@@ -1,0 +1,107 @@
+package pe.gob.acffaa.sisconv.application.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.gob.acffaa.sisconv.application.dto.response.*;
+import pe.gob.acffaa.sisconv.domain.model.*;
+
+@Component
+public class SeleccionMapper {
+
+    public PostulanteResponse toPostulanteResponse(Postulante p) {
+        if (p == null) return null;
+        return PostulanteResponse.builder()
+                .idPostulante(p.getIdPostulante())
+                .tipoDocumento(p.getTipoDocumento())
+                .numeroDocumento(p.getNumeroDocumento())
+                .nombreCompleto(nombreCompleto(p))
+                .email(p.getEmail())
+                .genero(p.getGenero())
+                .estado(p.getEstado())
+                .esLicenciadoFfaa(p.getEsLicenciadoFfaa())
+                .esPersonaDiscap(p.getEsPersonaDiscap())
+                .esDeportistaDest(p.getEsDeportistaDest())
+                .build();
+    }
+
+    public PostulacionResponse toPostulacionResponse(Postulacion post, String mensaje) {
+        if (post == null) return null;
+    
+        String numeroConvocatoria = post.getConvocatoria() != null
+                ? post.getConvocatoria().getNumeroConvocatoria()
+                : null;
+    
+        String nombrePuesto = null;
+        if (post.getPerfilPuesto() != null) {
+            nombrePuesto = post.getPerfilPuesto().getDenominacionPuesto();
+        } else if (post.getConvocatoria() != null
+                && post.getConvocatoria().getRequerimiento() != null
+                && post.getConvocatoria().getRequerimiento().getPerfilPuesto() != null) {
+            nombrePuesto = post.getConvocatoria().getRequerimiento().getPerfilPuesto().getDenominacionPuesto();
+        }
+    
+        return PostulacionResponse.builder()
+                .idPostulacion(post.getIdPostulacion())
+                .idConvocatoria(post.getConvocatoria() != null ? post.getConvocatoria().getIdConvocatoria() : null)
+                .idPerfilPuesto(post.getPerfilPuesto() != null ? post.getPerfilPuesto().getIdPerfilPuesto() : null)
+                .numeroConvocatoria(numeroConvocatoria)
+                .nombrePuesto(nombrePuesto)
+                .postulante(toPostulanteResponse(post.getPostulante()))
+                .estado(post.getEstado())
+                .codigoAnonimo(post.getCodigoAnonimo())
+                .verificacionRnssc(post.getVerificacionRnssc())
+                .verificacionRegiprec(post.getVerificacionRegiprec())
+                .fechaVerificacionDl(post.getFechaVerificacionDl())
+                .puntajeCurricular(post.getPuntajeCurricular())
+                .puntajeTecnica(post.getPuntajeTecnica())
+                .puntajeEntrevista(post.getPuntajeEntrevista())
+                .puntajeBonificacion(post.getPuntajeBonificacion())
+                .puntajeTotal(post.getPuntajeTotal())
+                .ordenMerito(post.getOrdenMerito())
+                .resultado(post.getResultado())
+                .fechaPostulacion(post.getFechaPostulacion())
+                .fechaConfirmacionExpediente(post.getFechaConfirmacionExpediente())
+                .mensaje(mensaje)
+                .build();
+    }
+
+    public TachaResponse toTachaResponse(Tacha t, String mensaje) {
+        if (t == null) return null;
+        return TachaResponse.builder()
+                .idTacha(t.getIdTacha())
+                .idPostulacion(t.getPostulacion() != null ? t.getPostulacion().getIdPostulacion() : null)
+                .idConvocatoria(t.getConvocatoria() != null ? t.getConvocatoria().getIdConvocatoria() : null)
+                .motivo(t.getMotivo())
+                .evidencia(t.getEvidencia())
+                .rutaAdjunto(t.getRutaAdjunto())
+                .estado(t.getEstado())
+                .resolucion(t.getResolucion())
+                .fechaPresentacion(t.getFechaPresentacion())
+                .fechaResolucion(t.getFechaResolucion())
+                .mensaje(mensaje)
+                .build();
+    }
+
+    public ExpedienteResponse toExpedienteResponse(ExpedienteVirtual e, String mensaje) {
+        if (e == null) return null;
+        return ExpedienteResponse.builder()
+                .idExpediente(e.getIdExpediente())
+                .idPostulacion(e.getPostulacion() != null ? e.getPostulacion().getIdPostulacion() : null)
+                .tipoDocumento(e.getTipoDocumento())
+                .nombreArchivo(e.getNombreArchivo())
+                .hashSha256(e.getHashSha256())
+                .verificado(e.getVerificado())
+                .fechaVerificacion(e.getFechaVerificacion())
+                .fechaCarga(e.getFechaCarga())
+                .tamanoKb(e.getTamanoKb())
+                .estado(e.getEstado())
+                .mensaje(mensaje)
+                .build();
+    }
+
+    public String nombreCompleto(Postulante p) {
+        if (p == null) return "";
+        String nc = p.getNombres() + " " + p.getApellidoPaterno();
+        if (p.getApellidoMaterno() != null) nc += " " + p.getApellidoMaterno();
+        return nc;
+    }
+}

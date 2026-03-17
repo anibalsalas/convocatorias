@@ -1,0 +1,47 @@
+-- V10: Crear catálogo TBL_NIVEL_PUESTO y FK desde TBL_PERFIL_PUESTO
+-- Normalización 3FN — datos maestros en tabla de catálogo (cursorrules §5)
+-- Rango/escala de responsabilidad del puesto (Especialista, Analista, Asistente, Operativo)
+
+-- 1. Crear secuencia para PK
+CREATE SEQUENCE SEQ_NIVEL_PUESTO
+  START WITH 1
+  INCREMENT BY 1
+  NOCACHE
+  NOCYCLE;
+
+-- 2. Crear tabla catálogo
+CREATE TABLE TBL_NIVEL_PUESTO (
+  ID_NIVEL_PUESTO  NUMBER(19)     NOT NULL,
+  CODIGO           VARCHAR2(50)   NOT NULL,
+  DESCRIPCION      VARCHAR2(500)  NOT NULL,
+  ORDEN            NUMBER(5)      DEFAULT 0,
+  CONSTRAINT PK_NIVEL_PUESTO PRIMARY KEY (ID_NIVEL_PUESTO),
+  CONSTRAINT UK_NIVEL_PUESTO_CODIGO UNIQUE (CODIGO)
+);
+
+COMMENT ON TABLE TBL_NIVEL_PUESTO IS 'Catálogo de niveles de puesto (rango/escala de responsabilidad)';
+COMMENT ON COLUMN TBL_NIVEL_PUESTO.CODIGO IS 'Código único: ESPECIALISTA, ANALISTA, ASISTENTE, OPERATIVO';
+COMMENT ON COLUMN TBL_NIVEL_PUESTO.DESCRIPCION IS 'Descripción del nivel según años de experiencia y responsabilidad';
+
+-- 3. Insertar datos maestros (IDs fijos para compatibilidad con datos existentes)
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (1, 'ESPECIALISTA', 'Nivel alto, toma decisiones técnicas, +5 años exp.', 1);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (2, 'ANALISTA', 'Nivel intermedio, procesa información, 2-4 años exp.', 2);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (3, 'ASISTENTE', 'Nivel inicial, soporte directo, 1-2 años exp.', 3);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (4, 'OPERATIVO', 'Ejecución directa de tareas', 4);
+-- Legado: P-5 a P-8 para perfiles históricos
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (5, 'P-5', 'Nivel P-5 (legado)', 5);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (6, 'P-6', 'Nivel P-6 (legado)', 6);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (7, 'P-7', 'Nivel P-7 (legado)', 7);
+INSERT INTO TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO, CODIGO, DESCRIPCION, ORDEN) VALUES (8, 'P-8', 'Nivel P-8 (legado)', 8);
+
+COMMIT;
+
+-- 4. Índice en FK (cursorrules §1.2: índices B-Tree en FKs)
+CREATE INDEX IDX_PERFIL_PUESTO_NIVEL ON TBL_PERFIL_PUESTO (ID_NIVEL_PUESTO);
+
+-- 5. Agregar FK desde TBL_PERFIL_PUESTO
+ALTER TABLE TBL_PERFIL_PUESTO ADD CONSTRAINT FK_PERFIL_NIVEL_PUESTO
+  FOREIGN KEY (ID_NIVEL_PUESTO) REFERENCES TBL_NIVEL_PUESTO (ID_NIVEL_PUESTO)
+  ON DELETE SET NULL;
+
+COMMENT ON COLUMN TBL_PERFIL_PUESTO.ID_NIVEL_PUESTO IS 'FK a TBL_NIVEL_PUESTO. Rango del puesto: Especialista, Analista, Asistente, Operativo';

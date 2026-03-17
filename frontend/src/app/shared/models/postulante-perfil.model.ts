@@ -1,0 +1,65 @@
+export interface PostulantePerfil {
+  idPostulante: number;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  nombres: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+  fechaNacimiento: string | null;
+  genero: string | null;
+  estadoCivil: string | null;
+  telefono: string | null;
+  telefonoFijo: string | null;
+  email: string;
+  direccion: string | null;
+  ubigeo: string | null;
+  ruc: string | null;
+  nroBrevete: string | null;
+  categoriaBrevete: string | null;
+  tieneColegiatura: boolean;
+  tieneHabilitacionProf: boolean;
+  nroColegiatura: string | null;
+  estaEnRedam: boolean;
+  estaEnRnssc: boolean;
+  estaEnRedereci: boolean;
+  tieneAntecedentesPenales: boolean;
+  tieneAntecedentesPoliciales: boolean;
+  tieneAntecedentesJudiciales: boolean;
+  aceptaDeclaracionJurada: boolean;
+  detalleDeclaracionJurada: string | null;
+  esLicenciadoFfaa: boolean;
+  esPersonaDiscap: boolean;
+  esDeportistaDest: boolean;
+  estado: string;
+}
+
+export interface ActualizarPerfilPostulanteRequest {
+  nombres: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string;
+  fechaNacimiento: string;
+  genero: string;
+  estadoCivil: string;
+  telefono: string;
+  telefonoFijo?: string;
+  email: string;
+  direccion: string;
+  ubigeo: string;
+  ruc: string;
+  nroBrevete?: string;
+  categoriaBrevete: string;
+  tieneColegiatura: boolean;
+  tieneHabilitacionProf: boolean;
+  nroColegiatura?: string;
+  estaEnRedam: boolean;
+  estaEnRnssc: boolean;
+  estaEnRedereci: boolean;
+  tieneAntecedentesPenales: boolean;
+  tieneAntecedentesPoliciales: boolean;
+  tieneAntecedentesJudiciales: boolean;
+  aceptaDeclaracionJurada: boolean;
+  detalleDeclaracionJurada?: string;
+  esLicenciadoFfaa?: boolean;
+  esPersonaDiscap?: boolean;
+  esDeportistaDest?: boolean;
+}

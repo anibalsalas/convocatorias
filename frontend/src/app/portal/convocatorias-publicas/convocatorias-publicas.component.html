@@ -1,0 +1,142 @@
+<div class="publicas-page">
+  <div class="publicas-container">
+    <header class="page-header">
+      <div class="header-content">
+        <h1 class="page-title">Transparencia — Convocatorias CAS {{ anioSeleccionado() }}</h1>
+        <p class="page-subtitle">Agencia de Compras de las Fuerzas Armadas — Ministerio de Defensa</p>
+      </div>
+
+      <div class="header-actions">
+        <a routerLink="/portal/login" class="btn-cta">
+          Postular aquí
+        </a>
+        <div class="filter-row">
+          <label class="filter-label">Año</label>
+          <select
+            [ngModel]="anioSeleccionado()"
+            (ngModelChange)="onAnioChange($event)"
+            class="filter-select"
+          >
+            @for (y of anios; track y) {
+              <option [value]="y">{{ y }}</option>
+            }
+          </select>
+          <button type="button" class="btn-filter" (click)="reload()">Mostrar</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="table-card">
+      <div class="table-wrapper">
+        <table class="publicas-table">
+          <thead>
+            <tr>
+              <th>Proceso</th>
+              <th>Fuente</th>
+              <th>Descripción</th>
+              <th>Oficina</th>
+              <th class="text-center">Estado</th>
+              <th class="text-center">Convocatoria</th>
+              <th class="text-center">Eval. Fichas</th>
+              <th class="text-center">Eval. Curricular</th>
+              <th class="text-center">Entrevista</th>
+              <th class="text-center">Resultados</th>
+              <th class="text-center">Comunicados</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-desc"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-badge"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-icon"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-dash"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-dash"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-dash"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-dash"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-dash"></span></td>
+                </tr>
+              }
+            } @else if (error()) {
+              <tr>
+                <td colspan="11" class="table-message-cell">
+                  No se pudo cargar. Verifique que el servidor esté activo e intente de nuevo.
+                </td>
+              </tr>
+            } @else if (convocatorias().length === 0) {
+              <tr>
+                <td colspan="11" class="table-message-cell">
+                  No se encontraron convocatorias para el año {{ anioSeleccionado() }}
+                </td>
+              </tr>
+            } @else {
+              @for (c of convocatorias(); track c.idConvocatoria) {
+                <tr class="table-row-hover">
+                  <td class="cell-proceso">{{ c.numeroConvocatoria }}</td>
+                  <td>{{ c.fuenteFinanciamiento || '—' }}</td>
+                  <td class="cell-descripcion">{{ c.objetoContratacion || '—' }}</td>
+                  <td class="cell-uppercase">{{ c.unidadOrganica || '—' }}</td>
+                  <td class="text-center">
+                    <app-status-badge [estado]="c.estado" [label]="c.estado" />
+                  </td>
+                  <td class="text-center">
+                    @if (c.linkPortalAcffaa) {
+                      <a
+                        [href]="c.linkPortalAcffaa"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="link-doc"
+                        title="Descargar bases"
+                        aria-label="Descargar bases de convocatoria"
+                      >
+                        📄
+                      </a>
+                    } @else {
+                      <span class="cell-empty">—</span>
+                    }
+                  </td>
+                  <td class="text-center"><span class="cell-empty">—</span></td>
+                  <td class="text-center"><span class="cell-empty">—</span></td>
+                  <td class="text-center"><span class="cell-empty">—</span></td>
+                  <td class="text-center"><span class="cell-empty">—</span></td>
+                  <td class="text-center"><span class="cell-empty">—</span></td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (totalPages() > 1) {
+      <div class="pagination-row">
+        <span class="pagination-info">
+          Mostrando {{ convocatorias().length }} de {{ totalElements() }} convocatorias
+        </span>
+        <div class="pagination-actions">
+          <button
+            type="button"
+            class="btn-page"
+            [disabled]="currentPage() === 0"
+            (click)="prevPage()"
+          >
+            ← Anterior
+          </button>
+          <span class="pagination-label">Página {{ currentPage() + 1 }} de {{ totalPages() }}</span>
+          <button
+            type="button"
+            class="btn-page"
+            [disabled]="currentPage() >= totalPages() - 1"
+            (click)="nextPage()"
+          >
+            Siguiente →
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+</div>

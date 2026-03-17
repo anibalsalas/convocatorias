@@ -1,0 +1,28 @@
+// ═══════════════════════════════════════════
+// Status Badges — 27 estados × 6 enums
+// Mapeo coherente con EstadoPostulacion, EstadoConvocatoria,
+// EstadoRequerimiento, EstadoContrato, EstadoTacha, EstadoUsuario
+// ═══════════════════════════════════════════
+
+// Base badge mixin
+%badge-base {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.badge-info         { @extend %badge-base; background: #DBEAFE; color: #1E40AF; }
+.badge-info-dark    { @extend %badge-base; background: #BFDBFE; color: #1E3A8A; }
+.badge-success      { @extend %badge-base; background: #D1FAE5; color: #065F46; }
+.badge-success-dark { @extend %badge-base; background: #A7F3D0; color: #064E3B; }
+.badge-warning      { @extend %badge-base; background: #FEF3C7; color: #92400E; }
+.badge-danger       { @extend %badge-base; background: #FEE2E2; color: #991B1B; }
+.badge-danger-dark  { @extend %badge-base; background: #FECACA; color: #7F1D1D; }
+.badge-gold         { @extend %badge-base; background: #FEF9C3; color: #854D0E; }
+.badge-neutral      { @extend %badge-base; background: #F3F4F6; color: #4B5563; }
+.badge-neutral-dark { @extend %badge-base; background: #E5E7EB; color: #374151; }
+.badge-active       { @extend %badge-base; background: #F3E8FF; color: #6B21A8; }

@@ -1,0 +1,168 @@
+<div class="portal-page">
+  <div class="portal-container">
+    <div class="top-actions">
+      <a routerLink="/portal/dashboard" class="top-action-link">
+        <span>🏠</span>
+        <span>Inicio</span>
+      </a>
+
+      <a routerLink="/portal/mi-perfil" class="top-action-link">
+        <span>👤</span>
+        <span>Mi Perfil</span>
+      </a>
+
+      <a routerLink="/portal/convocatorias-vigentes" class="top-action-link">
+        <span>📋</span>
+        <span>Convocatorias Vigentes</span>
+      </a>
+
+      <a
+        routerLink="/portal/postulaciones"
+        class="top-action-link"
+        routerLinkActive="top-action-link-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <span>📩</span>
+        <span>Mis postulaciones</span>
+      </a>
+    </div>
+
+    <section class="page-banner">
+      <div class="page-banner-content">
+        <h1 class="page-title">Mis postulaciones</h1>
+        <p class="page-subtitle">
+          Consulte el estado de sus postulaciones y complete su expediente virtual cuando corresponda.
+        </p>
+      </div>
+    </section>
+
+    @if (showAttentionBanner()) {
+      <div class="warning-banner">
+        <div class="warning-banner-icon">⚠️</div>
+        <div class="warning-banner-body">
+          <h2 class="warning-banner-title">{{ bannerTitle() }}</h2>
+          <p class="warning-banner-text">{{ bannerDescription() }}</p>
+        </div>
+        @if (firstActionablePostulationId()) {
+          <a
+            [routerLink]="['/portal/expediente', firstActionablePostulationId()]"
+            class="warning-banner-action"
+          >
+            Ir a completar expediente
+          </a>
+        }
+      </div>
+    }
+
+    @if (loading() && postulaciones().length === 0) {
+      <div class="content-card">
+        <div class="table-wrapper">
+          <table class="postulaciones-table">
+            <thead>
+              <tr>
+                <th>Proceso</th>
+                <th>Puesto</th>
+                <th>Fecha postulación</th>
+                <th>Estado</th>
+                <th>Expediente</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-desc"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-badges"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-btn"></span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    } @else if (!loading() && postulaciones().length === 0) {
+      <div class="content-card empty-card">
+        <div class="empty-icon">📭</div>
+        <h2 class="empty-title">Aún no tiene postulaciones registradas</h2>
+        <p class="empty-text">
+          Cuando registre una postulación, aquí verá su estado y el acceso para completar el expediente virtual.
+        </p>
+        <a routerLink="/portal/dashboard" class="btn-primary-action">
+          Volver al inicio
+        </a>
+      </div>
+    } @else {
+      <div class="content-card">
+        <div class="table-wrapper">
+          <table class="postulaciones-table">
+            <thead>
+              <tr>
+                <th>Proceso</th>
+                <th>Puesto</th>
+                <th>Fecha postulación</th>
+                <th>Estado</th>
+                <th>Expediente</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              @for (item of postulaciones(); track item.idPostulacion) {
+                <tr>
+                  <td>{{ item.numeroConvocatoria || '—' }}</td>
+                  <td class="cell-uppercase">{{ item.nombrePuesto || '—' }}</td>
+                  <td>{{ formatDate(item.fechaPostulacion) }}</td>
+                  <td>
+                    <div class="state-stack">
+                      <span [class]="postulacionStatusClass(item)">
+                        {{ postulacionStatusLabel(item) }}
+                      </span>
+                      <span [class]="expedienteStatusClass(item)">
+                        {{ expedienteStatusLabel(item) }}
+                      </span>
+                    </div>
+                    <div class="state-help-text">{{ expedienteHelpText(item) }}</div>
+                  </td>
+                  <td>{{ expedienteLabel(item) }}</td>
+                  <td class="text-center">
+                    <a [routerLink]="['/portal/expediente', item.idPostulacion]" class="btn-secondary-action">
+                      {{ expedienteActionLabel(item) }}
+                    </a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      @if (totalPages() > 1) {
+        <div class="pagination-row">
+          <span>
+            Mostrando {{ postulaciones().length }} de {{ totalElements() }} postulaciones
+          </span>
+
+          <div class="pagination-actions">
+            <button type="button" class="btn-page" [disabled]="currentPage() === 0" (click)="prevPage()">
+              ← Anterior
+            </button>
+
+            <span>Página {{ currentPage() + 1 }} de {{ totalPages() }}</span>
+
+            <button
+              type="button"
+              class="btn-page"
+              [disabled]="currentPage() >= totalPages() - 1"
+              (click)="nextPage()"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

@@ -1,0 +1,333 @@
+<div class="portal-page">
+  <div class="portal-container">
+    <div class="top-actions">
+      <a
+        routerLink="/portal/dashboard"
+        routerLinkActive="top-action-link-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="top-action-link"
+      >
+        <span>🏠</span>
+        <span>Inicio</span>
+      </a>
+
+      <a
+        routerLink="/portal/mi-perfil"
+        routerLinkActive="top-action-link-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="top-action-link"
+      >
+        <span>👤</span>
+        <span>Mi Perfil</span>
+      </a>
+
+      <a
+        routerLink="/portal/convocatorias-vigentes"
+        routerLinkActive="top-action-link-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="top-action-link"
+      >
+        <span>📋</span>
+        <span>Convocatorias Vigentes</span>
+      </a>
+
+      <a
+        routerLink="/portal/postulaciones"
+        routerLinkActive="top-action-link-active"
+        [routerLinkActiveOptions]="{ exact: false }"
+        class="top-action-link"
+      >
+        <span>📩</span>
+        <span>Mis postulaciones</span>
+      </a>
+    </div>
+
+    <section class="page-header-card">
+      <div class="page-header-title-row">
+        <span>🗂️</span>
+        <span>Expediente Virtual</span>
+      </div>
+      <p class="page-header-subtitle">
+        Postulación N.° {{ postId() }} — cargue los documentos del expediente y
+        finalice el trámite cuando corresponda.
+      </p>
+    </section>
+
+    <div class="info-banner">
+      <strong>Importante:</strong>
+      Registrar la postulación no finaliza el trámite. Debe cargar al menos un documento
+      y luego pulsar <strong>Finalizar expediente</strong>.
+    </div>
+
+    <div class="status-card">
+      @if (loadingPostulacion()) {
+        <div class="empty-inline">
+          <span class="spinner">⟳</span>
+          Cargando estado de la postulación...
+        </div>
+      } @else {
+        <div class="status-card-header">Estado actual</div>
+        <div class="status-badges-row">
+          <span [class]="estadoPostulacionClass()">
+            {{ estadoPostulacionVisible() }}
+          </span>
+          <span [class]="estadoExpedienteClass()">
+            {{ estadoExpedienteLabel() }}
+          </span>
+        </div>
+        <p class="status-card-text">{{ resumenEstadoTexto() }}</p>
+      }
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Formación académica</div>
+        <div class="summary-value">{{ supportSummary().formaciones }}</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Conocimientos</div>
+        <div class="summary-value">{{ supportSummary().conocimientos }}</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Experiencias</div>
+        <div class="summary-value">{{ supportSummary().experiencias }}</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">Documentos</div>
+        <div class="summary-value">{{ supportSummary().documentos }}</div>
+      </div>
+    </div>
+
+    <div class="content-grid">
+      <div class="content-card">
+        <h2 class="section-title">Sustentos registrados en Mi Perfil</h2>
+
+        @if (loadingSupport()) {
+          <div class="empty-inline">
+            <span class="spinner">⟳</span>
+            Cargando resumen de sustentos...
+          </div>
+        } @else {
+          <p class="support-text">
+            Registros disponibles como referencia previa:
+            <strong>{{ totalSupportItems() }}</strong>
+          </p>
+
+          <div class="support-actions">
+            <a
+              routerLink="/portal/mi-perfil"
+              [queryParams]="{ section: 'preview' }"
+              class="btn-primary-action"
+            >
+              Revisar vista previa
+            </a>
+
+            <a
+              routerLink="/portal/mi-perfil"
+              class="btn-outline-action"
+            >
+              Ir a Mi Perfil
+            </a>
+          </div>
+        }
+      </div>
+
+      <div class="content-card">
+        <h2 class="section-title">Cargar documento al expediente</h2>
+
+        @if (expedienteFinalizado()) {
+          <div class="success-panel">
+            <div class="success-panel-title">Expediente finalizado</div>
+            <p class="success-panel-text">
+              El expediente ya fue confirmado. La postulación quedó lista para validación.
+            </p>
+          </div>
+        } @else {
+          <div class="field-block">
+            <label class="field-label">Tipo de documento</label>
+            <select
+              class="field-input"
+              [ngModel]="selectedTipoDocumento()"
+              (ngModelChange)="selectedTipoDocumento.set($event)"
+            >
+              @for (option of documentTypeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+
+          <div
+            class="dropzone"
+            (drop)="onDrop($event)"
+            (dragover)="onDragOver($event)"
+          >
+            <div class="dropzone-icon">⬆️</div>
+            <div class="dropzone-title">
+              Arrastre un archivo aquí o selecciónelo manualmente
+            </div>
+            <div class="dropzone-subtitle">
+              Formatos permitidos: PDF, PNG, JPG, JPEG
+            </div>
+
+            <label class="btn-outline-action btn-file">
+              Seleccionar archivo
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                (change)="onFileChange($event)"
+                hidden
+              />
+            </label>
+          </div>
+
+          @if (selectedFile()) {
+            <div class="selected-file-card">
+              <div><strong>Archivo:</strong> {{ selectedFile()?.name }}</div>
+              <div><strong>Tamaño:</strong> {{ fileSizeLabel(selectedFile()?.size ?? null) }}</div>
+              <div class="hash-row">
+                <strong>SHA-256:</strong>
+                <span class="hash-text">{{ selectedFileHash() }}</span>
+              </div>
+
+              <div class="file-actions">
+                <button
+                  type="button"
+                  class="btn-primary-action"
+                  [disabled]="uploading()"
+                  (click)="uploadSelectedFile()"
+                >
+                  @if (uploading()) {
+                    <span class="spinner">⟳</span>
+                    <span>Cargando...</span>
+                  } @else {
+                    <span>Guardar en expediente</span>
+                  }
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-outline-action"
+                  [disabled]="uploading()"
+                  (click)="clearSelectedFile()"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </div>
+
+    <div class="content-card expediente-card">
+      <div class="expediente-header-row">
+        <h2 class="section-title no-margin">Documentos del expediente</h2>
+
+        <button
+          type="button"
+          class="btn-outline-action"
+          (click)="loadExpediente(); loadPostulacion()"
+        >
+          Actualizar
+        </button>
+      </div>
+
+      @if (loadingExpediente()) {
+        <div class="empty-inline">
+          <span class="spinner">⟳</span>
+          Cargando expediente...
+        </div>
+      } @else if (expedienteItems().length === 0) {
+        <div class="empty-inline">
+          Aún no hay documentos cargados en este expediente.
+        </div>
+      } @else {
+        <div class="table-wrapper">
+          <table class="expediente-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Archivo</th>
+                <th>Hash SHA-256</th>
+                <th>Estado</th>
+                <th>Verificación</th>
+                <th>Fecha carga</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              @for (item of expedienteItems(); track item.idExpediente) {
+                <tr>
+                  <td>{{ item.tipoDocumento }}</td>
+                  <td>{{ item.nombreArchivo }}</td>
+                  <td class="hash-text">{{ item.hashSha256 }}</td>
+                  <td>{{ item.estado }}</td>
+                  <td>{{ verificationLabel(item) }}</td>
+                  <td>{{ formatDate(item.fechaCarga) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <div class="finalize-panel">
+        <div>
+          <h3 class="finalize-panel-title">Finalizar expediente</h3>
+          <p class="finalize-panel-text">{{ finalizeHelpText() }}</p>
+        </div>
+
+        <button
+          type="button"
+          class="btn-finalize-action"
+          [disabled]="!canFinalizeExpediente() || finalizing()"
+          (click)="openFinalizeModal()"
+        >
+          Finalizar expediente
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (showFinalizeModal()) {
+    <div class="modal-backdrop">
+      <div class="modal-card">
+        <h2 class="modal-title">Confirmar finalización del expediente</h2>
+        <p class="modal-text">
+          Se confirmará el expediente con <strong>{{ totalExpedientes() }}</strong> documento(s).
+          Después de esta acción, la postulación se mostrará como
+          <strong>POSTULACIÓN EXITOSA</strong> y el expediente como
+          <strong>EXPEDIENTE COMPLETO</strong>.
+        </p>
+
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="btn-outline-action"
+            [disabled]="finalizing()"
+            (click)="closeFinalizeModal()"
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            class="btn-finalize-action"
+            [disabled]="finalizing()"
+            (click)="confirmFinalizeExpediente()"
+          >
+            @if (finalizing()) {
+              <span class="spinner">⟳</span>
+              <span>Finalizando...</span>
+            } @else {
+              <span>Confirmar expediente</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

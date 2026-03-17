@@ -1,0 +1,419 @@
+<div class="space-y-4 min-w-0 w-full">
+  @if (mode() === 'list') {
+    <div class="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div class="bg-[#374151] px-4 py-3 sm:px-5 sm:py-3.5 text-sm font-semibold text-white flex items-center gap-3">
+        <span>◉</span>
+        <span>EXPERIENCIA</span>
+      </div>
+
+      <div class="flex flex-col flex-1 min-h-0 p-4 sm:p-5 bg-white space-y-6">
+        <div class="flex justify-end flex-shrink-0">
+          <button
+            type="button"
+            (click)="onNuevo()"
+            aria-label="Agregar nueva experiencia"
+            class="inline-flex items-center gap-2 rounded-md bg-[#5cb85c] px-3 py-2 text-xs sm:text-sm font-semibold text-white transition-all duration-200 hover:brightness-95 hover:shadow-md"
+          >
+            <span>＋</span>
+            <span>Agregar</span>
+          </button>
+        </div>
+
+        @if (loading()) {
+          <div class="py-12 text-center text-gray-500 text-sm">Cargando experiencia...</div>
+        } @else {
+          <!-- Experiencia General -->
+          <fieldset class="border border-gray-200 rounded-lg p-4 sm:p-5 space-y-4">
+            <legend class="px-2 text-sm text-gray-800 font-medium">Experiencia General</legend>
+
+            @if (generalItems().length === 0) {
+              <div class="py-8 text-center text-gray-500 text-sm">No se encontraron registros de experiencia general.</div>
+            } @else {
+              <!-- Vista móvil: tarjetas -->
+              <div class="space-y-3 md:hidden">
+                @for (item of generalItems(); track item.idExperiencia; let i = $index) {
+                  <div class="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-2">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-xs font-medium text-gray-500 uppercase">{{ item.tipoExperiencia }} · {{ item.tipoSector }}</p>
+                        <p class="text-sm font-semibold text-gray-800 break-words">{{ item.puesto }}</p>
+                        <p class="text-xs text-gray-600 mt-0.5">{{ item.institucion }}</p>
+                        <p class="text-xs text-gray-500">{{ item.nivel }}</p>
+                      </div>
+                      <span class="flex-shrink-0 text-xs font-medium text-gray-400">#{{ i + 1 }}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
+                      <span>{{ formatFecha(item.fechaInicio) }} - {{ formatFecha(item.fechaFin) }}</span>
+                      <span class="font-medium">{{ getPeriodLabel(item.fechaInicio, item.fechaFin) }}</span>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-gray-200">
+                      <button type="button" (click)="onVerSustento(item)" [attr.aria-label]="'Ver sustento PDF de ' + item.puesto"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-[#1F2133] bg-white border border-gray-300 hover:bg-gray-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7zm0 1.5L18.5 8H14zM8 12h8v1.5H8zm0 3h8v1.5H8zm0-6h4v1.5H8z"/></svg>
+                        Ver
+                      </button>
+                      <button type="button" (click)="onEditar(item)" [attr.aria-label]="'Editar experiencia ' + item.puesto"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-[#1F2133] bg-white border border-gray-300 hover:bg-gray-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11.03-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0L15.13 5.12l3.75 3.75z"/></svg>
+                        Editar
+                      </button>
+                      <button type="button" (click)="onEliminar(item)" [attr.aria-label]="'Eliminar experiencia ' + item.puesto"
+                        class="inline-flex items-center justify-center rounded-md p-2 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                }
+                <div class="rounded-lg border border-green-200 bg-green-50/80 px-4 py-2 text-xs font-semibold text-green-800">
+                  Experiencia laboral general: {{ getTotalPeriodLabel(generalItems()) }}
+                </div>
+              </div>
+
+              <!-- Vista desktop: tabla -->
+              <div class="hidden md:block w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-md">
+                <table class="w-full min-w-[900px] table-auto text-xs sm:text-sm">
+                  <thead class="bg-[#374151] text-white sticky top-0 z-10">
+                    <tr>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-12">#</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Tipo</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Sector</th>
+                      <th class="border-r border-white/20 px-3 py-2 text-left font-semibold">Institución</th>
+                      <th class="border-r border-white/20 px-3 py-2 text-left font-semibold">Puesto</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Nivel</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-24">F. Inicio</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-24">F. Fin</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Tiempo</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Sustento</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Editar</th>
+                      <th class="px-2 py-2 text-center font-semibold w-20">Eliminar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (item of generalItems(); track item.idExperiencia; let i = $index) {
+                      <tr class="border-t border-gray-200 text-gray-800 hover:bg-gray-50/50 transition-colors">
+                        <td class="px-2 py-2 text-center">{{ i + 1 }}</td>
+                        <td class="px-2 py-2 uppercase break-words text-[10px] ">{{ item.tipoExperiencia }}</td>
+                        <td class="px-2 py-2 uppercase break-words text-[10px] ">{{ item.tipoSector }}</td>
+                        <td class="min-w-0 px-3 py-2 uppercase break-words text-[10px] ">{{ item.institucion }}</td>
+                        <td class="min-w-0 px-3 py-2 uppercase break-words text-[10px] ">{{ item.puesto }}</td>
+                        <td class="min-w-0 px-2 py-2 uppercase break-words text-[10px] ">{{ item.nivel }}</td>
+                        <td class="px-2 py-2 text-center whitespace-nowrap text-[10px]">{{ formatFecha(item.fechaInicio) }}</td>
+                        <td class="px-2 py-2 text-center whitespace-nowrap text-[10px]">{{ formatFecha(item.fechaFin) }}</td>
+                        <td class="px-2 py-2 text-center text-[10px]">{{ getPeriodLabel(item.fechaInicio, item.fechaFin) }}</td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onVerSustento(item)" [attr.aria-label]="'Ver sustento PDF de ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-gray-100" title="Ver sustento">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7zm0 1.5L18.5 8H14zM8 12h8v1.5H8zm0 3h8v1.5H8zm0-6h4v1.5H8z"/></svg>
+                          </button>
+                        </td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onEditar(item)" [attr.aria-label]="'Editar experiencia ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-gray-100" title="Editar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11.03-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0L15.13 5.12l3.75 3.75z"/></svg>
+                          </button>
+                        </td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onEliminar(item)" [attr.aria-label]="'Eliminar experiencia ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-red-50 hover:text-red-600" title="Eliminar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                    <tr class="border-t border-gray-200 bg-green-50/80 text-xs font-semibold text-green-800">
+                      <td colspan="9" class="px-3 py-2 text-right">Experiencia laboral general:</td>
+                      <td colspan="3" class="px-3 py-2 text-left">{{ getTotalPeriodLabel(generalItems()) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            }
+          </fieldset>
+
+          <!-- Experiencia Específica -->
+          <fieldset class="border border-gray-200 rounded-lg p-4 sm:p-5 space-y-4">
+            <legend class="px-2 text-sm text-gray-800 font-medium">Experiencia Específica</legend>
+
+            @if (specificItems().length === 0) {
+              <div class="py-8 text-center text-gray-500 text-sm">No se encontraron registros de experiencia específica.</div>
+            } @else {
+              <!-- Vista móvil: tarjetas -->
+              <div class="space-y-3 md:hidden">
+                @for (item of specificItems(); track item.idExperiencia; let i = $index) {
+                  <div class="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-2">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-xs font-medium text-gray-500 uppercase">{{ item.tipoExperiencia }} · {{ item.tipoSector }}</p>
+                        <p class="text-sm font-semibold text-gray-800 break-words">{{ item.puesto }}</p>
+                        <p class="text-xs text-gray-600 mt-0.5">{{ item.institucion }}</p>
+                        <p class="text-xs text-gray-500">{{ item.nivel }}</p>
+                      </div>
+                      <span class="flex-shrink-0 text-xs font-medium text-gray-400">#{{ i + 1 }}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
+                      <span>{{ formatFecha(item.fechaInicio) }} - {{ formatFecha(item.fechaFin) }}</span>
+                      <span class="font-medium">{{ getPeriodLabel(item.fechaInicio, item.fechaFin) }}</span>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-gray-200">
+                      <button type="button" (click)="onVerSustento(item)" [attr.aria-label]="'Ver sustento PDF de ' + item.puesto"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-[#1F2133] bg-white border border-gray-300 hover:bg-gray-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7zm0 1.5L18.5 8H14zM8 12h8v1.5H8zm0 3h8v1.5H8zm0-6h4v1.5H8z"/></svg>
+                        Ver
+                      </button>
+                      <button type="button" (click)="onEditar(item)" [attr.aria-label]="'Editar experiencia ' + item.puesto"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-[#1F2133] bg-white border border-gray-300 hover:bg-gray-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11.03-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0L15.13 5.12l3.75 3.75z"/></svg>
+                        Editar
+                      </button>
+                      <button type="button" (click)="onEliminar(item)" [attr.aria-label]="'Eliminar experiencia ' + item.puesto"
+                        class="inline-flex items-center justify-center rounded-md p-2 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                }
+                <div class="rounded-lg border border-green-200 bg-green-50/80 px-4 py-2 text-xs font-semibold text-green-800">
+                  Experiencia laboral específica: {{ getTotalPeriodLabel(specificItems()) }}
+                </div>
+                <div class="rounded-lg border border-green-200 bg-green-50/80 px-4 py-2 text-xs font-semibold text-green-800">
+                  Experiencia laboral específica en el sector público: {{ getTotalPeriodLabel(specificPublicItems()) }}
+                </div>
+              </div>
+
+              <!-- Vista desktop: tabla -->
+              <div class="hidden md:block w-full min-w-0 overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-md">
+                <table class="w-full min-w-[900px] table-auto text-xs sm:text-sm">
+                  <thead class="bg-[#374151] text-white sticky top-0 z-10">
+                    <tr>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-12">#</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Tipo</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Sector</th>
+                      <th class="border-r border-white/20 px-3 py-2 text-left font-semibold">Institución</th>
+                      <th class="border-r border-white/20 px-3 py-2 text-left font-semibold">Puesto</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-left font-semibold">Nivel</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-24">F. Inicio</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-24">F. Fin</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Tiempo</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Sustento</th>
+                      <th class="border-r border-white/20 px-2 py-2 text-center font-semibold w-20">Editar</th>
+                      <th class="px-2 py-2 text-center font-semibold w-20">Eliminar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (item of specificItems(); track item.idExperiencia; let i = $index) {
+                      <tr class="border-t border-gray-200 text-gray-800 hover:bg-gray-50/50 transition-colors">
+                        <td class="px-2 py-2 text-center">{{ i + 1 }}</td>
+                        <td class="px-2 py-2 uppercase break-words text-[10px] align-top">{{ item.tipoExperiencia }}</td>
+                        <td class="px-2 py-2 uppercase break-words text-[10px] align-top">{{ item.tipoSector }}</td>
+                        <td class="min-w-0 px-3 py-2 uppercase break-words text-[10px] align-top">{{ item.institucion }}</td>
+                        <td class="min-w-0 px-3 py-2 uppercase break-words text-[10px] align-top">{{ item.puesto }}</td>
+                        <td class="min-w-0 px-2 py-2 uppercase break-words text-[10px] align-top">{{ item.nivel }}</td>
+                        <td class="px-2 py-2 text-center whitespace-nowrap text-[10px]">{{ formatFecha(item.fechaInicio) }}</td>
+                        <td class="px-2 py-2 text-center whitespace-nowrap text-[10px]">{{ formatFecha(item.fechaFin) }}</td>
+                        <td class="px-2 py-2 text-center text-[10px]">{{ getPeriodLabel(item.fechaInicio, item.fechaFin) }}</td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onVerSustento(item)" [attr.aria-label]="'Ver sustento PDF de ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-gray-100" title="Ver sustento">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7zm0 1.5L18.5 8H14zM8 12h8v1.5H8zm0 3h8v1.5H8zm0-6h4v1.5H8z"/></svg>
+                          </button>
+                        </td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onEditar(item)" [attr.aria-label]="'Editar experiencia ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-gray-100" title="Editar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75l11-11.03-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0L15.13 5.12l3.75 3.75z"/></svg>
+                          </button>
+                        </td>
+                        <td class="px-2 py-2 text-center">
+                          <button type="button" (click)="onEliminar(item)" [attr.aria-label]="'Eliminar experiencia ' + item.puesto"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-[#1F2133] transition-colors hover:bg-red-50 hover:text-red-600" title="Eliminar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                    <tr class="border-t border-gray-200 bg-green-50/80 text-xs font-semibold text-green-800">
+                      <td colspan="9" class="px-3 py-2 text-right">Experiencia laboral específica:</td>
+                      <td colspan="3" class="px-3 py-2 text-left">{{ getTotalPeriodLabel(specificItems()) }}</td>
+                    </tr>
+                    <tr class="border-t border-gray-200 bg-green-50/80 text-xs font-semibold text-green-800">
+                      <td colspan="9" class="px-3 py-2 text-right">Experiencia laboral específica en el sector público:</td>
+                      <td colspan="3" class="px-3 py-2 text-left">{{ getTotalPeriodLabel(specificPublicItems()) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            }
+          </fieldset>
+        }
+      </div>
+    </div>
+  } @else {
+    <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div class="bg-[#374151] px-4 py-3 sm:px-5 sm:py-3.5 text-sm font-semibold text-white flex items-center gap-3">
+        <span>◉</span>
+        <span>{{ mode() === 'create' ? 'Nueva Experiencia' : 'Editar Experiencia' }}</span>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="onGuardar()" class="space-y-6 bg-white p-4 sm:p-5">
+        <fieldset class="border border-gray-200 rounded-lg p-4 sm:p-5 space-y-4">
+          <legend class="px-2 text-sm text-gray-800 font-medium">Experiencia</legend>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="label-field text-[11px]">Tipo de Experiencia (*)</label>
+              <select formControlName="tipoExperiencia" class="input-field text-[11px]">
+                <option value="">-- SELECCIONAR --</option>
+                @for (item of tipoExperienciaOptions; track item.value) {
+                  <option [value]="item.value">{{ item.label }}</option>
+                }
+              </select>
+              @if (form.controls.tipoExperiencia.touched && form.controls.tipoExperiencia.errors) {
+                <span class="error-text text-[10px]">Seleccione el tipo de experiencia</span>
+              }
+            </div>
+
+            <div>
+              <label class="label-field text-[11px]">Tipo de Sector (*)</label>
+              <select formControlName="tipoSector" class="input-field text-[11px]">
+                <option value="">-- SELECCIONAR --</option>
+                @for (item of tipoSectorOptions; track item.value) {
+                  <option [value]="item.value">{{ item.label }}</option>
+                }
+              </select>
+              @if (form.controls.tipoSector.touched && form.controls.tipoSector.errors) {
+                <span class="error-text text-[10px]">Seleccione el tipo de sector</span>
+              }
+            </div>
+
+            <div>
+              <label class="label-field text-[11px]">Nombre Institución (*)</label>
+              <input formControlName="institucion" class="input-field text-[11px] uppercase" maxlength="250" />
+              @if (form.controls.institucion.touched && form.controls.institucion.errors) {
+                <span class="error-text text-[10px]">Ingrese la institución</span>
+              }
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="label-field text-[11px]">Nombre Puesto (*)</label>
+              <input formControlName="puesto" class="input-field text-[11px] uppercase" maxlength="250" />
+              @if (form.controls.puesto.touched && form.controls.puesto.errors) {
+                <span class="error-text text-[10px]">Ingrese el puesto</span>
+              }
+            </div>
+
+            <div>
+              <label class="label-field text-[11px]">Fecha Inicio (*)</label>
+              <input formControlName="fechaInicio" type="date" class="input-field text-[11px]" />
+              @if (form.controls.fechaInicio.touched && form.controls.fechaInicio.errors) {
+                <span class="error-text text-[10px]">Ingrese la fecha de inicio</span>
+              }
+            </div>
+
+            <div>
+              <label class="label-field text-[11px]">Fecha Fin (*)</label>
+              <input formControlName="fechaFin" type="date" class="input-field text-[11px]" />
+              @if (form.controls.fechaFin.touched && form.controls.fechaFin.errors) {
+                <span class="error-text text-[10px]">Ingrese la fecha fin</span>
+              }
+              @if (form.errors && form.errors['invalidDateRange']) {
+                <span class="error-text text-[10px] block mt-1">La fecha fin no puede ser menor que la fecha inicio</span>
+              }
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="label-field text-[11px]">Nivel (*)</label>
+              <select formControlName="nivel" class="input-field text-[11px]">
+                <option value="">-- SELECCIONAR --</option>
+                @for (item of nivelOptions; track item) {
+                  <option [value]="item">{{ item }}</option>
+                }
+              </select>
+              @if (form.controls.nivel.touched && form.controls.nivel.errors) {
+                <span class="error-text text-[10px]">Seleccione el nivel</span>
+              }
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="label-field text-[11px]">
+                Adjuntar Documento (*)
+                <span class="text-[9px] text-red-500">(Archivos permitidos: .pdf)</span>
+              </label>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                aria-label="Adjuntar documento PDF de sustento"
+                class="block w-full text-[11px] text-gray-700 file:mr-3 file:rounded file:border file:border-gray-300 file:bg-white file:px-2 file:py-1 file:text-[11px]"
+                (change)="onFileSelected($event)"
+              />
+              <div class="mt-2 text-[11px] text-gray-500">
+                {{ currentFileName() }}
+              </div>
+              @if (fileError()) {
+                <span class="error-text text-[10px]">{{ fileError() }}</span>
+              }
+            </div>
+          </div>
+
+          <div>
+            <label class="label-field text-[11px]">Funciones (*)</label>
+            <textarea
+              formControlName="funciones"
+              class="input-field text-[11px] min-h-[100px] uppercase"
+              maxlength="4000"
+            ></textarea>
+            @if (form.controls.funciones.touched && form.controls.funciones.errors) {
+              <span class="error-text text-[10px]">Ingrese las funciones</span>
+            }
+          </div>
+        </fieldset>
+
+        <div class="text-[11px] text-gray-500">Nota: (*) Campos obligatorios a llenar</div>
+
+        @if (errorMsg()) {
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[11px] text-red-700">
+            {{ errorMsg() }}
+          </div>
+        }
+
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3">
+          <button
+            type="submit"
+            [disabled]="saving()"
+            aria-label="Guardar experiencia"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-[#5cb85c] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:brightness-95 disabled:opacity-60"
+          >
+            @if (saving()) {
+              <span class="animate-spin">⟳</span>
+            } @else {
+              <span>💾</span>
+            }
+            <span>Guardar</span>
+          </button>
+
+          <button
+            type="button"
+            (click)="onVolver()"
+            aria-label="Volver a la lista de experiencia"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-[#337ab7] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:brightness-95"
+          >
+            <span>↩</span>
+            <span>Volver</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  }
+
+  <app-confirm-dialog
+    [open]="showConfirmDelete()"
+    title="¿Eliminar experiencia?"
+    [message]="confirmDeleteMessage()"
+    confirmText="Sí, eliminar"
+    [confirmDanger]="true"
+    (confirm)="onConfirmEliminar()"
+    (cancel)="showConfirmDelete.set(false); itemToDelete.set(null)" />
+</div>
