@@ -1,0 +1,144 @@
+<div class="convocatorias-vigentes-page">
+  <div class="convocatorias-vigentes-container">
+    <div class="top-actions">
+      <a routerLink="/portal/dashboard" class="top-action-link">
+        <span>🏠</span>
+        <span>Inicio</span>
+      </a>
+
+      <a routerLink="/portal/mi-perfil" class="top-action-link">
+        <span>👤</span>
+        <span>Mi Perfil</span>
+      </a>
+
+      <a routerLink="/portal/postulaciones" class="top-action-link">
+        <span>📩</span>
+        <span>Mis postulaciones</span>
+      </a>
+    </div>
+
+    <section class="page-banner">
+      <div class="page-banner-content">
+        <h1 class="page-title">Convocatorias Vigentes</h1>
+        <p class="page-subtitle">
+          Revise las convocatorias abiertas y registre su postulación desde cada fila.
+        </p>
+      </div>
+    </section>
+
+    <div class="important-note">
+      <div class="important-note-content">
+        <div class="important-note-icon">📌</div>
+        <div>
+          <h2 class="important-note-title">Nota importante:</h2>
+          <ol class="important-note-list">
+            <li>
+              Genere una <span class="important-note-strong">vista previa</span> y
+              revise cuidadosamente toda la información antes de postular.
+            </li>
+            <li>
+              Registrar la postulación <span class="important-note-strong">no finaliza el trámite</span>.
+              Luego deberá completar el expediente virtual para continuar en evaluación.
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-wrapper">
+        <table class="convocatorias-table">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Proceso</th>
+              <th>Fuente</th>
+              <th>Nombre Puesto</th>
+              <th>Descripción</th>
+              <th>Oficina</th>
+              <th class="text-center">Postular</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @if (loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton-type"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td><span class="skeleton skeleton-desc"></span></td>
+                  <td><span class="skeleton skeleton-desc"></span></td>
+                  <td><span class="skeleton skeleton-text"></span></td>
+                  <td class="text-center"><span class="skeleton skeleton-btn"></span></td>
+                </tr>
+              }
+            } @else if (convocatorias().length === 0) {
+              <tr>
+                <td colspan="7" class="table-message-cell">
+                  No existen convocatorias vigentes disponibles en este momento.
+                </td>
+              </tr>
+            } @else {
+              @for (item of convocatorias(); track item.idConvocatoria) {
+                <tr class="table-row-hover">
+                  <td class="cell-type">CAS</td>
+                  <td>{{ item.numeroConvocatoria || '—' }}</td>
+                  <td>{{ item.fuenteFinanciamiento || 'RECURSOS ORDINARIOS' }}</td>
+                  <td class="cell-uppercase">{{ resolveNombrePuesto(item) }}</td>
+                  <td>{{ item.objetoContratacion || item.descripcion || '—' }}</td>
+                  <td class="cell-uppercase">{{ item.unidadOrganica || '—' }}</td>
+                  <td class="text-center">
+                    <button
+                      type="button"
+                      class="btn-postular"
+                      [disabled]="isApplying(item.idConvocatoria)"
+                      (click)="postular(item)"
+                    >
+                      @if (isApplying(item.idConvocatoria)) {
+                        <span class="spinner">⟳</span>
+                        <span>Postulando</span>
+                      } @else {
+                        <span>📝</span>
+                        <span>Postular</span>
+                      }
+                    </button>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  @if (showSuccessModal()) {
+    <div class="modal-backdrop" (click)="closeSuccessModal()">
+      <div class="success-modal" (click)="$event.stopPropagation()">
+        <div class="success-modal-icon">✅</div>
+        <h2 class="success-modal-title">Postulación registrada correctamente</h2>
+        <p class="success-modal-text">
+          Su postulación a <strong>{{ createdPostulationProcess() }}</strong> para el puesto
+          <strong>{{ createdPostulationJob() }}</strong> quedó en estado <strong>REGISTRADO</strong>.
+        </p>
+        <div class="success-alert-box">
+          <strong>Acción obligatoria:</strong> aún debe completar el expediente virtual para que su
+          postulación continúe en el proceso de evaluación.
+        </div>
+        <p class="success-modal-footnote">
+          El sistema registrará una notificación y, si la mensajería institucional está habilitada,
+          enviará un correo al email consignado en su perfil.
+        </p>
+        <div class="success-modal-actions">
+          <button type="button" class="btn-modal-primary" (click)="continueToExpediente()">
+            Completar expediente ahora
+          </button>
+          <button type="button" class="btn-modal-secondary" (click)="goToMisPostulaciones()">
+            Ir a Mis postulaciones
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

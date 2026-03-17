@@ -1,0 +1,494 @@
+<div class="preview-shell">
+    <div class="preview-toolbar">
+      <div>
+        <h2 class="preview-toolbar-title">Vista previa</h2>
+        <p class="preview-toolbar-subtitle">
+          Documento generado con la información registrada en Mi Perfil.
+        </p>
+      </div>
+  
+      <div class="preview-toolbar-actions">
+        <button
+          type="button"
+          (click)="onActualizarVista()"
+          class="btn-secondary"
+          [disabled]="loading()"
+        >
+          Actualizar vista
+        </button>
+  
+        <button
+          type="button"
+          (click)="onDescargarPdf()"
+          class="btn-primary"
+          [disabled]="loading() || !!errorMsg()"
+        >
+          Descargar PDF
+        </button>
+      </div>
+    </div>
+  
+    @if (loading()) {
+      <div class="preview-status-card">
+        Generando vista previa...
+      </div>
+    } @else if (errorMsg()) {
+      <div class="preview-status-card preview-status-error">
+        {{ errorMsg() }}
+      </div>
+    } @else {
+      <div class="preview-frame">
+        <div #previewContent class="preview-document">
+          <div class="preview-header">
+            <img [src]="logoUrl" alt="SISCONV ACFFAA" class="preview-logo" />
+            <div class="preview-title-block">
+              <h1 class="preview-main-title">VISTA PREVIA</h1>
+              <div class="preview-subtitle">SISCONV-ACFFAA</div>
+            </div>
+            <div class="preview-logo-spacer"></div>
+          </div>
+  
+          <p class="preview-note">
+            LA INFORMACIÓN CONTENIDA EN EL PRESENTE DOCUMENTO TIENE CARÁCTER DE
+            <strong>DECLARACIÓN JURADA.</strong>
+          </p>
+  
+          <section class="preview-block">
+            <h3 class="section-title">1.- DATOS PERSONALES</h3>
+  
+            <table class="preview-table compact-table">
+              <tbody>
+                <tr>
+                  <td class="w-label"><strong>Apellidos y Nombres</strong></td>
+                  <td>{{ fullName() }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Fecha de Nacimiento (Día/Mes/Año)</strong></td>
+                  <td>{{ formatDate(perfil()?.fechaNacimiento) }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Domicilio (Departamento / Provincia / Distrito)</strong></td>
+                  <td>{{ domicilioLabel() }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Dirección</strong></td>
+                  <td>{{ perfil()?.direccion || '—' }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Número de DNI o Carnet de Extranjería</strong></td>
+                  <td>{{ documentNumberLabel() }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Número de RUC</strong></td>
+                  <td>{{ perfil()?.ruc || '—' }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Número de Brevete y Categoría (si el perfil lo requiere)</strong></td>
+                  <td>{{ breveteLabel() }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Estado Civil</strong></td>
+                  <td>{{ perfil()?.estadoCivil || '—' }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Teléfono celular</strong></td>
+                  <td>{{ perfil()?.telefono || '—' }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Correo electrónico</strong></td>
+                  <td>{{ perfil()?.email || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">2.- FORMACIÓN ACADÉMICA</h3>
+  
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>FORMACIÓN ACADÉMICA</th>
+                  <th>NIVEL ALCANZADO</th>
+                  <th>CARRERA</th>
+                  <th>UNIVERSIDAD O INSTITUTO O CENTRO DE ESTUDIOS</th>
+                  <th>FECHA DE EXPEDICIÓN DEL GRADO O TÍTULO / FECHA DEL EGRESO</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (formaciones().length === 0) {
+                  <tr>
+                    <td colspan="5" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of formaciones(); track trackByFormacion($index, item)) {
+                    <tr>
+                      <td>{{ item.formacionAcademica }}</td>
+                      <td>{{ item.nivelAlcanzado }}</td>
+                      <td>{{ item.carrera }}</td>
+                      <td>{{ item.centroEstudios }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaExpedicion) }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">
+              3.- CURSOS Y/O PROGRAMAS DE ESPECIALIZACIÓN
+              <span class="section-subtitle">(Certificaciones, Diplomados, Especializaciones u otros)</span>
+            </h3>
+  
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>DENOMINACIÓN DESPLEGABLE</th>
+                  <th>DESCRIPCIÓN (NOMBRE DEL CURSO O PROGRAMA)</th>
+                  <th>INSTITUCIÓN</th>
+                  <th>HORAS ACADÉMICAS</th>
+                  <th>FECHA INICIO</th>
+                  <th>FECHA FIN</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (cursosEspecializacion().length === 0) {
+                  <tr>
+                    <td colspan="6" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of cursosEspecializacion(); track trackByConocimiento($index, item)) {
+                    <tr>
+                      <td>{{ item.tipoConocimiento }}</td>
+                      <td>{{ item.descripcion }}</td>
+                      <td>{{ item.institucion || '—' }}</td>
+                      <td>{{ hoursLabel(item.horas) }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaInicio) }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaFin) }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">4.- CONOCIMIENTOS DE OFIMÁTICA</h3>
+  
+            <table class="preview-table compact-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">OFIMÁTICA (DESPLEGABLE)</th>
+                  <th colspan="4">NIVEL DE DOMINIO</th>
+                </tr>
+                <tr>
+                  <th>NO APLICA</th>
+                  <th>BÁSICO</th>
+                  <th>INTERMEDIO</th>
+                  <th>AVANZADO</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (ofimaticaRows().length === 0) {
+                  <tr>
+                    <td colspan="5" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of ofimaticaRows(); track item.nombre) {
+                    <tr>
+                      <td>{{ item.nombre }}</td>
+                      <td class="text-center">{{ item.nivel === 'NO_APLICA' ? 'X' : '' }}</td>
+                      <td class="text-center">{{ item.nivel === 'BÁSICO' ? 'X' : '' }}</td>
+                      <td class="text-center">{{ item.nivel === 'INTERMEDIO' ? 'X' : '' }}</td>
+                      <td class="text-center">{{ item.nivel === 'AVANZADO' ? 'X' : '' }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">5.- OTROS DOCUMENTOS EXIGIDOS PARA EL PUESTO O CARGO</h3>
+  
+            <table class="preview-table compact-table">
+              <thead>
+                <tr>
+                  <th style="width: 56px;">N°</th>
+                  <th>DOCUMENTOS</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (documentos().length === 0) {
+                  <tr>
+                    <td colspan="2" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of documentos(); track trackByDocumento($index, item); let i = $index) {
+                    <tr>
+                      <td class="text-center">{{ i + 1 }}</td>
+                      <td>{{ item.tipoDocumento }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">6.- CONOCIMIENTO DE IDIOMAS</h3>
+  
+            <table class="preview-table compact-table">
+              <thead>
+                <tr>
+                  <th>IDIOMAS (DESPLEGABLE)</th>
+                  <th>NIVEL</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (idiomasRows().length === 0) {
+                  <tr>
+                    <td colspan="2" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of idiomasRows(); track item.idioma) {
+                    <tr>
+                      <td>{{ item.idioma }}</td>
+                      <td>{{ item.nivel }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">
+              7.- EXPERIENCIA LABORAL GENERAL
+              <span class="section-subtitle">
+                (En caso de presentar las prácticas pre-profesionales o profesionales o Secigra, éstas se contabilizarán siempre y cuando se adjunte la constancia de egreso, en el apartado N°2 de formación académica).
+              </span>
+            </h3>
+  
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>TIPO DE SECTOR</th>
+                  <th>NOMBRE DE INSTITUCIÓN O EMPRESA</th>
+                  <th>NOMBRE DEL PUESTO O CARGO</th>
+                  <th>FECHA DE INICIO</th>
+                  <th>FECHA DE FIN</th>
+                  <th>TIEMPO DE SERVICIO (AÑO-MES-DIAS)</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (generalExperiences().length === 0) {
+                  <tr>
+                    <td colspan="6" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of generalExperiences(); track trackByExperiencia($index, item)) {
+                    <tr>
+                      <td>{{ item.tipoSector }}</td>
+                      <td>{{ item.institucion }}</td>
+                      <td>{{ item.puesto }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaInicio) }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaFin) }}</td>
+                      <td class="text-center">{{ getExperiencePeriodLabel(item.fechaInicio, item.fechaFin) }}</td>
+                    </tr>
+                  }
+                  <tr class="summary-row">
+                    <td colspan="5" class="text-right">EXPERIENCIA GENERAL TOTAL:</td>
+                    <td>{{ getExperienceTotalLabel(generalExperiences()) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">
+              8.- EXPERIENCIA LABORAL ESPECÍFICA
+              <span class="section-subtitle">
+                (En caso de presentar las prácticas pre-profesionales o profesionales o Secigra, éstas se contabilizarán siempre y cuando se adjunte la constancia de egreso, en el apartado N°2 de formación académica).
+              </span>
+            </h3>
+  
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>TIPO DE SECTOR</th>
+                  <th>NOMBRE DE INSTITUCIÓN O EMPRESA</th>
+                  <th>NOMBRE DEL PUESTO O CARGO</th>
+                  <th>NIVEL</th>
+                  <th>FUNCIONES PRINCIPALES</th>
+                  <th>FECHA DE INICIO</th>
+                  <th>FECHA DE FIN</th>
+                  <th>TIEMPO DE SERVICIO (AÑO-MES-DIAS)</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (specificExperiences().length === 0) {
+                  <tr>
+                    <td colspan="8" class="text-center muted">Sin registros</td>
+                  </tr>
+                } @else {
+                  @for (item of specificExperiences(); track trackByExperiencia($index, item)) {
+                    <tr>
+                      <td>{{ item.tipoSector }}</td>
+                      <td>{{ item.institucion }}</td>
+                      <td>{{ item.puesto }}</td>
+                      <td>{{ item.nivel }}</td>
+                      <td class="pre-line">{{ item.funciones }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaInicio) }}</td>
+                      <td class="text-center">{{ formatDate(item.fechaFin) }}</td>
+                      <td class="text-center">{{ getExperiencePeriodLabel(item.fechaInicio, item.fechaFin) }}</td>
+                    </tr>
+                  }
+                  <tr class="summary-row">
+                    <td colspan="7" class="text-right">EXPERIENCIA ESPECÍFICA TOTAL:</td>
+                    <td>{{ getExperienceTotalLabel(specificExperiences()) }}</td>
+                  </tr>
+                  <tr class="summary-row">
+                    <td colspan="7" class="text-right">EXPERIENCIA ESPECÍFICA PÚBLICA TOTAL:</td>
+                    <td>{{ getExperienceTotalLabel(specificPublicExperiences()) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">9.- COLEGIATURA Y HABILITACIÓN PROFESIONAL</h3>
+  
+            <table class="preview-table compact-table">
+              <thead>
+                <tr>
+                  <th>¿CUENTA CON COLEGIATURA?</th>
+                  <th>¿CUENTA CON HABILITACIÓN PROFESIONAL?</th>
+                  <th>N° DE COLEGIATURA</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    SI ({{ boolMark(perfil()?.tieneColegiatura, true) }})
+                    &nbsp;&nbsp; NO ({{ boolMark(perfil()?.tieneColegiatura, false) }})
+                  </td>
+                  <td>
+                    SI ({{ boolMark(perfil()?.tieneHabilitacionProf, true) }})
+                    &nbsp;&nbsp; NO ({{ boolMark(perfil()?.tieneHabilitacionProf, false) }})
+                  </td>
+                  <td>{{ perfil()?.nroColegiatura || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">10.- INFORMACIÓN FACULTATIVA</h3>
+  
+            <table class="preview-table compact-table">
+              <tbody>
+                <tr>
+                  <td><strong>¿POSEE DISCAPACIDAD?</strong></td>
+                  <td>
+                    SI ({{ boolMark(perfil()?.esPersonaDiscap, true) }})
+                    &nbsp;&nbsp; NO ({{ boolMark(perfil()?.esPersonaDiscap, false) }})
+                  </td>
+                  <td><strong>SI ES AFIRMATIVO QUE TIPO DE DISCAPACIDAD ES</strong></td>
+                  <td>--</td>
+                </tr>
+                <tr>
+                  <td><strong>TIPO DE DOCUMENTO QUE ACREDITA LA DISCAPACIDAD DEL POSTULANTE</strong></td>
+                  <td>--</td>
+                  <td><strong>NÚMERO DE DOCUMENTO QUE ACREDITA LA DISCAPACIDAD</strong></td>
+                  <td>--</td>
+                </tr>
+                <tr>
+                  <td><strong>¿NECESITA AJUSTES RAZONABLES EN ESTE PROCESO?</strong></td>
+                  <td>NO (X)</td>
+                  <td><strong>¿CUÁLES?</strong></td>
+                  <td>--</td>
+                </tr>
+                <tr>
+                  <td><strong>¿ES LICENCIADO DE LAS FUERZAS ARMADAS?</strong></td>
+                  <td>
+                    SI ({{ boolMark(perfil()?.esLicenciadoFfaa, true) }})
+                    &nbsp;&nbsp; NO ({{ boolMark(perfil()?.esLicenciadoFfaa, false) }})
+                  </td>
+                  <td><strong>¿ES DEPORTISTA CALIFICADO DE ALTO NIVEL?</strong></td>
+                  <td>
+                    SI ({{ boolMark(perfil()?.esDeportistaDest, true) }})
+                    &nbsp;&nbsp; NO ({{ boolMark(perfil()?.esDeportistaDest, false) }})
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">11.- ANTECEDENTES</h3>
+  
+            <table class="preview-table compact-table">
+              <tbody>
+                <tr>
+                  <td>¿Se encuentra dentro del Registro de Deudores Alimentarios Morosos - REDAM?</td>
+                  <td>SI ({{ boolMark(perfil()?.estaEnRedam, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.estaEnRedam, false) }})</td>
+                </tr>
+                <tr>
+                  <td>¿Se encuentra inscrito en el Registro Nacional de Sanciones contra Servidores Civiles - RNSSC?</td>
+                  <td>SI ({{ boolMark(perfil()?.estaEnRnssc, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.estaEnRnssc, false) }})</td>
+                </tr>
+                <tr>
+                  <td>¿Se encuentra inscrito en el Registro Nacional de Deudores de reparaciones Civiles - REDERECI?</td>
+                  <td>SI ({{ boolMark(perfil()?.estaEnRedereci, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.estaEnRedereci, false) }})</td>
+                </tr>
+                <tr>
+                  <td>¿A la fecha cuenta con antecedentes penales?</td>
+                  <td>SI ({{ boolMark(perfil()?.tieneAntecedentesPenales, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.tieneAntecedentesPenales, false) }})</td>
+                </tr>
+                <tr>
+                  <td>¿A la fecha cuenta con antecedentes policiales?</td>
+                  <td>SI ({{ boolMark(perfil()?.tieneAntecedentesPoliciales, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.tieneAntecedentesPoliciales, false) }})</td>
+                </tr>
+                <tr>
+                  <td>¿A la fecha cuenta con antecedentes judiciales?</td>
+                  <td>SI ({{ boolMark(perfil()?.tieneAntecedentesJudiciales, true) }}) &nbsp;&nbsp; NO ({{ boolMark(perfil()?.tieneAntecedentesJudiciales, false) }})</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+  
+          <section class="preview-block">
+            <h3 class="section-title">
+              12.- DECLARACIÓN JURADA DE NO TENER IMPEDIMENTOS NI PROHIBICIÓN PARA CELEBRAR CONTRATOS CON EL ESTADO
+            </h3>
+            <div class="preview-declaration">
+              <p>LEY N° 26771 Y DECRETO SUPREMO 021-2000-PCM</p>
+              <p>Declaro aceptar las bases y la convocatoria del proceso de Selección.</p>
+              <p>Declaro estar habilitado administrativa o judicialmente para el ejercicio de la profesión, para contratar con el Estado o para desempeñar función pública.</p>
+              <p>Declaro no presentarme a otra convocatoria CAS o 728 de la Defensoría del Pueblo que tenga el mismo Cronograma, en cumplimiento a la Directiva actual.</p>
+              <p>Declaro no percibir simultáneamente remuneración y pensión, u honorarios por concepto de locación de servicios, asesorías o consultorías, o cualquier otra doble percepción o ingresos del Estado, salvo por el ejercicio de la actividad docente y la percepción de dietas por participación en uno (1) de los directorios de entidades o empresas públicas, o por ser miembro únicamente de un órgano colegiado.</p>
+              <p>
+                Declara no tener grado de parentesco hasta el 4° grado de consanguinidad o 2° de afinidad y por razón de matrimonio o por unión de hecho,
+                con los funcionarios de dirección y/o personal de confianza de la Defensoría del Pueblo que gozan de la facultad de nombramiento y contratación
+                de personal o tenga injerencia directa o indirecta en el proceso de selección.
+              </p>
+  
+              @if (perfil()?.detalleDeclaracionJurada) {
+                <p><strong>Detalle declarado:</strong> {{ perfil()?.detalleDeclaracionJurada }}</p>
+              }
+  
+              <p class="preview-acceptance">
+                ¿Acepta Declaración Jurada?
+                &nbsp; SI ({{ boolMark(perfil()?.aceptaDeclaracionJurada, true) }})
+                &nbsp; NO ({{ boolMark(perfil()?.aceptaDeclaracionJurada, false) }})
+              </p>
+            </div>
+          </section>
+        </div>
+      </div>
+    }
+  </div>

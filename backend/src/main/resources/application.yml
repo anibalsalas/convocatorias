@@ -1,0 +1,112 @@
+# ═══════════════════════════════════════════════════════════════
+# SISCONV-ACFFAA v1.0 — Configuración Principal
+# SAD §4.1: Spring Boot 3.3 + Oracle 21c XE (XEPDB1)
+# SAD §7.1: HikariCP connection pool
+# ═══════════════════════════════════════════════════════════════
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/sisconv
+
+spring:
+  application:
+    name: sisconv-backend
+  servlet:
+    multipart:
+      max-file-size: 3MB
+      max-request-size: 3MB
+  # ============================
+  # ORACLE DATABASE CONFIG
+  # ============================
+  datasource:
+    url: jdbc:oracle:thin:@//${DB_HOST:localhost}:${DB_PORT:1521}/${DB_SID:XEPDB1}
+    username: ${DB_USERNAME:sisconv}
+    password: ${DB_PASSWORD:sisconv2026}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20            # SAD §7.1: HikariCP max=20
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+  # ============================
+  # JPA / HIBERNATE
+  # ============================
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect
+    hibernate:
+      ddl-auto: none                   # Scripts versionados V1-V6
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: SISCONV
+  # ============================
+  # JACKSON — Serialización JSON
+  # ============================
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: America/Lima
+    serialization:
+      write-dates-as-timestamps: false
+
+# ============================
+# ALMACENAMIENTO — Parte B: archivos fuera de BD
+# Ruta por defecto: {directorio-ejecución}/sisconv-uploads
+# Ejemplo: C:\Users\PC\Documents\GitHub\siscontx\backend\sisconv-uploads
+# Sobrescribir con variable de entorno STORAGE_PATH si se desea otra ruta
+# ============================
+app:
+  storage:
+    base-path: ${STORAGE_PATH:${user.dir}/sisconv-uploads}
+  notifications:
+    mail:
+      enabled: ${MAIL_ENABLED:false}
+      from: ${MAIL_FROM:no-reply@sisconv.gob.pe}
+      portal-base-url: ${PORTAL_BASE_URL:http://localhost:4200/portal}
+
+# ============================
+# JWT — SAD §5.1: Doble token
+# ============================
+sisconv:
+  jwt:
+    secret: ${JWT_SECRET:clave-secreta-sisconv-acffaa-2025-cambiar-en-produccion-min-256bits-hmac-sha256}
+    access-token-expiration: 1800000   # 30 min (SAD §5.1)
+    refresh-token-expiration: 86400000 # 24h    (SAD §5.1)
+    issuer: SISCONV-ACFFAA
+
+# ============================
+# LOGGING
+# Configuración final aplicada
+# Se usa formato YAML (en lugar de .properties) 
+#porque permite estructura jerárquica, es más legible para configuraciones complejas 
+# como HikariCP y JWT con múltiples propiedades anidadas, 
+# y es el formato recomendado por Spring Boot para proyectos con más de 15 propiedades.
+# ============================
+logging:
+  level:
+    root: INFO
+    pe.gob.acffaa.sisconv: DEBUG
+    org.springframework.security: WARN
+
+# ============================
+# ACTUATOR — SAD §6.1
+# ============================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+

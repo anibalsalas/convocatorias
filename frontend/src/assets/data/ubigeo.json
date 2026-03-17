@@ -1,0 +1,148 @@
+[
+  {
+    "codigo": "01",
+    "nombre": "Amazonas",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Chachapoyas",
+        "distritos": [
+          { "codigo": "01", "nombre": "Chachapoyas" },
+          { "codigo": "02", "nombre": "Asunción" },
+          { "codigo": "03", "nombre": "Balsas" }
+        ]
+      }
+    ]
+  },
+  {
+    "codigo": "04",
+    "nombre": "Arequipa",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Arequipa",
+        "distritos": [
+          { "codigo": "01", "nombre": "Arequipa" },
+          { "codigo": "02", "nombre": "Alto Selva Alegre" },
+          { "codigo": "03", "nombre": "Cayma" },
+          { "codigo": "04", "nombre": "Cerro Colorado" },
+          { "codigo": "05", "nombre": "Jacobo Hunter" }
+        ]
+      }
+    ]
+  },
+  {
+    "codigo": "08",
+    "nombre": "Cusco",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Cusco",
+        "distritos": [
+          { "codigo": "01", "nombre": "Cusco" },
+          { "codigo": "02", "nombre": "Ccorca" },
+          { "codigo": "03", "nombre": "Poroy" },
+          { "codigo": "04", "nombre": "San Jerónimo" }
+        ]
+      }
+    ]
+  },
+  {
+    "codigo": "13",
+    "nombre": "La Libertad",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Trujillo",
+        "distritos": [
+          { "codigo": "01", "nombre": "Trujillo" },
+          { "codigo": "02", "nombre": "El Porvenir" },
+          { "codigo": "03", "nombre": "Florencia de Mora" },
+          { "codigo": "04", "nombre": "Huanchaco" }
+        ]
+      }
+    ]
+  },
+  {
+    "codigo": "15",
+    "nombre": "Lima",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Lima",
+        "distritos": [
+          { "codigo": "01", "nombre": "Lima" },
+          { "codigo": "02", "nombre": "Ancón" },
+          { "codigo": "03", "nombre": "Ate" },
+          { "codigo": "04", "nombre": "Barranco" },
+          { "codigo": "05", "nombre": "Breña" },
+          { "codigo": "06", "nombre": "Carabayllo" },
+          { "codigo": "07", "nombre": "Chaclacayo" },
+          { "codigo": "08", "nombre": "Chorrillos" },
+          { "codigo": "09", "nombre": "Cieneguilla" },
+          { "codigo": "10", "nombre": "Comas" },
+          { "codigo": "11", "nombre": "El Agustino" },
+          { "codigo": "12", "nombre": "Independencia" },
+          { "codigo": "13", "nombre": "Jesús María" },
+          { "codigo": "14", "nombre": "La Molina" },
+          { "codigo": "15", "nombre": "La Victoria" },
+          { "codigo": "16", "nombre": "Lince" },
+          { "codigo": "17", "nombre": "Los Olivos" },
+          { "codigo": "18", "nombre": "Lurigancho" },
+          { "codigo": "19", "nombre": "Lurín" },
+          { "codigo": "20", "nombre": "Magdalena del Mar" },
+          { "codigo": "21", "nombre": "Miraflores" },
+          { "codigo": "22", "nombre": "Pachacámac" },
+          { "codigo": "23", "nombre": "Pucusana" },
+          { "codigo": "24", "nombre": "Pueblo Libre" },
+          { "codigo": "25", "nombre": "Puente Piedra" },
+          { "codigo": "26", "nombre": "Punta Hermosa" },
+          { "codigo": "27", "nombre": "Punta Negra" },
+          { "codigo": "28", "nombre": "Rímac" },
+          { "codigo": "29", "nombre": "San Bartolo" },
+          { "codigo": "30", "nombre": "San Isidro" },
+          { "codigo": "31", "nombre": "San Juan de Lurigancho" },
+          { "codigo": "32", "nombre": "San Juan de Miraflores" },
+          { "codigo": "33", "nombre": "San Luis" },
+          { "codigo": "34", "nombre": "San Martín de Porres" },
+          { "codigo": "35", "nombre": "San Miguel" },
+          { "codigo": "36", "nombre": "Santa Anita" },
+          { "codigo": "37", "nombre": "Santa María del Mar" },
+          { "codigo": "38", "nombre": "Santa Rosa" },
+          { "codigo": "39", "nombre": "Santiago de Surco" },
+          { "codigo": "40", "nombre": "Surquillo" },
+          { "codigo": "41", "nombre": "Villa El Salvador" },
+          { "codigo": "42", "nombre": "Villa María del Triunfo" }
+        ]
+      },
+      {
+        "codigo": "02",
+        "nombre": "Callao",
+        "distritos": [
+          { "codigo": "01", "nombre": "Callao" },
+          { "codigo": "02", "nombre": "Bellavista" },
+          { "codigo": "03", "nombre": "Carmen de la Legua" },
+          { "codigo": "04", "nombre": "La Perla" },
+          { "codigo": "05", "nombre": "La Punta" },
+          { "codigo": "06", "nombre": "Ventanilla" }
+        ]
+      }
+    ]
+  },
+  {
+    "codigo": "20",
+    "nombre": "Piura",
+    "provincias": [
+      {
+        "codigo": "01",
+        "nombre": "Piura",
+        "distritos": [
+          { "codigo": "01", "nombre": "Piura" },
+          { "codigo": "02", "nombre": "Castilla" },
+          { "codigo": "03", "nombre": "Catacaos" },
+          { "codigo": "04", "nombre": "Cura Mori" }
+        ]
+      }
+    ]
+  }
+]

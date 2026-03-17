@@ -1,0 +1,36 @@
+// ═══════════════════════════════════════════
+// SISCONV-ACFFAA — Design Tokens Institucional
+// ═══════════════════════════════════════════
+
+// Colores primarios
+$primary:         #1F2133;  // Azul Defensa
+$primary-light:   #2D5F8A;
+$primary-dark:    #142740;
+
+// Dorado institucional
+$secondary:       #D4A843;
+$secondary-light: #E0BE6A;
+$secondary-dark:  #B8912F;
+
+// Estados semánticos
+$success:  #10B981;
+$warning:  #F59E0B;
+$danger:   #EF4444;
+$info:     #3B82F6;
+$neutral:  #6B7280;
+
+// Superficies
+$background: #F8FAFC;
+$surface:    #FFFFFF;
+
+// Tipografía
+$font-primary: 'Inter', system-ui, sans-serif;
+$font-mono:    'JetBrains Mono', monospace;
+
+// Espaciado sidebar
+$sidebar-width:     280px;
+$sidebar-collapsed:  64px;
+
+// Bordes
+$radius-card:  8px;
+$radius-input: 6px;

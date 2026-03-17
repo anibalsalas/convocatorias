@@ -1,0 +1,18 @@
+# --- JAVA / SPRING BOOT ---
+**/target/
+**.jar
+**.war
+**.class
+
+# --- ANGULAR / NODE ---
+**/node_modules/
+**/.angular/
+**/dist/
+**/tmp/
+**.log
+
+# --- IDEs & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
