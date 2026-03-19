@@ -170,6 +170,17 @@ public class RequerimientoController {
     }
 
     /**
+     * GET /requerimientos/count-configurados-sin-convocatoria — Banner ORH: CONFIGURADO pendientes de crear convocatoria.
+     * Roles permitidos: ADMIN, ORH.
+     */
+    @GetMapping("/count-configurados-sin-convocatoria")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Contar requerimientos CONFIGURADO sin convocatoria (banner ORH — inicio Etapa 2)")
+    public ResponseEntity<ApiResponse<Long>> contarConfiguradosSinConvocatoria() {
+        return ResponseEntity.ok(ApiResponse.ok(reqService.contarConfiguradosSinConvocatoria()));
+    }
+
+    /**
      * GET /requerimientos/{id} — Obtener detalle con datos de verificación presupuestal.
      *
      * Roles: ADMIN, ORH, OPP, AREA_SOLICITANTE

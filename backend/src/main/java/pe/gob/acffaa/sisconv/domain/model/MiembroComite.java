@@ -45,6 +45,13 @@ public class MiembroComite {
     @Builder.Default
     private Boolean esTitular = true;
 
+    @Column(name = "EMAIL_MIEMBRO", length = 100)
+    private String email;
+
+    /** Auditoría PKG-06: timestamp de la última notificación de designación enviada. */
+    @Column(name = "FEC_ULT_NOTIFICACION")
+    private LocalDateTime fechaUltNotificacion;
+
     @Column(name = "ESTADO", length = 20)
     @Builder.Default
     private String estado = "ACTIVO";

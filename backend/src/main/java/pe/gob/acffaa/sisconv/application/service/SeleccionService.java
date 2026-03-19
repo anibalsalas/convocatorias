@@ -9,6 +9,7 @@ import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.mapper.SeleccionMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.domain.exception.*;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoPostulacion;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
@@ -381,15 +382,22 @@ public class SeleccionService {
     public CuadroMeritosResponse publicarResultados(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
-        if (!"EN_SELECCION".equals(conv.getEstado()))
+        if (conv.getEstado() != EstadoConvocatoria.EN_SELECCION)
             throw new DomainException("Convocatoria no esta EN_SELECCION");
         List<CuadroMeritos> meritos = new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConv));
         if (meritos.isEmpty()) throw new DomainException("No hay cuadro de meritos para publicar");
 
-        conv.setEstado("FINALIZADA");
+        EstadoConvocatoria destino = EstadoConvocatoria.FINALIZADA;
+        if (!conv.getEstado().puedeTransicionarA(destino)) {
+            throw new DomainException("Transición inválida: " + conv.getEstado() + " → " + destino);
+        }
+        conv.setEstado(destino);
         conv.setUsuarioModificacion(user());
         convRepo.save(conv);
-        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "PUBLICAR_RESULTADOS", "EN_SELECCION", "FINALIZADA", http);
+        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "PUBLICAR_RESULTADOS",
+                EstadoConvocatoria.EN_SELECCION.name(), EstadoConvocatoria.FINALIZADA.name(),
+                "Publicación de resultados finales y cuadro de méritos",
+                http);
 
         meritos.sort(Comparator.comparingInt(CuadroMeritos::getOrdenMerito));
         List<CuadroMeritosResponse.MeritoItem> cuadro = meritos.stream()

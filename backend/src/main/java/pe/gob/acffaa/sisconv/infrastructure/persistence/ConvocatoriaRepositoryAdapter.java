@@ -3,10 +3,12 @@ package pe.gob.acffaa.sisconv.infrastructure.persistence;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.model.Convocatoria;
 import pe.gob.acffaa.sisconv.domain.repository.IConvocatoriaRepository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -33,23 +35,23 @@ public class ConvocatoriaRepositoryAdapter implements IConvocatoriaRepository {
     }
 
     @Override
-    public Page<Convocatoria> findByEstado(String estado, Pageable pageable) {
+    public Page<Convocatoria> findByEstado(EstadoConvocatoria estado, Pageable pageable) {
         return jpa.findByEstado(estado, pageable);
     }
 
     @Override
-    public Page<Convocatoria> findByEstadoIn(java.util.List<String> estados, Pageable pageable) {
+    public Page<Convocatoria> findByEstadoIn(List<EstadoConvocatoria> estados, Pageable pageable) {
         return jpa.findByEstadoIn(estados, pageable);
     }
 
     @Override
-    public Page<Convocatoria> findByEstadoInAndAnio(java.util.List<String> estados, Integer anio, Pageable pageable) {
+    public Page<Convocatoria> findByEstadoInAndAnio(List<EstadoConvocatoria> estados, Integer anio, Pageable pageable) {
         return jpa.findByEstadoInAndAnio(estados, anio, pageable);
     }
 
     @Override
     public Page<Convocatoria> findVigentesByEstadoInAndAnio(
-            java.util.List<String> estados,
+            List<EstadoConvocatoria> estados,
             Integer anio,
             LocalDate fechaActual,
             Pageable pageable) {
@@ -63,7 +65,7 @@ public class ConvocatoriaRepositoryAdapter implements IConvocatoriaRepository {
 
     @Override
     public Page<Convocatoria> findVigentesByEstadoIn(
-            java.util.List<String> estados,
+            List<EstadoConvocatoria> estados,
             LocalDate fechaActual,
             Pageable pageable) {
         return jpa.findByEstadoInAndFechaIniPostulacionLessThanEqualAndFechaFinPostulacionGreaterThanEqual(

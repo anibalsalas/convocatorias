@@ -130,7 +130,7 @@ import { ToastService } from '@core/services/toast.service';
               <div class="h-full min-h-[320px] flex items-center justify-center text-center text-sm text-gray-500">
                 <div>
                   <p class="font-medium text-gray-700">Vista previa no disponible</p>
-                  <p class="mt-2">El backend actual devuelve la ruta del archivo, pero no expone un endpoint de descarga/preview para el acta. La carga firmada sí queda registrada.</p>
+                  <p class="mt-2">Genere el acta o cargue el PDF firmado para ver la vista previa.</p>
                 </div>
               </div>
             }
@@ -175,11 +175,42 @@ export class ActaComponent {
         next: (response) => {
           this.convocatoria.set(response.data);
           this.loadingConvocatoria.set(false);
+          this.cargarActaExistente();
         },
         error: () => {
           this.loadingConvocatoria.set(false);
           this.globalError.set('No se pudo cargar la convocatoria.');
         },
+      });
+  }
+
+  /** Carga el acta existente (si la hay) al entrar a la vista. */
+  private cargarActaExistente(): void {
+    this.convocatoriaService.obtenerActa(this.idConvocatoria)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          if (res.data) {
+            this.acta.set(res.data);
+            if (res.data.firmada) {
+              this.cargarPreviewDesdeBackend();
+            }
+          }
+        },
+        error: () => { /* silencioso: acta no existe aún */ },
+      });
+  }
+
+  /** Solicita el PDF al backend (endpoint GET /acta-instalacion/pdf) y genera blob URL. */
+  private cargarPreviewDesdeBackend(): void {
+    this.convocatoriaService.descargarActaPdf(this.idConvocatoria)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          this.previewUrl.set(url);
+        },
+        error: () => { /* silencioso: archivo aún no existe en disco (E13 sin generación real) */ },
       });
   }
 
@@ -193,7 +224,7 @@ export class ActaComponent {
         next: (response) => {
           this.generating.set(false);
           this.acta.set(response.data);
-          this.trySetPreview(response.data.rutaArchivoPdf ?? null);
+          this.cargarPreviewDesdeBackend();
           this.toast.success(response.message || 'Acta generada correctamente.');
         },
         error: (err: { error?: { message?: string } }) => {
@@ -240,7 +271,9 @@ export class ActaComponent {
           this.uploading.set(false);
           this.acta.set(response.data);
           this.toast.success(response.message || 'Acta firmada cargada correctamente.');
-          this.router.navigate(['/sistema/convocatoria', this.idConvocatoria, 'publicar']);
+          // Preview ya fue seteado con blob URL al seleccionar el archivo.
+          // También cargamos desde backend para que persista en recargas futuras.
+          this.cargarPreviewDesdeBackend();
         },
         error: (err: { error?: { message?: string } }) => {
           this.uploading.set(false);
@@ -250,10 +283,4 @@ export class ActaComponent {
       });
   }
 
-  private trySetPreview(path: string | null): void {
-    if (!path) return;
-    if (path.startsWith('http') || path.startsWith('/')) {
-      this.previewUrl.set(path);
-    }
-  }
 }

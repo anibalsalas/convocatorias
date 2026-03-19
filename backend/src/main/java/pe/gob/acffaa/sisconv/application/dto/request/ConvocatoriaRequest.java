@@ -28,10 +28,8 @@ public class ConvocatoriaRequest {
 
     private LocalDate fechaPublicacion;
 
-    @NotNull(message = "fechaIniPostulacion es obligatoria")
     private LocalDate fechaIniPostulacion;
 
-    @NotNull(message = "fechaFinPostulacion es obligatoria")
     private LocalDate fechaFinPostulacion;
 
     private LocalDate fechaEvaluacion;

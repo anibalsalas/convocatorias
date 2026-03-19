@@ -45,7 +45,7 @@ class AuditServiceTest {
     @DisplayName("Debe registrar log con contexto de convocatoria")
     void shouldLogWithConvocatoriaContext() {
         auditService.registrarConvocatoria(99L, "TBL_CONVOCATORIA", 99L,
-                "PUBLICAR", "BORRADOR", "PUBLICADA", null);
+                "PUBLICAR", "BORRADOR", "PUBLICADA", "Publicación de convocatoria para test", null);
         Page<LogTransparencia> logs = logRepo.findByIdConvocatoria(99L, PageRequest.of(0, 10));
         assertFalse(logs.isEmpty());
         assertEquals("PUBLICAR", logs.getContent().get(0).getAccion());

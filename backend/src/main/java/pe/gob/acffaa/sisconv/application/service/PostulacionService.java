@@ -11,6 +11,7 @@ import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.mapper.SeleccionMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.domain.exception.*;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoPostulacion;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
@@ -269,11 +270,18 @@ public class PostulacionService {
                     if (sinSanciones) aptos++; else noAptos++;
                 }
 
-                if ("PUBLICADA".equals(conv.getEstado())) {
-                    conv.setEstado("EN_SELECCION");
+                if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
+                    EstadoConvocatoria destino = EstadoConvocatoria.EN_SELECCION;
+                    if (!conv.getEstado().puedeTransicionarA(destino)) {
+                        throw new DomainException("Transición inválida: " + conv.getEstado() + " → " + destino);
+                    }
+                    conv.setEstado(destino);
                     conv.setUsuarioModificacion(user());
                     convRepo.save(conv);
-                    audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "INICIO_SELECCION", "PUBLICADA", "EN_SELECCION", http);
+                    audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "INICIO_SELECCION",
+                            EstadoConvocatoria.PUBLICADA.name(), EstadoConvocatoria.EN_SELECCION.name(),
+                            "Inicio del proceso de selección — primer filtro de requisitos completado",
+                            http);
                 }
 
                 return PostulacionResponse.builder()

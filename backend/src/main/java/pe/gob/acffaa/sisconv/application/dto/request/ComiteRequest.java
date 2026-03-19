@@ -30,5 +30,6 @@ public class ComiteRequest {
         private String cargo;
         @NotBlank private String rolComite;
         private Boolean esTitular;
+        private String email;
     }
 }

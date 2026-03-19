@@ -9,13 +9,20 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
 import { StatusBadgeComponent } from '@shared/components/status-badge/status-badge.component';
 import { DatePeruPipe } from '@shared/pipes/date-peru.pipe';
 import { AuthService } from '@core/auth/auth.service';
+import { ConvocatoriaEditarModalComponent } from '../convocatoria-editar-modal/convocatoria-editar-modal.component';
 
 @Component({
   selector: 'app-convocatoria-list',
   standalone: true,
-  imports: [FormsModule, RouterLink, DataTableComponent, PageHeaderComponent, StatusBadgeComponent, DatePeruPipe],
+  imports: [FormsModule, RouterLink, DataTableComponent, PageHeaderComponent, StatusBadgeComponent, DatePeruPipe, ConvocatoriaEditarModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    @if (modalIdConvocatoria()) {
+      <app-convocatoria-editar-modal
+        [idConvocatoria]="modalIdConvocatoria()!"
+        (cerrado)="onModalCerrado($event)" />
+    }
+
     <div class="space-y-4">
       <app-page-header
         title="Convocatorias CAS"
@@ -85,6 +92,13 @@ import { AuthService } from '@core/auth/auth.service';
                   
                   <td class="px-3 py-2 text-center">
                     <div class="flex justify-center gap-1 flex-wrap">
+                      <!-- Icono ver/editar (disponible para todos los estados) -->
+                      <button
+                        (click)="abrirModal(conv.idConvocatoria)"
+                        class="btn-ghost text-xs"
+                        title="Ver / Editar convocatoria"
+                        aria-label="Ver y editar convocatoria">👁</button>
+
                       @if (conv.estado === 'EN_ELABORACION') {
                         <!-- ORH: Cronograma (siempre), Comité (cronograma conformado), Ver bases (bases generables), Publicar (bases + acta firmada) -->
                         @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
@@ -151,8 +165,16 @@ export class ConvocatoriaListComponent implements OnInit {
   readonly page = signal(0);
   readonly totalPages = signal(0);
   readonly totalElements = signal(0);
+  readonly modalIdConvocatoria = signal<number | null>(null);
 
   filtroEstado = '';
+
+  abrirModal(id: number): void { this.modalIdConvocatoria.set(id); }
+
+  onModalCerrado(actualizado: boolean): void {
+    this.modalIdConvocatoria.set(null);
+    if (actualizado) this.loadPage();
+  }
 
 
   hasRole(role: string): boolean {

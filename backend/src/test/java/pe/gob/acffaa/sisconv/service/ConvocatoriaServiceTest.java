@@ -15,6 +15,7 @@ import pe.gob.acffaa.sisconv.application.service.ConvocatoriaService;
 import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.domain.exception.DomainException;
 import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.model.Convocatoria;
 import pe.gob.acffaa.sisconv.domain.model.Cronograma;
 import pe.gob.acffaa.sisconv.domain.repository.IActaRepository;
@@ -125,6 +126,7 @@ class ConvocatoriaServiceTest {
                 eq("REGISTRAR_CRONOGRAMA"),
                 isNull(),
                 isNull(),
+                any(String.class),
                 eq(httpReq)
         );
         verify(notificacionService).notificarRol(
@@ -155,7 +157,7 @@ class ConvocatoriaServiceTest {
     @DisplayName("E10: Convocatoria fuera de EN_ELABORACION -> 400")
     void registrarCronograma_estadoInvalido() {
         Convocatoria convocatoria = convocatoriaEnElaboracion(1L);
-        convocatoria.setEstado("PUBLICADA");
+        convocatoria.setEstado(EstadoConvocatoria.PUBLICADA);
 
         when(convRepo.findById(1L)).thenReturn(Optional.of(convocatoria));
 
@@ -355,7 +357,7 @@ class ConvocatoriaServiceTest {
         return Convocatoria.builder()
                 .idConvocatoria(id)
                 .numeroConvocatoria("CAS-001-2026")
-                .estado("EN_ELABORACION")
+                .estado(EstadoConvocatoria.EN_ELABORACION)
                 .build();
     }
 

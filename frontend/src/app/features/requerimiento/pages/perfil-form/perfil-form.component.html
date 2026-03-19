@@ -150,7 +150,7 @@
               </div>
               <div>
                 <label class="label-field">Especialidad *</label>
-                <input formControlName="especialidad" class="input-field" maxlength="200" placeholder="Ej. Derecho, Ingeniería" />
+                <input formControlName="especialidad" class="input-field" maxlength="200" placeholder="Ej. Derecho, Ingeniería" (input)="onEspecialidadInput()" />
                 @if (isControlInvalid(formacionForm.controls.especialidad)) {
                   <span class="error-text">La especialidad es obligatoria.</span>
                 }
@@ -363,18 +363,96 @@
         </section>
       }
 
+      <!-- TAB 4: Condiciones del Puesto -->
+      @if (activeTab() === 4) {
+        <section class="card-section">
+          <h2 class="section-title">Condiciones del Puesto</h2>
+          @if (condicionesReadonly()) {
+            <p class="section-subtitle text-amber-700">
+              Solo lectura — el requerimiento ya superó el estado ELABORADO
+              (estado actual: <strong>{{ estadoRequerimientoAsociado() }}</strong>).
+              Las condiciones económicas solo son editables antes de la conformidad OPP.
+            </p>
+          } @else {
+            <p class="section-subtitle">Remuneración y condiciones contractuales — D.Leg. 1057 (CAS).</p>
+          }
+
+          @if (!perfilId()) {
+            <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
+          } @else {
+            <div class="grid-form grid-form--two" [formGroup]="condicionForm">
+              <div>
+                <label class="label-field">Remuneración mensual (S/) <span class="text-red-500">*</span></label>
+                <input formControlName="remuneracionMensual" type="number" min="0.01" step="0.01"
+                  class="input-field" [class.input-field--readonly]="condicionesReadonly()"
+                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  placeholder="Ej. 3500.00" />
+                @if (isControlInvalid(condicionForm.controls.remuneracionMensual)) {
+                  <span class="error-text">Ingrese una remuneración válida mayor a 0.</span>
+                }
+              </div>
+              <div>
+                <label class="label-field">Jornada semanal (horas)</label>
+                <input formControlName="jornadaSemanal" type="number" min="1" max="48"
+                  class="input-field" [class.input-field--readonly]="condicionesReadonly()"
+                  [attr.readonly]="condicionesReadonly() ? true : null" />
+                <span class="helper-text">Máximo 48 h/semana — D.Leg. 1057.</span>
+              </div>
+              <div>
+                <label class="label-field">Duración del contrato <span class="text-red-500">*</span></label>
+                <input formControlName="duracionContrato" class="input-field"
+                  [class.input-field--readonly]="condicionesReadonly()"
+                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  maxlength="100" placeholder="Ej. 3 meses renovables" />
+                @if (isControlInvalid(condicionForm.controls.duracionContrato)) {
+                  <span class="error-text">La duración del contrato es obligatoria.</span>
+                }
+              </div>
+              <div>
+                <label class="label-field">Lugar de prestación del servicio <span class="text-red-500">*</span></label>
+                <input formControlName="lugarPrestacion" class="input-field"
+                  [class.input-field--readonly]="condicionesReadonly()"
+                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  maxlength="300" placeholder="Ej. Miraflores, Lima" />
+                @if (isControlInvalid(condicionForm.controls.lugarPrestacion)) {
+                  <span class="error-text">El lugar de prestación es obligatorio.</span>
+                }
+              </div>
+              <div class="col-span-2">
+                <label class="label-field">Otras condiciones</label>
+                <textarea formControlName="otrasCondiciones" class="input-field"
+                  [class.input-field--readonly]="condicionesReadonly()"
+                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  rows="2" maxlength="1000"
+                  placeholder="Ej. Disponibilidad para viajes eventuales"></textarea>
+              </div>
+            </div>
+            @if (!condicionesReadonly()) {
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary"
+                  (click)="guardarCondicion()"
+                  [disabled]="saving() || !condicionForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  Guardar condiciones
+                </button>
+              </div>
+            }
+          }
+        </section>
+      }
+
       <div class="actions-row">
         <div class="flex gap-2">
           @if (activeTab() > 0) {
             <button type="button" class="btn-outline" (click)="prevTab()">← Anterior</button>
           }
-          @if (activeTab() < 3) {
+          @if (activeTab() < 4) {
             <button type="button" class="btn-primary" (click)="nextTab()">Siguiente →</button>
           }
         </div>
-        @if (activeTab() === 3 && perfilId()) {
+        @if (activeTab() === 4 && perfilId()) {
           <button type="button" class="btn-primary" (click)="finalizar()">
-            Finalizar y volver al listado
+            Finalizar y Notificar a ORH
           </button>
         }
       </div>

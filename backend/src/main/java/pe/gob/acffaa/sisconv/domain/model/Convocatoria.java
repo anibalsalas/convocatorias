@@ -2,6 +2,7 @@ package pe.gob.acffaa.sisconv.domain.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -88,12 +89,18 @@ public class Convocatoria {
 
     // ── Estado BPMN ──
 
-    /** EN_ELABORACION, APROBADA, PUBLICADA, EN_SELECCION, DESIERTA, FINALIZADA, CANCELADA */
+    /** Estados BPMN — máquina de estados en EstadoConvocatoria.puedeTransicionarA() */
+    @Enumerated(EnumType.STRING)
     @Column(name = "ESTADO", nullable = false, length = 30)
     @Builder.Default
-    private String estado = "EN_ELABORACION";
+    private EstadoConvocatoria estado = EstadoConvocatoria.EN_ELABORACION;
 
     // ── Auditoría ──
+
+    /** Bloqueo optimista — Hibernate incrementa automáticamente (TBL_CONVOCATORIA.VERSION) */
+    @Version
+    @Column(name = "VERSION")
+    private Long version;
 
     @Column(name = "USUARIO_CREACION", length = 50)
     private String usuarioCreacion;

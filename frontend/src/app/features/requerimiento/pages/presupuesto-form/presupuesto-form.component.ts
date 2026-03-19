@@ -29,12 +29,40 @@ const PATRON_ALFANUM_GUION = /^[A-Z0-9\-]*$/;
       @if (loading()) {
         <div class="card text-center py-12 text-gray-400">Cargando requerimiento...</div>
       } @else if (req()) {
-        <div class="card space-y-3">
-          <h2 class="font-semibold text-gray-800">{{ req()!.perfil.denominacion }}</h2>
-          <p class="text-sm text-gray-600">{{ req()!.justificacion }}</p>
-          <div class="flex gap-6 text-sm">
-            <span><strong>N°:</strong> {{ req()!.numeroRequerimiento }}</span>
-            <span><strong>Puestos:</strong> {{ req()!.cantidadPuestos }}</span>
+        <!-- Resumen del requerimiento — todos los campos son solo lectura para OPP -->
+        <div class="card space-y-4">
+          <div class="flex items-center justify-between border-b pb-3">
+            <h2 class="font-semibold text-gray-800">Resumen del requerimiento</h2>
+            <span class="text-xs font-mono bg-gray-100 text-[#1F2133] font-semibold px-2 py-1 rounded">
+              N°: {{ req()!.numeroRequerimiento }}
+            </span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+            <div>
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Nombre del puesto</p>
+              <p class="font-semibold text-gray-800">{{ req()!.perfil.nombrePuesto || req()!.perfil.denominacion || '—' }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Unidad orgánica</p>
+              <p class="font-semibold text-gray-800">{{ req()!.perfil.unidadOrganica || '—' }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Cantidad de puestos</p>
+              <p class="font-semibold text-gray-800">{{ req()!.cantidadPuestos }}</p>
+            </div>
+            <div></div>
+            <div>
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Remuneración mensual</p>
+              <p class="font-semibold text-gray-800">{{ formatRemuneracion(req()!.perfil.condicion?.remuneracionMensual) }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Duración del contrato</p>
+              <p class="font-semibold text-gray-800">{{ req()!.perfil.condicion?.duracionContrato || '—' }}</p>
+            </div>
+            <div class="md:col-span-2">
+              <p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Justificación</p>
+              <p class="text-gray-700">{{ req()!.justificacion || '—' }}</p>
+            </div>
           </div>
         </div>
 
@@ -93,7 +121,7 @@ const PATRON_ALFANUM_GUION = /^[A-Z0-9\-]*$/;
           <div class="flex justify-end">
             <button (click)="onVerificar()" [disabled]="saving()" class="btn-primary">
               @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-              Registrar Verificación
+              Registrar Verificación y Notificar al Área Solicitante y ORH
             </button>
           </div>
         </div>
@@ -138,6 +166,16 @@ export class PresupuestoFormComponent implements OnInit {
     if (input.value !== sanitized) {
       this.form.controls.numeroSiaf.setValue(sanitized, { emitEvent: false });
     }
+  }
+
+  formatRemuneracion(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: 'PEN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
   }
 
   private sanitizeAlfanumGuion(value: string, maxLen: number): string {

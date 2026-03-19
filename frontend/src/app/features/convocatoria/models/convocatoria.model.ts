@@ -9,8 +9,8 @@ export interface ConvocatoriaRequest {
   descripcion: string;
   objetoContratacion?: string | null;
   fechaPublicacion?: string | null;
-  fechaIniPostulacion: string;
-  fechaFinPostulacion: string;
+  fechaIniPostulacion?: string | null;
+  fechaFinPostulacion?: string | null;
   fechaEvaluacion?: string | null;
   fechaResultado?: string | null;
 }
@@ -23,6 +23,9 @@ export interface ActividadCronogramaItem {
   responsable?: string | null;
   lugar?: string | null;
   orden?: number | null;
+  areaResp1?: string | null;
+  areaResp2?: string | null;
+  areaResp3?: string | null;
 }
 
 export interface CronogramaRequest {
@@ -35,6 +38,7 @@ export interface MiembroComiteItem {
   cargo?: string | null;
   rolComite: string;
   esTitular?: boolean | null;
+  email?: string | null;
 }
 
 export interface ComiteRequest {
@@ -49,6 +53,7 @@ export interface MiembroComiteRequest {
   cargo?: string | null;
   rolComite: string;
   esTitular?: boolean | null;
+  email?: string | null;
 }
 
 export interface FactorEvaluacionItem {
@@ -143,6 +148,9 @@ export interface ActividadCronogramaResponse {
   responsable?: string | null;
   lugar?: string | null;
   orden?: number | null;
+  areaResp1?: string | null;
+  areaResp2?: string | null;
+  areaResp3?: string | null;
 }
 
 export interface CronogramaResponse {
@@ -167,6 +175,9 @@ export interface MiembroDetalleItem {
   rolComite: string;
   esTitular: boolean;
   estado: string;
+  email?: string | null;
+  /** ISO-8601 timestamp de última notificación. Null si nunca fue notificado. */
+  fechaUltNotificacion?: string | null;
 }
 
 export interface ComiteDetalleResponse {

@@ -35,4 +35,7 @@ public interface IRequerimientoRepository {
 
     /** Cuenta requerimientos por estado (ej. CON_PRESUPUESTO pendientes de motor de reglas) */
     long countByEstado(String estado);
+
+    /** Cuenta requerimientos CONFIGURADO sin convocatoria asociada (banner ORH — pendientes Etapa 2) */
+    long countConfiguradosSinConvocatoria();
 }

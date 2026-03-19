@@ -32,6 +32,7 @@ public class AuditService implements IAuditPort {
                 .accion(accion)
                 .estadoAnterior(estadoAnterior)
                 .estadoNuevo(estadoNuevo)
+                .sustento("Operación " + accion + " sobre " + entidad)
                 .ipOrigen(obtenerIp(request))
                 .userAgent(request != null ? request.getHeader("User-Agent") : null)
                 .usuarioAccion(obtenerUsuarioActual())
@@ -49,7 +50,7 @@ public class AuditService implements IAuditPort {
     @Override
     public void registrarConvocatoria(Long idConvocatoria, String entidad, Long idEntidad,
                                        String accion, String estadoAnterior, String estadoNuevo,
-                                       HttpServletRequest request) {
+                                       String sustento, HttpServletRequest request) {
         LogTransparencia log = LogTransparencia.builder()
                 .idConvocatoria(idConvocatoria)
                 .entidad(entidad)
@@ -57,6 +58,7 @@ public class AuditService implements IAuditPort {
                 .accion(accion)
                 .estadoAnterior(estadoAnterior)
                 .estadoNuevo(estadoNuevo)
+                .sustento(sustento)
                 .ipOrigen(obtenerIp(request))
                 .userAgent(request != null ? request.getHeader("User-Agent") : null)
                 .usuarioAccion(obtenerUsuarioActual())

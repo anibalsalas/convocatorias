@@ -53,4 +53,12 @@ Optional<Requerimiento> findByIdWithProfileAndCondition(@Param("id") Long id);
      * Cuenta requerimientos en estado CON_PRESUPUESTO pendientes de configurar motor de reglas (ORH).
      */
     long countByEstado(String estado);
+
+    /**
+     * Cuenta requerimientos CONFIGURADO sin convocatoria asociada.
+     * Banner informativo ORH: pendientes de crear convocatoria (Etapa 2).
+     */
+    @Query("SELECT COUNT(r) FROM Requerimiento r WHERE r.estado = 'CONFIGURADO' " +
+           "AND NOT EXISTS (SELECT 1 FROM Convocatoria c WHERE c.requerimiento = r)")
+    long countConfiguradosSinConvocatoria();
 }

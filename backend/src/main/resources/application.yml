@@ -20,7 +20,7 @@ spring:
   # ORACLE DATABASE CONFIG
   # ============================
   datasource:
-    url: jdbc:oracle:thin:@//${DB_HOST:localhost}:${DB_PORT:1521}/${DB_SID:XEPDB1}
+    url: jdbc:oracle:thin:@//${DB_HOST:localhost}:${DB_PORT:1521}/${DB_SERVICE_NAME:XEPDB1}
     username: ${DB_USERNAME:sisconv}
     password: ${DB_PASSWORD:sisconv2026}
     driver-class-name: oracle.jdbc.OracleDriver

@@ -54,6 +54,10 @@ public class LogTransparencia {
     @Column(name = "FECHA_ACCION", nullable = false)
     private LocalDateTime fechaAccion;
 
+    /** Justificación obligatoria del cambio — D.L. 1451 (mínimo 10 caracteres). */
+    @Column(name = "SUSTENTO", nullable = false, length = 1000)
+    private String sustento;
+
     @Column(name = "DATOS_ADICIONALES", length = 4000)
     private String datosAdicionales;
 

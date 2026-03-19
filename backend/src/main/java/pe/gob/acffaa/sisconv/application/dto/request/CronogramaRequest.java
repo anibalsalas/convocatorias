@@ -25,5 +25,8 @@ public class CronogramaRequest {
         private String responsable;
         private String lugar;
         private Integer orden;
+        private String areaResp1;
+        private String areaResp2;
+        private String areaResp3;
     }
 }

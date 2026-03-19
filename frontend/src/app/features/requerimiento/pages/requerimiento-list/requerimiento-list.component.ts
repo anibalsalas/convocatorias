@@ -50,6 +50,21 @@ import { Page } from '@shared/models/pagination.model';
         </div>
       }
 
+      @if (canCreateConvocatoria() && configuradosSinConvocatoria() > 0) {
+        <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 flex items-center gap-2"
+             role="status"
+             aria-live="polite"
+             [attr.aria-label]="'Hay ' + configuradosSinConvocatoria() + ' requerimientos de personal en estado CONFIGURADO por crear convocatoria'">
+          <svg class="h-4 w-4 flex-shrink-0 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" />
+          </svg>
+          <span class="font-medium">
+            Hay {{ configuradosSinConvocatoria() }} requerimiento{{ configuradosSinConvocatoria() !== 1 ? 's' : '' }} de personal por crear Convocatoria CAS.
+          </span>
+          <button type="button" (click)="filtrarConfigurados()" class="ml-auto underline hover:no-underline text-blue-700 font-medium">Ver pendientes</button>
+        </div>
+      }
+
       <div class="card flex items-center gap-3 flex-wrap">
         <div>
           <label class="label-field">Estado</label>
@@ -101,6 +116,16 @@ import { Page } from '@shared/models/pagination.model';
                       @if (r.estado === 'CON_PRESUPUESTO' && canVerifyOrh()) {
                         <a [routerLink]="['/sistema/requerimiento', r.idRequerimiento, 'reglas']" class="btn-ghost text-xs" title="Configurar reglas">⚙️</a>
                       }
+                      @if (r.estado === 'CONFIGURADO' && !r.tieneConvocatoria && canCreateConvocatoria()) {
+                        <a [routerLink]="['/sistema/convocatoria/nueva']"
+                           [queryParams]="{ idRequerimiento: r.idRequerimiento }"
+                           class="btn-ghost text-xs text-blue-600 hover:text-blue-800"
+                           title="Generar Nueva Convocatoria CAS">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="inline h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                          </svg>
+                        </a>
+                      }
                     </div>
                   </td>
                 </tr>
@@ -142,6 +167,10 @@ export class RequerimientoListComponent implements OnInit {
     this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN'])
   );
 
+  readonly canCreateConvocatoria = computed(() =>
+    this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN'])
+  );
+
   // Estado (Signals)
   requerimientos = signal<RequerimientoResponse[]>([]);
   loading = signal(false);
@@ -150,6 +179,7 @@ export class RequerimientoListComponent implements OnInit {
   totalElements = signal(0);
   pendientesVerificacionPresupuestal = signal(0);
   conPresupuestoPendientesReglas = signal(0);
+  configuradosSinConvocatoria = signal(0);
   filtroEstado = '';
 
   // Lifecycle
@@ -196,6 +226,15 @@ export class RequerimientoListComponent implements OnInit {
         next: (res: ApiResponse<number>) => this.conPresupuestoPendientesReglas.set(res.data ?? 0),
         error: () => this.conPresupuestoPendientesReglas.set(0),
       });
+
+    if (this.canCreateConvocatoria()) {
+      this.svc.contarConfiguradosSinConvocatoria()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (res: ApiResponse<number>) => this.configuradosSinConvocatoria.set(res.data ?? 0),
+          error: () => this.configuradosSinConvocatoria.set(0),
+        });
+    }
   }
 
   filtrarElaborados(): void {
@@ -206,6 +245,12 @@ export class RequerimientoListComponent implements OnInit {
 
   filtrarConPresupuesto(): void {
     this.filtroEstado = 'CON_PRESUPUESTO';
+    this.page.set(0);
+    this.cargar();
+  }
+
+  filtrarConfigurados(): void {
+    this.filtroEstado = 'CONFIGURADO';
     this.page.set(0);
     this.cargar();
   }

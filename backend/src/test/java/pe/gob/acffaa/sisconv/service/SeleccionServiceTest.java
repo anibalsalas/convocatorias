@@ -12,6 +12,7 @@ import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.mapper.SeleccionMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.application.service.SeleccionService;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.exception.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
@@ -73,7 +74,7 @@ class SeleccionServiceTest {
     private Convocatoria convEnSeleccion() {
         Requerimiento req = Requerimiento.builder().idRequerimiento(1L).cantidadPuestos(1).build();
         return Convocatoria.builder().idConvocatoria(1L).numeroConvocatoria("CAS-001-2026")
-                .estado("EN_SELECCION").requerimiento(req)
+                .estado(EstadoConvocatoria.EN_SELECCION).requerimiento(req)
                 .pesoEvalCurricular(new BigDecimal("30.00"))
                 .pesoEvalTecnica(new BigDecimal("35.00"))
                 .pesoEntrevista(new BigDecimal("35.00")).build();
@@ -356,7 +357,7 @@ class SeleccionServiceTest {
     @Test @DisplayName("E31: Conv no EN_SELECCION -> 400")
     void e31_estadoInvalido() {
         Convocatoria conv = convEnSeleccion();
-        conv.setEstado("EN_ELABORACION");
+        conv.setEstado(EstadoConvocatoria.EN_ELABORACION);
         when(convRepo.findById(1L)).thenReturn(Optional.of(conv));
         assertThrows(DomainException.class, () -> service.publicarResultados(1L, http));
     }
