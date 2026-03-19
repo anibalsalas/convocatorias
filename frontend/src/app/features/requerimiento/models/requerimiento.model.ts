@@ -70,6 +70,7 @@ export interface RequerimientoResponse {
   observacionPresupuestal: string;
   fechaCertPresupuestal: string;
   motorReglas?: MotorReglasResumen | null;
+  tieneConvocatoria?: boolean | null;
   mensaje: string;
   fechaSolicitud: string;
   usuarioCreacion: string;

@@ -30,7 +30,8 @@ public class Cronograma {
     @JoinColumn(name = "ID_CONVOCATORIA", nullable = false)
     private Convocatoria convocatoria;
 
-    /** PUBLICACION, POSTULACION, EVAL_CURRICULAR, EVAL_TECNICA, ENTREVISTA, RESULTADO, SUSCRIPCION */
+    /** PUBLICACION, POSTULACION, EVAL_CURRICULAR, RESULT_CURRICULAR,
+     *  EVAL_TECNICA, RESULT_TECNICA, ENTREVISTA, RESULTADO, SUSCRIPCION */
     @Column(name = "ETAPA", nullable = false, length = 30)
     private String etapa;
 
@@ -45,6 +46,15 @@ public class Cronograma {
 
     @Column(name = "RESPONSABLE", length = 100)
     private String responsable;
+
+    @Column(name = "AREA_RESP_1", length = 100)
+    private String areaResp1;
+
+    @Column(name = "AREA_RESP_2", length = 100)
+    private String areaResp2;
+
+    @Column(name = "AREA_RESP_3", length = 100)
+    private String areaResp3;
 
     @Column(name = "LUGAR", length = 200)
     private String lugar;

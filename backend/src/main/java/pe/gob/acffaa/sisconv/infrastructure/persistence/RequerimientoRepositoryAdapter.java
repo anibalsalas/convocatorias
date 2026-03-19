@@ -36,4 +36,5 @@ public class RequerimientoRepositoryAdapter implements IRequerimientoRepository 
     @Override public long countByAnio(int anio) { return jpa.countByAnio(anio); }
     @Override public long countElaboradosPendientesVerificacionPresupuestal() { return jpa.countElaboradosPendientesVerificacionPresupuestal(); }
     @Override public long countByEstado(String estado) { return jpa.countByEstado(estado); }
+    @Override public long countConfiguradosSinConvocatoria() { return jpa.countConfiguradosSinConvocatoria(); }
 }

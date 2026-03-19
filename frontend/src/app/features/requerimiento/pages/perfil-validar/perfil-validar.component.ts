@@ -70,7 +70,7 @@ import { DatePeruPipe } from '@shared/pipes/date-peru.pipe';
               <textarea [formControl]="aprobarForm.controls.observaciones" class="input-field" rows="3" maxlength="1000"></textarea>
             </div>
             <div class="flex gap-3">
-              <button (click)="onAprobar(true)" [disabled]="saving()" class="btn-primary">✅ Aprobar Perfil</button>
+              <button (click)="onAprobar(true)" [disabled]="saving()" class="btn-primary">✅ Aprobar Perfil y Notificar al Área Solicitante</button>
               <button (click)="onAprobar(false)" [disabled]="saving()" class="btn-danger">❌ Rechazar</button>
             </div>
           </div>

@@ -1,9 +1,10 @@
-import { Component, ChangeDetectionStrategy, input, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, signal, computed, inject } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 /**
- * Wrapper de pdf.js (Mozilla) para visor inline con zoom y paginación
- * Uso: <app-pdf-viewer [url]="pdfUrl" />
- * Implementación completa del visor en E2 (cuando se use para perfil PDF)
+ * Wrapper inline de PDF con zoom.
+ * Usa DomSanitizer para permitir blob: y http: URLs en iframe
+ * (Angular los bloquea por defecto con unsafe:).
  */
 @Component({
   selector: 'app-pdf-viewer',
@@ -23,8 +24,9 @@ import { Component, ChangeDetectionStrategy, input, signal } from '@angular/core
         </div>
       </div>
       <div class="p-4 min-h-[400px] flex items-center justify-center bg-gray-100">
-        @if (url()) {
-          <iframe [src]="url()" class="w-full h-[600px] border-0" [style.transform]="'scale(' + zoom() / 100 + ')'"></iframe>
+        @if (safeUrl()) {
+          <iframe [src]="safeUrl()" class="w-full h-[600px] border-0"
+            [style.transform]="'scale(' + zoom() / 100 + ')'"></iframe>
         } @else {
           <p class="text-gray-400 text-sm">No hay documento disponible</p>
         }
@@ -33,8 +35,16 @@ import { Component, ChangeDetectionStrategy, input, signal } from '@angular/core
   `,
 })
 export class PdfViewerComponent {
+  private readonly sanitizer = inject(DomSanitizer);
+
   url = input<string>('');
   zoom = signal(100);
+
+  /** Bypass necesario para blob: URLs generados por URL.createObjectURL() */
+  readonly safeUrl = computed<SafeResourceUrl | null>(() => {
+    const u = this.url();
+    return u ? this.sanitizer.bypassSecurityTrustResourceUrl(u) : null;
+  });
 
   zoomIn(): void { this.zoom.update(z => Math.min(200, z + 10)); }
   zoomOut(): void { this.zoom.update(z => Math.max(50, z - 10)); }

@@ -32,7 +32,6 @@ import pe.gob.acffaa.sisconv.domain.repository.IAreaOrganizacionalRepository;
 import pe.gob.acffaa.sisconv.domain.repository.INivelPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPerfilPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IUsuarioRepository;
-import pe.gob.acffaa.sisconv.infrastructure.audit.LogTransparenciaAnnotation;
 import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaRequerimientoRepository;
 
 import java.io.ByteArrayOutputStream;
@@ -131,7 +130,6 @@ public class PerfilPuestoService {
     }
 
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_PERFIL_PUESTO", accion = "CREAR")
     public PerfilPuestoResponse crear(PerfilPuestoRequest req, String username, HttpServletRequest httpReq) {
         syncRequestWithUserContext(req, username, true);
         trimRequest(req);
@@ -161,7 +159,6 @@ public class PerfilPuestoService {
     }
 
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_PERFIL_PUESTO", accion = "ACTUALIZAR")
     public PerfilPuestoResponse actualizar(Long id, PerfilPuestoRequest req, String username, HttpServletRequest httpReq) {
         PerfilPuesto perfil = perfilRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PerfilPuesto", id));
@@ -176,6 +173,19 @@ public class PerfilPuestoService {
         replaceExperiencias(req, perfil);
         replaceRequisitos(req, perfil);
         replaceFunciones(req, perfil);
+        // Guarda: condición económica solo editable mientras el requerimiento está en ELABORADO
+        if (req.getCondicion() != null) {
+            requerimientoRepo
+                    .findFirstByPerfilPuesto_IdPerfilPuestoAndEstadoInOrderByFechaCreacionDesc(
+                            perfil.getIdPerfilPuesto(), ESTADOS_REQUERIMIENTO_VIGENTES)
+                    .ifPresent(requerimiento -> {
+                        if (!"ELABORADO".equals(requerimiento.getEstado())) {
+                            throw new DomainException(
+                                    "Las condiciones económicas solo se pueden modificar mientras el requerimiento está en estado ELABORADO. Estado actual: "
+                                            + requerimiento.getEstado());
+                        }
+                    });
+        }
         replaceCondicion(req, perfil);
 
         perfil = perfilRepo.save(perfil);
@@ -195,7 +205,6 @@ public class PerfilPuestoService {
     }
 
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_PERFIL_PUESTO", accion = "VALIDAR")
     public PerfilPuestoResponse validar(Long id, ValidarPerfilRequest req, String username, HttpServletRequest httpReq) {
         PerfilPuesto perfil = perfilRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PerfilPuesto", id));
@@ -238,7 +247,6 @@ public class PerfilPuestoService {
     }
 
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_PERFIL_PUESTO", accion = "APROBAR")
     public PerfilPuestoResponse aprobar(Long id, AprobarPerfilRequest req, String username, HttpServletRequest httpReq) {
         PerfilPuesto perfil = perfilRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PerfilPuesto", id));

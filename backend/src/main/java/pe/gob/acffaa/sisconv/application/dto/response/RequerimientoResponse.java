@@ -27,6 +27,10 @@ public class RequerimientoResponse {
     @Builder.Default
     private Boolean tienePresupuesto = false;
 
+    /** Indica si ya existe una convocatoria vinculada a este requerimiento — candado UI */
+    @Builder.Default
+    private Boolean tieneConvocatoria = false;
+
     private String certificacionPresupuestal;
     private String numeroSiaf;
     private String observacionPresupuestal;

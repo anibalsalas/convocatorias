@@ -20,9 +20,17 @@ import pe.gob.acffaa.sisconv.application.dto.request.MiembroComiteRequest;
 import pe.gob.acffaa.sisconv.application.dto.response.ComiteDetalleResponse;
 import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaMiembroComiteRepository;
 
+import com.lowagie.text.Document;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.pdf.PdfWriter;
+import java.io.FileOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,37 +103,60 @@ public class ConvocatoriaService {
     }
 
         private static final List<String> ETAPAS_CRONOGRAMA_ORDENADAS = List.of(
+                "PUBLICACION",
                 "POSTULACION",
-                "EVALUACION_CURRICULAR",
-                "EVALUACION_TECNICA",
+                "EVAL_CURRICULAR",
+                "RESULT_CURRICULAR",
+                "EVAL_TECNICA",
+                "RESULT_TECNICA",
                 "ENTREVISTA",
-                "RESULTADOS"
-                );
+                "RESULTADO",
+                "SUSCRIPCION"
+        );
 
         private static final Map<String, String> ETIQUETAS_ETAPA = Map.of(
-                "POSTULACION", "Postulación",
-                "EVALUACION_CURRICULAR", "Evaluación Curricular",
-                "EVALUACION_TECNICA", "Evaluación Técnica",
-                "ENTREVISTA", "Entrevista",
-                "RESULTADOS", "Resultados"
+                "PUBLICACION",      "Publicación",
+                "POSTULACION",      "Postulación",
+                "EVAL_CURRICULAR",  "Evaluación Curricular",
+                "RESULT_CURRICULAR","Resultados Curriculares",
+                "EVAL_TECNICA",     "Evaluación Técnica",
+                "RESULT_TECNICA",   "Resultados Técnicos",
+                "ENTREVISTA",       "Entrevista Personal",
+                "RESULTADO",        "Resultado Final",
+                "SUSCRIPCION",      "Suscripción de Contrato"
         );
 
-        /** Mapeo API -> DB: CK_CRONO_ETAPA espera EVAL_CURRICULAR, EVAL_TECNICA, RESULTADO */
-        private static final Map<String, String> ETAPA_API_TO_DB = Map.of(
-                "POSTULACION", "POSTULACION",
-                "EVALUACION_CURRICULAR", "EVAL_CURRICULAR",
-                "EVALUACION_TECNICA", "EVAL_TECNICA",
-                "ENTREVISTA", "ENTREVISTA",
-                "RESULTADOS", "RESULTADO"
+        /**
+         * Mapeo API -> DB. El frontend ahora usa directamente los nombres DB,
+         * se conservan las claves antiguas para compatibilidad con datos existentes.
+         */
+        private static final Map<String, String> ETAPA_API_TO_DB = Map.ofEntries(
+                Map.entry("PUBLICACION",        "PUBLICACION"),
+                Map.entry("POSTULACION",        "POSTULACION"),
+                Map.entry("EVAL_CURRICULAR",    "EVAL_CURRICULAR"),
+                Map.entry("RESULT_CURRICULAR",  "RESULT_CURRICULAR"),
+                Map.entry("EVAL_TECNICA",       "EVAL_TECNICA"),
+                Map.entry("RESULT_TECNICA",     "RESULT_TECNICA"),
+                Map.entry("ENTREVISTA",         "ENTREVISTA"),
+                Map.entry("RESULTADO",          "RESULTADO"),
+                Map.entry("SUSCRIPCION",        "SUSCRIPCION"),
+                // Claves antiguas conservadas para compatibilidad
+                Map.entry("EVALUACION_CURRICULAR", "EVAL_CURRICULAR"),
+                Map.entry("EVALUACION_TECNICA",    "EVAL_TECNICA"),
+                Map.entry("RESULTADOS",            "RESULTADO")
         );
 
-        /** Mapeo DB -> API para respuesta consistente */
+        /** Mapeo DB -> API: los nombres DB son ahora los nombres de la API. */
         private static final Map<String, String> ETAPA_DB_TO_API = Map.of(
-                "POSTULACION", "POSTULACION",
-                "EVAL_CURRICULAR", "EVALUACION_CURRICULAR",
-                "EVAL_TECNICA", "EVALUACION_TECNICA",
-                "ENTREVISTA", "ENTREVISTA",
-                "RESULTADO", "RESULTADOS"
+                "PUBLICACION",      "PUBLICACION",
+                "POSTULACION",      "POSTULACION",
+                "EVAL_CURRICULAR",  "EVAL_CURRICULAR",
+                "RESULT_CURRICULAR","RESULT_CURRICULAR",
+                "EVAL_TECNICA",     "EVAL_TECNICA",
+                "RESULT_TECNICA",   "RESULT_TECNICA",
+                "ENTREVISTA",       "ENTREVISTA",
+                "RESULTADO",        "RESULTADO",
+                "SUSCRIPCION",      "SUSCRIPCION"
         );
 
     // ══════════════════════════════════════════════════════════════
@@ -134,7 +165,7 @@ public class ConvocatoriaService {
 
     public Page<ConvocatoriaResponse> listar(String estado, Pageable pageable) {
         Page<Convocatoria> page = (estado != null && !estado.isBlank())
-                ? convRepo.findByEstado(estado, pageable)
+                ? convRepo.findByEstado(EstadoConvocatoria.valueOf(estado), pageable)
                 : convRepo.findAll(pageable);
         return page.map(this::enriquecerResponse);
     }
@@ -142,6 +173,30 @@ public class ConvocatoriaService {
     public ConvocatoriaResponse obtenerPorId(Long id) {
         Convocatoria conv = buscarConvocatoria(id);
         return enriquecerResponse(conv);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PUT /convocatorias/{id} — Actualización parcial por ORH
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Actualización parcial de convocatoria — solo campos editables por ORH.
+     * Campos heredados del requerimiento (pesos Motor RF-14, estado) son ignorados.
+     * Auditoría: registra cambio en TBL_LOG_TRANSPARENCIA (D.L. 1451).
+     */
+    @Transactional
+    public ConvocatoriaResponse actualizar(Long id, ConvocatoriaUpdateRequest request,
+                                           String username, HttpServletRequest httpReq) {
+        Convocatoria conv = buscarConvocatoria(id);
+        conv.setDescripcion(request.getDescripcion());
+        conv.setObjetoContratacion(request.getObjetoContratacion());
+        Convocatoria saved = convRepo.save(conv);
+        auditPort.registrar(
+                "CONVOCATORIA", saved.getIdConvocatoria(),
+                "ACTUALIZAR_DATOS_ORH",
+                httpReq
+        );
+        return enriquecerResponse(saved);
     }
 
     /**
@@ -164,20 +219,22 @@ public class ConvocatoriaService {
 
     private boolean isCronogramaConformado(Long idConvocatoria) {
         List<Cronograma> actividades = cronoRepo.findByConvocatoriaId(idConvocatoria);
-        if (actividades == null || actividades.size() != 5) return false;
+        if (actividades == null || actividades.size() != 9) return false;
         Set<String> etapas = actividades.stream()
                 .map(c -> etapaFromDb(c.getEtapa()))
                 .collect(Collectors.toSet());
         if (!etapas.containsAll(ETAPAS_CRONOGRAMA_ORDENADAS)) return false;
+        // Regla 1: publicación >= 10 días hábiles (D.S. 065-2011-PCM)
+        LocalDate[] rangoPublicacion = null;
         LocalDate[] rangoPostulacion = null;
         for (Cronograma c : actividades) {
-            if ("POSTULACION".equals(etapaFromDb(c.getEtapa()))) {
-                rangoPostulacion = new LocalDate[]{c.getFechaInicio(), c.getFechaFin()};
-                break;
-            }
+            String etapa = etapaFromDb(c.getEtapa());
+            if ("PUBLICACION".equals(etapa))  rangoPublicacion  = new LocalDate[]{c.getFechaInicio(), c.getFechaFin()};
+            if ("POSTULACION".equals(etapa))  rangoPostulacion  = new LocalDate[]{c.getFechaInicio(), c.getFechaFin()};
         }
-        if (rangoPostulacion == null) return false;
-        return calcularDiasHabiles(rangoPostulacion[0], rangoPostulacion[1]) >= 10;
+        if (rangoPublicacion == null || rangoPostulacion == null) return false;
+        if (calcularDiasHabiles(rangoPublicacion[0], rangoPublicacion[1]) < 10) return false;
+        return true;
     }
 
     private boolean isTieneFactoresPeso100(Long idConvocatoria) {
@@ -211,7 +268,10 @@ public class ConvocatoriaService {
                         c.getFechaFin(),
                         c.getResponsable(),
                         c.getLugar(),
-                        c.getOrden()
+                        c.getOrden(),
+                        c.getAreaResp1(),
+                        c.getAreaResp2(),
+                        c.getAreaResp3()
                 ))
                 .toList();
     }
@@ -224,7 +284,8 @@ public class ConvocatoriaService {
      * Retorna ConvocatoriaPublicaResponse (datos recortados, sin internos)
      */
     public Page<ConvocatoriaPublicaResponse> listarPublicas(Integer anio, Pageable pageable) {
-        var estadosPublicos = java.util.List.of("PUBLICADA", "EN_SELECCION", "FINALIZADA");
+        var estadosPublicos = java.util.List.of(
+                EstadoConvocatoria.PUBLICADA, EstadoConvocatoria.EN_SELECCION, EstadoConvocatoria.FINALIZADA);
     
         Page<Convocatoria> page = (anio != null)
                 ? convRepo.findByEstadoInAndAnio(estadosPublicos, anio, pageable)
@@ -235,7 +296,7 @@ public class ConvocatoriaService {
                 .numeroConvocatoria(conv.getNumeroConvocatoria())
                 .descripcion(conv.getDescripcion())
                 .objetoContratacion(conv.getObjetoContratacion())
-                .estado(conv.getEstado())
+                .estado(conv.getEstado() != null ? conv.getEstado().name() : null)
                 .anio(conv.getAnio())
                 .nombrePuesto(conv.getRequerimiento() != null
                         && conv.getRequerimiento().getPerfilPuesto() != null
@@ -325,7 +386,7 @@ public class ConvocatoriaService {
                 .fechaFinPostulacion(request.getFechaFinPostulacion())
                 .fechaEvaluacion(request.getFechaEvaluacion())
                 .fechaResultado(request.getFechaResultado())
-                .estado("EN_ELABORACION")
+                .estado(EstadoConvocatoria.EN_ELABORACION)
                 .usuarioCreacion(username)
                 .build();
 
@@ -334,7 +395,9 @@ public class ConvocatoriaService {
         // Auditoría
         auditPort.registrarConvocatoria(conv.getIdConvocatoria(),
                 "TBL_CONVOCATORIA", conv.getIdConvocatoria(),
-                "CREAR", null, "EN_ELABORACION", httpReq);
+                "CREAR", null, "EN_ELABORACION",
+                "Creación de convocatoria " + conv.getNumeroConvocatoria() + " — Motor RF-14 aplicado",
+                httpReq);
 
            
 
@@ -363,7 +426,7 @@ public class ConvocatoriaService {
     public CronogramaResponse registrarCronograma(Long idConvocatoria, CronogramaRequest request,
                                                    String username, HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "registrar cronograma");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "registrar cronograma");
         validarReglasCronograma(request);                                               
         // Eliminar cronograma anterior si existe (reemplazar)
         cronoRepo.deleteByConvocatoriaId(idConvocatoria);
@@ -384,6 +447,9 @@ public class ConvocatoriaService {
                     .responsable(item.getResponsable())
                     .lugar(item.getLugar())
                     .orden(item.getOrden())
+                    .areaResp1(item.getAreaResp1())
+                    .areaResp2(item.getAreaResp2())
+                    .areaResp3(item.getAreaResp3())
                     .usuarioCreacion(username)
                     .build());
         }
@@ -392,7 +458,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_CRONOGRAMA", idConvocatoria,
-                "REGISTRAR_CRONOGRAMA", null, null, httpReq);
+                "REGISTRAR_CRONOGRAMA", null, null,
+                "Registro de cronograma de actividades — " + actividades.size() + " actividades",
+                httpReq);
 
         notificacionService.notificarRoles(
                 List.of("ORH", "COMITE"),
@@ -423,7 +491,7 @@ public class ConvocatoriaService {
     public ComiteResponse registrarComite(Long idConvocatoria, ComiteRequest request,
                                            String username, HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "registrar comité");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "registrar comité");
 
         if (comiteRepo.existsByConvocatoriaId(idConvocatoria)) {
             throw new DomainException("Ya existe un comité registrado para esta convocatoria");
@@ -452,6 +520,7 @@ public class ConvocatoriaService {
                     .cargo(item.getCargo())
                     .rolComite(item.getRolComite())
                     .esTitular(item.getEsTitular() != null ? item.getEsTitular() : true)
+                    .email(item.getEmail())
                     .build());
         }
         comite.setMiembros(miembros);
@@ -459,7 +528,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_COMITE_SELECCION", comite.getIdComite(),
-                "REGISTRAR_COMITE", null, null, httpReq);
+                "REGISTRAR_COMITE", null, null,
+                "Registro de comité de selección con resolución " + request.getNumeroResolucion(),
+                httpReq);
 
             notificacionService.notificarRoles(
                      List.of("ORH", "COMITE"),
@@ -487,7 +558,7 @@ public class ConvocatoriaService {
     @Transactional
     public void notificarComiteConformado(Long idConvocatoria, String username, HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "notificar comité");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "notificar comité");
 
         ComiteSeleccion comite = comiteRepo.findByConvocatoriaId(idConvocatoria)
                 .orElseThrow(() -> new ResourceNotFoundException("Comité", idConvocatoria));
@@ -507,7 +578,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_COMITE_SELECCION", comite.getIdComite(),
-                "NOTIFICAR_COMITE_CONFORMADO", "ACTIVO", "COMITE_CONFORMADO", httpReq);
+                "NOTIFICAR_COMITE_CONFORMADO", "ACTIVO", "COMITE_CONFORMADO",
+                "Notificación y conformación del comité de selección",
+                httpReq);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -516,9 +589,10 @@ public class ConvocatoriaService {
 
     public ComiteDetalleResponse obtenerComite(Long idConvocatoria) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        ComiteSeleccion comite = comiteRepo.findByConvocatoriaId(idConvocatoria)
-                .orElseThrow(() -> new ResourceNotFoundException("Comité", idConvocatoria));
-        return mapComiteDetalle(comite, conv);
+        // Retorna null cuando aún no existe comité (200 OK en lugar de 404)
+        return comiteRepo.findByConvocatoriaId(idConvocatoria)
+                .map(comite -> mapComiteDetalle(comite, conv))
+                .orElse(null);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -539,12 +613,15 @@ public class ConvocatoriaService {
                 .cargo(request.getCargo())
                 .rolComite(request.getRolComite())
                 .esTitular(request.getEsTitular() != null ? request.getEsTitular() : true)
+                .email(request.getEmail())
                 .build();
         miembro = miembroJpaRepo.save(miembro);
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_MIEMBRO_COMITE", miembro.getIdMiembroComite(),
-                "AGREGAR_MIEMBRO", null, null, httpReq);
+                "AGREGAR_MIEMBRO", null, null,
+                "Incorporación de miembro " + request.getNombresCompletos() + " — rol: " + request.getRolComite(),
+                httpReq);
 
         return ComiteDetalleResponse.MiembroItem.builder()
                 .idMiembroComite(miembro.getIdMiembroComite())
@@ -553,6 +630,7 @@ public class ConvocatoriaService {
                 .rolComite(miembro.getRolComite())
                 .esTitular(miembro.getEsTitular())
                 .estado(miembro.getEstado())
+                .email(miembro.getEmail())
                 .build();
     }
 
@@ -572,11 +650,14 @@ public class ConvocatoriaService {
         miembro.setCargo(request.getCargo());
         miembro.setRolComite(request.getRolComite());
         if (request.getEsTitular() != null) miembro.setEsTitular(request.getEsTitular());
+        miembro.setEmail(request.getEmail());
         miembro = miembroJpaRepo.save(miembro);
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_MIEMBRO_COMITE", idMiembro,
-                "ACTUALIZAR_MIEMBRO", null, null, httpReq);
+                "ACTUALIZAR_MIEMBRO", null, null,
+                "Actualización de datos del miembro " + request.getNombresCompletos(),
+                httpReq);
 
         return ComiteDetalleResponse.MiembroItem.builder()
                 .idMiembroComite(miembro.getIdMiembroComite())
@@ -585,6 +666,7 @@ public class ConvocatoriaService {
                 .rolComite(miembro.getRolComite())
                 .esTitular(miembro.getEsTitular())
                 .estado(miembro.getEstado())
+                .email(miembro.getEmail())
                 .build();
     }
 
@@ -602,7 +684,60 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_MIEMBRO_COMITE", idMiembro,
-                "ELIMINAR_MIEMBRO", null, null, httpReq);
+                "ELIMINAR_MIEMBRO", null, null,
+                "Eliminación de miembro del comité — ID: " + idMiembro,
+                httpReq);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // POST /convocatorias/{id}/comite/miembros/{idMiembro}/notificar
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * E11.N — Notifica individualmente a un miembro del comité (PKG-06).
+     *
+     * FASE 1 — Desarrollo : log.info simulando el envío.
+     * FASE 2 — Producción : descomentar bloque mailService (ver TODO).
+     *
+     * En ambas fases se persiste FEC_ULT_NOTIFICACION para auditoría.
+     */
+    @Transactional
+    public void notificarMiembro(Long idConvocatoria, Long idMiembro,
+                                  String username, HttpServletRequest httpReq) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+
+        // Verificamos existencia del miembro sin cargar toda la entidad (evita ORA-00904
+        // si alguna columna mapeada aún no existe en la BD — ej. durante migraciones en vuelo).
+        String nombreMiembro;
+        String emailMiembro;
+        try {
+            MiembroComite miembro = miembroJpaRepo.findById(idMiembro)
+                    .orElseThrow(() -> new ResourceNotFoundException("Miembro", idMiembro));
+            nombreMiembro = miembro.getNombresCompletos();
+            emailMiembro  = miembro.getEmail();
+        } catch (Exception ex) {
+            throw new ResourceNotFoundException("Miembro", idMiembro);
+        }
+
+        // ── FASE 1: Desarrollo ──────────────────────────────────────
+        System.out.printf("[NOTIFICACION-MIEMBRO] Simulando envío → Conv=%s | Miembro=%s | correo=%s%n",
+                conv.getNumeroConvocatoria(), nombreMiembro, emailMiembro);
+
+        // ── FASE 2: Producción ─────────────────────────────────────
+        // TODO: DESCOMENTAR PARA PRODUCCIÓN
+        // notificacionService.enviarCorreoMiembroComite(emailMiembro, nombreMiembro,
+        //         conv.getNumeroConvocatoria());
+
+        // ── Persistencia de auditoría (siempre) ────────────────────
+        // UPDATE dirigido: solo FEC_ULT_NOTIFICACION — no SELECT + UPDATE completo.
+        miembroJpaRepo.actualizarFechaNotificacion(idMiembro, LocalDateTime.now());
+
+        auditPort.registrarConvocatoria(idConvocatoria,
+                "TBL_MIEMBRO_COMITE", idMiembro,
+                "NOTIFICAR_MIEMBRO", null, null,
+                "Notificación de designación enviada al miembro " + nombreMiembro
+                        + " — correo: " + emailMiembro,
+                httpReq);
     }
 
     // ── Helper para mapear comité a DTO ──
@@ -615,6 +750,9 @@ public class ConvocatoriaService {
                         .rolComite(m.getRolComite())
                         .esTitular(m.getEsTitular())
                         .estado(m.getEstado())
+                        .email(m.getEmail())
+                        .fechaUltNotificacion(m.getFechaUltNotificacion() != null
+                                ? m.getFechaUltNotificacion().toString() : null)
                         .build())
                 .toList();
         return ComiteDetalleResponse.builder()
@@ -643,7 +781,7 @@ public class ConvocatoriaService {
                                                        FactorEvaluacionRequest request,
                                                        String username, HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "registrar factores");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "registrar factores");
 
         // Eliminar factores anteriores (reemplazar)
         factorRepo.deleteByConvocatoriaId(idConvocatoria);
@@ -673,7 +811,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_FACTOR_EVALUACION", idConvocatoria,
-                "REGISTRAR_FACTORES", null, null, httpReq);
+                "REGISTRAR_FACTORES", null, null,
+                "Registro de factores de evaluación — " + factores.size() + " criterios configurados",
+                httpReq);
 
         notificacionService.notificarRoles(
                     List.of("ORH", "COMITE"),
@@ -710,7 +850,7 @@ public class ConvocatoriaService {
     public FactorDetalleResponse agregarFactor(Long idConvocatoria, FactorFactorRequest request,
                                                String username, HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "agregar factor");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "agregar factor");
 
         BigDecimal min = request.getPuntajeMinimo() != null ? request.getPuntajeMinimo() : BigDecimal.ZERO;
         if (request.getPuntajeMaximo().compareTo(min) < 0) {
@@ -752,7 +892,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_FACTOR_EVALUACION", factor.getIdFactor(),
-                "AGREGAR_FACTOR", null, null, httpReq);
+                "AGREGAR_FACTOR", null, null,
+                "Incorporación de factor de evaluación: " + request.getCriterio(),
+                httpReq);
 
         return mapFactorDetalle(factor);
     }
@@ -787,7 +929,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_FACTOR_EVALUACION", idFactor,
-                "ACTUALIZAR_FACTOR", null, null, httpReq);
+                "ACTUALIZAR_FACTOR", null, null,
+                "Actualización de factor de evaluación: " + request.getCriterio(),
+                httpReq);
 
         return mapFactorDetalle(factor);
     }
@@ -808,7 +952,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_FACTOR_EVALUACION", idFactor,
-                "ELIMINAR_FACTOR", null, null, httpReq);
+                "ELIMINAR_FACTOR", null, null,
+                "Eliminación de factor de evaluación — ID: " + idFactor,
+                httpReq);
     }
 
     private FactorDetalleResponse mapFactorDetalle(FactorEvaluacion f) {
@@ -861,11 +1007,13 @@ public class ConvocatoriaService {
     public ActaResponse generarActaInstalacion(Long idConvocatoria, String username,
                                                 HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "generar acta de instalación");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "generar acta de instalación");
 
-        // Validar que exista comité
-        if (!comiteRepo.existsByConvocatoriaId(idConvocatoria)) {
-            throw new DomainException("Debe registrar el comité antes de generar el acta de instalación");
+        // Validar que exista comité y esté CONFORMADO (notificado por ORH)
+        ComiteSeleccion comiteActa = comiteRepo.findByConvocatoriaId(idConvocatoria)
+                .orElseThrow(() -> new DomainException("Debe registrar el comité antes de generar el acta de instalación"));
+        if (!"COMITE_CONFORMADO".equals(comiteActa.getEstado())) {
+            throw new DomainException("El comité debe estar conformado (notificado por ORH) antes de generar el acta de instalación");
         }
 
         // Verificar si ya existe un acta de instalación
@@ -875,7 +1023,38 @@ public class ConvocatoriaService {
                 });
 
         String numeroActa = "ACTA-INST-" + conv.getNumeroConvocatoria();
-        String rutaPdf = "/actas/" + numeroActa + ".pdf";
+        // Ruta relativa al directorio de trabajo del servidor (sin leading slash)
+        String rutaPdf = "actas/" + numeroActa + ".pdf";
+
+        // Generar PDF físico con OpenPDF — streaming directo a disco (CLAUDE.md: no byte[])
+        try {
+            Path dirActas = Path.of("actas");
+            Files.createDirectories(dirActas);
+            try (FileOutputStream fos = new FileOutputStream(dirActas.resolve(numeroActa + ".pdf").toFile())) {
+                Document doc = new Document();
+                PdfWriter.getInstance(doc, fos);
+                doc.open();
+
+                doc.add(new Paragraph("ACTA DE INSTALACIÓN DEL COMITÉ DE SELECCIÓN"));
+                doc.add(new Paragraph(" "));
+                doc.add(new Paragraph("Convocatoria : " + conv.getNumeroConvocatoria()));
+                doc.add(new Paragraph("Descripción  : " + conv.getDescripcion()));
+                doc.add(new Paragraph("Número Acta  : " + numeroActa));
+                doc.add(new Paragraph("Fecha        : " + LocalDate.now()));
+                doc.add(new Paragraph(" "));
+                doc.add(new Paragraph("MIEMBROS DEL COMITÉ DE SELECCIÓN:"));
+                for (MiembroComite m : comiteActa.getMiembros()) {
+                    String linea = "  • " + m.getRolComite() + ": " + m.getNombresCompletos()
+                            + (m.getCargo() != null ? " — " + m.getCargo() : "");
+                    doc.add(new Paragraph(linea));
+                }
+                doc.add(new Paragraph(" "));
+                doc.add(new Paragraph("Este documento requiere firma de todos los miembros del comité."));
+                doc.close();
+            }
+        } catch (Exception e) {
+            throw new DomainException("Error al generar el PDF del acta: " + e.getMessage());
+        }
 
         Acta acta = Acta.builder()
                 .convocatoria(conv)
@@ -891,7 +1070,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_ACTA", acta.getIdActa(),
-                "GENERAR_ACTA", null, "GENERADA", httpReq);
+                "GENERAR_ACTA", null, "GENERADA",
+                "Generación de acta de instalación del comité — " + numeroActa,
+                httpReq);
 
 
         notificacionService.notificarRoles(
@@ -940,7 +1121,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_ACTA", acta.getIdActa(),
-                "CARGAR_ACTA_FIRMADA", estadoAnterior, "FIRMADA", httpReq);
+                "CARGAR_ACTA_FIRMADA", estadoAnterior, "FIRMADA",
+                "Carga de acta de instalación firmada — ruta: " + rutaArchivoFirmado,
+                httpReq);
 
 
           notificacionService.notificarRoles(
@@ -958,6 +1141,31 @@ public class ConvocatoriaService {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // GET /acta-instalacion  |  GET /acta-instalacion/pdf
+    // ══════════════════════════════════════════════════════════════
+
+    /** Retorna metadata del acta de instalación si existe (null si no hay). */
+    public ActaResponse obtenerActa(Long idConvocatoria) {
+        return actaRepo.findByConvocatoriaIdAndTipoActa(idConvocatoria, "INSTALACION")
+                .map(mapper::toActaResponse)
+                .orElse(null);
+    }
+
+    /**
+     * Retorna la ruta física del PDF del acta:
+     * prioriza el firmado (E14) sobre el generado (E13).
+     * Lanza ResourceNotFoundException si no hay acta registrada.
+     */
+    public String obtenerRutaActaPdf(Long idConvocatoria) {
+        Acta acta = actaRepo.findByConvocatoriaIdAndTipoActa(idConvocatoria, "INSTALACION")
+                .orElseThrow(() -> new ResourceNotFoundException("Acta", idConvocatoria));
+        if (Boolean.TRUE.equals(acta.getFirmada()) && acta.getRutaArchivoFirmado() != null) {
+            return acta.getRutaArchivoFirmado();
+        }
+        return acta.getRutaArchivoPdf();
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // E15 — Aprobar y publicar convocatoria
     // ══════════════════════════════════════════════════════════════
 
@@ -971,7 +1179,7 @@ public class ConvocatoriaService {
                                          String username, Long idUsuario,
                                          HttpServletRequest httpReq) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
-        validarEstado(conv, "EN_ELABORACION", "aprobar convocatoria");
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "aprobar convocatoria");
 
         if (!Boolean.TRUE.equals(request.getAprobada())) {
             throw new DomainException("El campo 'aprobada' debe ser true para aprobar la convocatoria");
@@ -990,8 +1198,13 @@ public class ConvocatoriaService {
             throw new DomainException("Se requieren factores de evaluación registrados antes de aprobar");
         }
 
-        String estadoAnterior = conv.getEstado();
-        conv.setEstado("PUBLICADA");
+        EstadoConvocatoria estadoAnterior = conv.getEstado();
+        EstadoConvocatoria estadoDestino = EstadoConvocatoria.PUBLICADA;
+        if (!estadoAnterior.puedeTransicionarA(estadoDestino)) {
+            throw new DomainException(String.format(
+                    "Transición inválida: %s → %s", estadoAnterior, estadoDestino));
+        }
+        conv.setEstado(estadoDestino);
         conv.setLinkPortalAcffaa(request.getLinkPortalAcffaa());
         conv.setLinkTalentoPeru(request.getLinkTalentoPeru());
         if (conv.getFechaPublicacion() == null) {
@@ -1003,7 +1216,9 @@ public class ConvocatoriaService {
 
         auditPort.registrarConvocatoria(idConvocatoria,
                 "TBL_CONVOCATORIA", conv.getIdConvocatoria(),
-                "APROBAR_PUBLICAR", estadoAnterior, "PUBLICADA", httpReq);
+                "APROBAR_PUBLICAR", estadoAnterior.name(), "PUBLICADA",
+                "Aprobación y publicación simultánea (D.S. 065-2011-PCM) — portales: ACFFAA y Talento Perú",
+                httpReq);
 
 
             notificacionService.notificarRoles(
@@ -1064,8 +1279,8 @@ public class ConvocatoriaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", id));
     }
 
-    private void validarEstado(Convocatoria conv, String estadoRequerido, String operacion) {
-        if (!estadoRequerido.equals(conv.getEstado())) {
+    private void validarEstado(Convocatoria conv, EstadoConvocatoria estadoRequerido, String operacion) {
+        if (conv.getEstado() != estadoRequerido) {
             String msg = String.format("No se puede %s. Estado actual: %s. Requerido: %s",
                     operacion, conv.getEstado(), estadoRequerido);
             throw new DomainException(msg);
@@ -1077,38 +1292,46 @@ public class ConvocatoriaService {
 
     private void validarReglasCronograma(CronogramaRequest request) {
         if (request == null || request.getActividades() == null || request.getActividades().isEmpty()) {
-                throw new DomainException("Debe registrar al menos una actividad en el cronograma.");
-            }
-        
+            throw new DomainException("Debe registrar al menos una actividad en el cronograma.");
+        }
+
         Map<String, LocalDate[]> rangosPorEtapa = consolidarRangosPorEtapa(request.getActividades());
-    
-        LocalDate[] rangoPostulacion = rangosPorEtapa.get("POSTULACION");
-        if (rangoPostulacion == null) {
-            throw new DomainException("El cronograma debe incluir la etapa de Postulación.");
+
+        // Regla 1: PUBLICACION debe estar presente y durar al menos 10 días hábiles (D.S. 065-2011-PCM)
+        LocalDate[] rangoPublicacion = rangosPorEtapa.get("PUBLICACION");
+        if (rangoPublicacion == null) {
+            throw new DomainException("El cronograma debe incluir la etapa de Publicación.");
         }
-    
-        int diasHabilesPostulacion = calcularDiasHabiles(rangoPostulacion[0], rangoPostulacion[1]);
-        if (diasHabilesPostulacion < 10) {
-            throw new DomainException("La etapa de Postulación debe contemplar al menos 10 días hábiles estimados (D.S. 065-2011-PCM).");
+        int diasPublicacion = calcularDiasHabiles(rangoPublicacion[0], rangoPublicacion[1]);
+        if (diasPublicacion < 10) {
+            throw new DomainException(
+                "La Publicación debe contemplar al menos 10 días hábiles (D.S. 065-2011-PCM). Registrados: " + diasPublicacion + ".");
         }
-    
+
+
+        // Regla 3: Evaluación Técnica y Entrevista deben realizarse en un solo día
+        for (String etapaFechaUnica : List.of("EVAL_TECNICA", "ENTREVISTA")) {
+            LocalDate[] rango = rangosPorEtapa.get(etapaFechaUnica);
+            if (rango != null && !rango[0].equals(rango[1])) {
+                throw new DomainException(
+                    "La etapa " + etiquetaEtapa(etapaFechaUnica) + " debe realizarse en un solo día (fecha inicio = fecha fin).");
+            }
+        }
+
+        // Regla 4: coherencia cronológica entre etapas
+        // Excepción: Postulación puede iniciar el mismo día que termina Publicación
         String etapaAnterior = null;
         LocalDate finAnterior = null;
-    
         for (String etapa : ETAPAS_CRONOGRAMA_ORDENADAS) {
             LocalDate[] rangoActual = rangosPorEtapa.get(etapa);
-            if (rangoActual == null) {
-                continue;
-            }
-    
-            if (etapaAnterior != null && rangoActual[0].isBefore(finAnterior)) {
+            if (rangoActual == null) continue;
+            boolean esPostulacionTrasPub = "POSTULACION".equals(etapa) && "PUBLICACION".equals(etapaAnterior);
+            if (!esPostulacionTrasPub && etapaAnterior != null && rangoActual[0].isBefore(finAnterior)) {
                 throw new DomainException(
-                        "La etapa " + etiquetaEtapa(etapa)
-                                + " no puede iniciar antes de que finalice la etapa "
-                                + etiquetaEtapa(etapaAnterior) + "."
-                );
+                    "La etapa " + etiquetaEtapa(etapa)
+                        + " no puede iniciar antes de que finalice la etapa "
+                        + etiquetaEtapa(etapaAnterior) + ".");
             }
-    
             etapaAnterior = etapa;
             finAnterior = rangoActual[1];
         }

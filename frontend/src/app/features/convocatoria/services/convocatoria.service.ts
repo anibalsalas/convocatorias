@@ -34,6 +34,10 @@ export class ConvocatoriaService {
     return this.api.get<ConvocatoriaResponse>(`${this.path}/${id}`);
   }
 
+  actualizar(id: number, req: { descripcion: string; objetoContratacion?: string }): Observable<ApiResponse<ConvocatoriaResponse>> {
+    return this.api.put<ConvocatoriaResponse>(`${this.path}/${id}`, req);
+  }
+
   obtenerCronograma(id: number): Observable<ApiResponse<ActividadCronogramaResponse[]>> {
     return this.api.get<ActividadCronogramaResponse[]>(`${this.path}/${id}/cronograma`);
   }
@@ -70,6 +74,10 @@ export class ConvocatoriaService {
     return this.api.delete<void>(`${this.path}/${idConv}/comite/miembros/${idMiembro}`);
   }
 
+  notificarMiembro(idConv: number, idMiembro: number): Observable<ApiResponse<void>> {
+    return this.api.post<void>(`${this.path}/${idConv}/comite/miembros/${idMiembro}/notificar`, {});
+  }
+
   // ═══ E12 — Factores (CRUD individual + batch) ═══
 
   listarFactores(id: number): Observable<ApiResponse<FactorDetalleResponse[]>> {
@@ -93,6 +101,14 @@ export class ConvocatoriaService {
   }
 
   // ═══ E13–E16 ═══
+
+  obtenerActa(id: number): Observable<ApiResponse<ActaResponse>> {
+    return this.api.get<ActaResponse>(`${this.path}/${id}/acta-instalacion`);
+  }
+
+  descargarActaPdf(id: number): Observable<Blob> {
+    return this.api.getBlob(`${this.path}/${id}/acta-instalacion/pdf`);
+  }
 
   generarActaInstalacion(id: number): Observable<ApiResponse<ActaResponse>> {
     return this.api.post<ActaResponse>(`${this.path}/${id}/acta-instalacion`, {});

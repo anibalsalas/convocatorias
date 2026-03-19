@@ -40,78 +40,37 @@ const ETIQUETAS_FASE: Record<string, string> = {
       @if (loading()) {
         <div class="card text-center py-12 text-gray-400">Cargando...</div>
       } @else {
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- MODELO COMITÉ: tabla siempre visible + CRUD debajo       -->
-        <!-- ═══════════════════════════════════════════════════════ -->
-        <div class="card space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="font-semibold text-gray-800">Fases de evaluación</h3>
-              <p class="text-sm text-gray-500">
-                Máx. {{ MAX_FACTORES }} fases. Peso total 100%. Agregue fases y subcriterios con el formulario debajo.
-              </p>
+        <!-- Pesos definidos en la convocatoria (referencia) -->
+        @if (convocatoria()) {
+          <div class="card bg-blue-50 border border-blue-200">
+            <p class="text-xs font-semibold text-blue-700 mb-2 uppercase tracking-wide">Pesos de evaluación (definidos en la convocatoria)</p>
+            <div class="flex flex-wrap gap-4 text-sm">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
+                <span class="text-gray-600">Evaluación Curricular:</span>
+                <span class="font-semibold text-blue-800">{{ convocatoria()!.pesoEvalCurricular ?? '—' }}%</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                <span class="text-gray-600">Evaluación Técnica:</span>
+                <span class="font-semibold text-indigo-800">{{ convocatoria()!.pesoEvalTecnica ?? '—' }}%</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-violet-400"></span>
+                <span class="text-gray-600">Entrevista Personal:</span>
+                <span class="font-semibold text-violet-800">{{ convocatoria()!.pesoEntrevista ?? '—' }}%</span>
+              </span>
             </div>
-            <span class="text-sm text-gray-500">{{ factoresExistentes()?.length ?? 0 }} / {{ MAX_FACTORES }} fases</span>
           </div>
+        }
 
-          <div class="overflow-x-auto -mx-4 sm:mx-0">
-            <table class="w-full text-sm min-w-[560px]" role="grid" aria-label="Tabla de fases y subcriterios">
-              <thead>
-                <tr class="bg-[#1F2133] text-white">
-                  <th class="px-4 py-3 text-left font-semibold">N°</th>
-                  <th class="px-4 py-3 text-left font-semibold">Fases</th>
-                  <th class="px-4 py-3 text-center font-semibold">Peso (%)</th>
-                  <th class="px-4 py-3 text-center font-semibold">Puntaje Mínimo</th>
-                  <th class="px-4 py-3 text-center font-semibold">Puntaje Máximo</th>
-                  <th class="px-4 py-3 text-center font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <ng-container *ngFor="let item of filasParaTabla(); trackBy: trackByFila">
-                  <tr class="border-t hover:bg-gray-50 transition-colors" [class.bg-slate-50]="item.esSubcriterio">
-                    <td class="px-4 py-3 text-gray-500 font-mono">{{ item.numero }}</td>
-                    <td class="px-4 py-3 font-medium text-gray-800" [class.pl-8]="item.esSubcriterio">
-                      @if (item.esSubcriterio) {
-                        <span class="text-gray-600">{{ item.fase.criterio }}</span>
-                      } @else {
-                        <span class="font-semibold">{{ etiquetaFase(item.fase.etapaEvaluacion) }}</span>
-                      }
-                    </td>
-                    <td class="px-4 py-3 text-center font-mono">{{ item.fase.pesoCriterio }}%</td>
-                    <td class="px-4 py-3 text-center font-mono">{{ item.fase.puntajeMinimo ?? '\u2014' }}</td>
-                    <td class="px-4 py-3 text-center font-mono font-semibold">{{ item.fase.puntajeMaximo }}</td>
-                    <td class="px-4 py-3">
-                      <div class="flex justify-center gap-1">
-                        <button type="button" class="btn-ghost text-xs text-blue-600" (click)="onEditarFactor(item.fase)" title="Editar">Editar</button>
-                        @if (!item.esSubcriterio) {
-                          <button type="button" class="btn-ghost text-xs text-green-600" (click)="onAgregarSubcriterio(item.fase)" title="Agregar subcriterio">+ Sub</button>
-                        }
-                        <button type="button" class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(item.fase)" title="Eliminar">Eliminar</button>
-                      </div>
-                    </td>
-                  </tr>
-                </ng-container>
-                <tr class="border-t-2 border-[#1F2133] bg-[#1F2133] text-white font-semibold">
-                  <td class="px-4 py-3" colspan="2">Total</td>
-                  <td class="px-4 py-3 text-center">{{ totalPeso() }}%</td>
-                  <td class="px-4 py-3 text-center">{{ totalPuntajeMinimo() }}</td>
-                  <td class="px-4 py-3 text-center">{{ totalPuntajeMaximo() }}</td>
-                  <td class="px-4 py-3"></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          @if (!factoresExistentes() || factoresExistentes()!.length === 0) {
-            <p class="text-sm text-amber-600">No hay fases registradas. Use el formulario debajo para agregar la primera fase.</p>
-          }
-        </div>
-
-        <!-- Formulario agregar / editar fase o subcriterio (mismo modelo que Comité) -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- FORMULARIO: agregar / editar fase o subcriterio        -->
+        <!-- ═══════════════════════════════════════════════════════ -->
         <div class="card space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">
-              {{ editandoFactor() ? 'Editar' : (agregandoSubcriterioDe() ? 'Agregar subcriterio a «' + (agregandoSubcriterioDe()?.criterio ?? '') + '»' : '+ Agregar fase') }}
+              {{ editandoFactor() ? 'Editar factor' : (agregandoSubcriterioDe() ? 'Agregar subcriterio a «' + (agregandoSubcriterioDe()?.criterio ?? '') + '»' : '+ Agregar fase') }}
             </h3>
             @if (editandoFactor() || agregandoSubcriterioDe()) {
               <button type="button" class="btn-ghost text-xs" (click)="cancelarEdicion()">Cancelar</button>
@@ -159,6 +118,77 @@ const ETIQUETAS_FASE: Record<string, string> = {
           </form>
           @if (!puedeAgregarFase() && !editandoFactor() && !agregandoSubcriterioDe()) {
             <p class="text-sm text-amber-700">Máximo {{ MAX_FACTORES }} fases permitidas.</p>
+          }
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TABLA: fases y subcriterios registrados                 -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="card space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-semibold text-gray-800">Fases de evaluación registradas</h3>
+              <p class="text-sm text-gray-500">
+                {{ factoresExistentes()?.length ?? 0 }} / {{ MAX_FACTORES }} fases. Peso total 100%.
+              </p>
+            </div>
+          </div>
+
+          @if (!factoresExistentes() || factoresExistentes()!.length === 0) {
+            <p class="text-sm text-amber-600">No hay fases registradas aún.</p>
+          } @else {
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm min-w-[560px]" role="grid" aria-label="Tabla de fases y subcriterios">
+                <thead>
+                  <tr class="bg-[#1F2133] text-white">
+                    <th class="px-4 py-3 text-left font-semibold w-10">N°</th>
+                    <th class="px-4 py-3 text-left font-semibold">Fases</th>
+                    <th class="px-4 py-3 text-center font-semibold w-24">Peso (%)</th>
+                    <th class="px-4 py-3 text-center font-semibold w-28">Puntaje Mínimo</th>
+                    <th class="px-4 py-3 text-center font-semibold w-28">Puntaje Máximo</th>
+                    <th class="px-4 py-3 text-center font-semibold w-32">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <ng-container *ngFor="let item of filasParaTabla(); trackBy: trackByFila">
+                    <tr class="border-t transition-colors"
+                      [class.hover:bg-gray-50]="!item.esSubcriterio"
+                      [class.bg-slate-50]="item.esSubcriterio"
+                      [class.hover:bg-slate-100]="item.esSubcriterio">
+                      <td class="px-4 py-2 text-gray-500 font-mono text-xs">
+                        {{ item.esSubcriterio ? '' : item.numero }}
+                      </td>
+                      <td class="px-4 py-2 text-gray-800" [class.pl-10]="item.esSubcriterio">
+                        @if (item.esSubcriterio) {
+                          <span class="text-gray-500 text-xs">{{ item.fase.criterio }}</span>
+                        } @else {
+                          <span class="font-semibold">{{ etiquetaFase(item.fase.etapaEvaluacion) }}</span>
+                        }
+                      </td>
+                      <td class="px-4 py-2 text-center font-mono text-xs">{{ item.fase.pesoCriterio }}%</td>
+                      <td class="px-4 py-2 text-center font-mono text-xs">{{ item.fase.puntajeMinimo ?? '\u2014' }}</td>
+                      <td class="px-4 py-2 text-center font-mono text-xs font-semibold">{{ item.fase.puntajeMaximo }}</td>
+                      <td class="px-4 py-2">
+                        <div class="flex justify-center gap-1">
+                          <button type="button" class="btn-ghost text-xs text-blue-600" (click)="onEditarFactor(item.fase)" title="Editar">Editar</button>
+                          @if (!item.esSubcriterio) {
+                            <button type="button" class="btn-ghost text-xs text-green-600" (click)="onAgregarSubcriterio(item.fase)" title="Agregar subcriterio">+ Sub</button>
+                          }
+                          <button type="button" class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(item.fase)" title="Eliminar">Eliminar</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-container>
+                  <tr class="border-t-2 border-[#1F2133] bg-[#1F2133] text-white font-semibold">
+                    <td class="px-4 py-3" colspan="2">Total</td>
+                    <td class="px-4 py-3 text-center">{{ totalPeso() }}%</td>
+                    <td class="px-4 py-3 text-center">{{ totalPuntajeMinimo() }}</td>
+                    <td class="px-4 py-3 text-center">{{ totalPuntajeMaximo() }}</td>
+                    <td class="px-4 py-3"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           }
         </div>
 
@@ -249,6 +279,20 @@ export class FactoresComponent {
         if (!this.editandoFactor() && !this.agregandoSubcriterioDe()) {
           const label = ETIQUETAS_FASE[etapa ?? ''] ?? etapa ?? '';
           this.factorForm.controls.criterio.setValue(label.toUpperCase(), { emitEvent: false });
+
+          // Pre-llenar peso desde los valores de la convocatoria
+          const conv = this.convocatoria();
+          if (conv) {
+            const pesoMap: Record<string, number | null | undefined> = {
+              CURRICULAR: conv.pesoEvalCurricular,
+              TECNICA:    conv.pesoEvalTecnica,
+              ENTREVISTA: conv.pesoEntrevista,
+            };
+            const peso = pesoMap[etapa ?? ''];
+            if (peso != null) {
+              this.factorForm.controls.pesoCriterio.setValue(peso, { emitEvent: false });
+            }
+          }
         }
       });
   }

@@ -37,6 +37,11 @@ export class RequerimientoService {
     return this.api.get<number>(`${this.path}/count-con-presupuesto-pendientes-reglas`);
   }
 
+  /** Cuenta requerimientos CONFIGURADO sin convocatoria (banner ORH — pendientes Etapa 2) */
+  contarConfiguradosSinConvocatoria(): Observable<ApiResponse<number>> {
+    return this.api.get<number>(`${this.path}/count-configurados-sin-convocatoria`);
+  }
+
   /** GET /requerimientos/{id} — Detalle */
   obtener(id: number): Observable<ApiResponse<RequerimientoResponse>> {
     return this.api.get<RequerimientoResponse>(`${this.path}/${id}`);

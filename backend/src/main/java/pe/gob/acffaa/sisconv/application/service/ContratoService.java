@@ -118,7 +118,9 @@ public class ContratoService {
         // Auditoría RF-18
         audit.registrarConvocatoria(idConvocatoria, "TBL_CONTRATO_CAS",
                 contrato.getIdContrato(), "NOTIFICAR_GANADOR", null,
-                EstadoContrato.NOTIFICADO.name(), http);
+                EstadoContrato.NOTIFICADO.name(),
+                "Notificación al ganador para presentación de documentos originales",
+                http);
 
         return mapper.toContratoResponse(contrato, "Ganador notificado exitosamente.");
     }
@@ -186,7 +188,9 @@ public class ContratoService {
                 contrato.getConvocatoria().getIdConvocatoria(), "TBL_VERIFICACION_DOCUMENTO",
                 idContrato, "VERIFICAR_DOCUMENTOS",
                 EstadoContrato.NOTIFICADO.name(),
-                allOk ? EstadoContrato.DOCS_VERIFICADOS.name() : "DOCS_RECHAZADOS", http);
+                allOk ? EstadoContrato.DOCS_VERIFICADOS.name() : "DOCS_RECHAZADOS",
+                "Verificación de documentos originales — conformes: " + conformes + ", no conformes: " + noConformes,
+                http);
 
         return mapper.toVerificacionResponse(idContrato, total, conformes, noConformes);
     }
@@ -238,7 +242,9 @@ public class ContratoService {
 
         audit.registrarConvocatoria(contrato.getConvocatoria().getIdConvocatoria(),
                 "TBL_CONTRATO_CAS", idContrato, "SUSCRIBIR_CONTRATO",
-                estadoAnterior, EstadoContrato.SUSCRITO.name(), http);
+                estadoAnterior, EstadoContrato.SUSCRITO.name(),
+                "Suscripción bilateral del contrato CAS — D.Leg. 1057",
+                http);
 
         return mapper.toContratoResponse(contrato, "Contrato CAS suscrito exitosamente.");
     }
@@ -329,7 +335,9 @@ public class ContratoService {
 
         audit.registrarConvocatoria(idConv, "TBL_CONTRATO_CAS",
                 nuevoContrato.getIdContrato(), "CONVOCAR_ACCESITARIO",
-                EstadoContrato.CANCELADO.name(), EstadoContrato.NOTIFICADO.name(), http);
+                EstadoContrato.CANCELADO.name(), EstadoContrato.NOTIFICADO.name(),
+                "Convocatoria de accesitario por renuncia o incumplimiento del ganador",
+                http);
 
         return mapper.toContratoResponse(nuevoContrato, "Accesitario convocado y notificado.");
     }
@@ -362,7 +370,9 @@ public class ContratoService {
 
         audit.registrarConvocatoria(contrato.getConvocatoria().getIdConvocatoria(),
                 "TBL_CONTRATO_CAS", idContrato, "REGISTRAR_PLANILLA",
-                estadoAnterior, EstadoContrato.EN_PLANILLA.name(), http);
+                estadoAnterior, EstadoContrato.EN_PLANILLA.name(),
+                "Registro de planilla de remuneraciones — N°: " + req.getNumeroPlanilla(),
+                http);
 
         return mapper.toPlanillaResponse(contrato);
     }
@@ -416,7 +426,9 @@ public class ContratoService {
         // Auditoría RF-18 (D.L. 1451)
         audit.registrarConvocatoria(idConv, "TBL_CONTRATO_CAS", idContrato,
                 "CERRAR_PROCESO_" + req.getProcesoEstado(),
-                estadoAnterior, EstadoContrato.CERRADO.name(), http);
+                estadoAnterior, EstadoContrato.CERRADO.name(),
+                "Cierre del proceso como " + req.getProcesoEstado(),
+                http);
 
         Long logId = contrato.getIdContrato(); // referencia al log
 

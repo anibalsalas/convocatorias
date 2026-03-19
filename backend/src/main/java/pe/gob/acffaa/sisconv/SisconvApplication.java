@@ -3,6 +3,8 @@ package pe.gob.acffaa.sisconv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.data.web.config.EnableSpringDataWebSupport;
+import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode;
 
 /**
  * SISCONV-ACFFAA v1.0 — Sistema de Convocatorias CAS
@@ -14,6 +16,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
  */
 @SpringBootApplication
 @EnableJpaAuditing
+@EnableSpringDataWebSupport(pageSerializationMode = PageSerializationMode.VIA_DTO)
 public class SisconvApplication {
     public static void main(String[] args) {
         SpringApplication.run(SisconvApplication.class, args);

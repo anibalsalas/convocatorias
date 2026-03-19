@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ToastService } from '@core/services/toast.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
@@ -151,45 +151,13 @@ import { ConvocatoriaService } from '../../services/convocatoria.service';
               placeholder="Contratación de un(01) Especialista ..."
               aria-label="Objeto de contratación"></textarea>
           </div>
-          <div class="grid-form grid-form--three">
-            <div>
-              <label for="fechaPublicacion" class="label-field">Fecha publicación</label>
-              <input id="fechaPublicacion" type="date" formControlName="fechaPublicacion" class="input-field" />
-            </div>
-            <div>
-              <label for="fechaIniPostulacion" class="label-field">Inicio postulación <span class="text-red-500">*</span></label>
-              <input id="fechaIniPostulacion" type="date" formControlName="fechaIniPostulacion" class="input-field" />
-              @if (form.controls.fechaIniPostulacion.touched && form.controls.fechaIniPostulacion.invalid) {
-                <span class="error-text">Obligatorio.</span>
-              }
-            </div>
-            <div>
-              <label for="fechaFinPostulacion" class="label-field">Fin postulación <span class="text-red-500">*</span></label>
-              <input id="fechaFinPostulacion" type="date" formControlName="fechaFinPostulacion" class="input-field" />
-              @if (form.controls.fechaFinPostulacion.touched && form.controls.fechaFinPostulacion.invalid) {
-                <span class="error-text">Obligatorio.</span>
-              }
-            </div>
-            <div>
-              <label for="fechaEvaluacion" class="label-field">Fecha evaluación</label>
-              <input id="fechaEvaluacion" type="date" formControlName="fechaEvaluacion" class="input-field" />
-            </div>
-            <div>
-              <label for="fechaResultado" class="label-field">Fecha resultado</label>
-              <input id="fechaResultado" type="date" formControlName="fechaResultado" class="input-field" />
-            </div>
-          </div>
-          @if (dateError()) {
-            <div class="info-box info-box--error mt-2">
-              {{ dateError() }}
-            </div>
-          }
+        
           <div class="info-box mt-2">
             El N° CAS se genera automáticamente con <strong>SEQ_NUM_CONVOCATORIA</strong>. Siguiente paso: cronograma detallado (E10).
           </div>
           <div class="form-actions">
             <a routerLink="/sistema/convocatoria" class="btn-ghost">Cancelar</a>
-            <button type="submit" class="btn-primary" [disabled]="saving() || form.invalid || !!dateError() || !selectedRequerimientoDetail()">
+            <button type="submit" class="btn-primary" [disabled]="saving() || form.invalid || !selectedRequerimientoDetail()">
               @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
               Registrar y continuar
             </button>
@@ -205,6 +173,7 @@ export class ConvocatoriaFormComponent implements OnInit {
   private readonly requerimientoService = inject(RequerimientoService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly requerimientosConfigurados = signal<RequerimientoResponse[]>([]);
@@ -219,11 +188,7 @@ export class ConvocatoriaFormComponent implements OnInit {
     idRequerimiento: [null as number | null, Validators.required],
     descripcion: ['', [Validators.required, Validators.maxLength(500)]],
     objetoContratacion: ['', [Validators.maxLength(2000)]],
-    fechaPublicacion: [''],
-    fechaIniPostulacion: ['', Validators.required],
-    fechaFinPostulacion: ['', Validators.required],
-    fechaEvaluacion: [''],
-    fechaResultado: [''],
+   
   });
 
   readonly numeroConvocatoriaDisplay = computed(() => {
@@ -248,54 +213,33 @@ export class ConvocatoriaFormComponent implements OnInit {
     return this.formatMoney(remuneracion);
   });
 
-  readonly dateError = computed(() => {
-    const raw = this.form.getRawValue();
-    const publicacion = raw.fechaPublicacion || '';
-    const inicio = raw.fechaIniPostulacion || '';
-    const fin = raw.fechaFinPostulacion || '';
-    const evaluacion = raw.fechaEvaluacion || '';
-    const resultado = raw.fechaResultado || '';
-
-    if (publicacion && inicio && publicacion > inicio) {
-      return 'La fecha de publicación no puede ser posterior al inicio de postulación.';
-    }
-    if (inicio && fin && inicio > fin) {
-      return 'La fecha de inicio de postulación no puede ser mayor a la fecha de fin.';
-    }
-    if (fin && evaluacion && fin > evaluacion) {
-      return 'La fecha de evaluación no puede ser anterior al fin de postulación.';
-    }
-    if (evaluacion && resultado && evaluacion > resultado) {
-      return 'La fecha de resultado no puede ser anterior a la fecha de evaluación.';
-    }
-    return '';
-  });
+  /** ID de requerimiento preseleccionado desde query param (navegación desde el listado) */
+  private readonly preselectedIdRequerimiento = signal<number | null>(null);
 
   ngOnInit(): void {
+    const idParam = this.route.snapshot.queryParamMap.get('idRequerimiento');
+    if (idParam) {
+      this.preselectedIdRequerimiento.set(Number(idParam));
+    }
     this.loadConfiguredRequirements();
     this.watchRequirementSelection();
   }
 
   onSubmit(): void {
-    if (this.form.invalid || this.dateError() || !this.selectedRequerimientoDetail()) {
+    if (this.form.invalid || !this.selectedRequerimientoDetail()) {
       this.form.markAllAsTouched();
-      if (this.dateError()) {
-        this.toast.warning(this.dateError());
-      }
       return;
     }
 
     const raw = this.form.getRawValue();
+    const hoy = new Date().toISOString().split('T')[0];
     const payload: ConvocatoriaRequest = {
       idRequerimiento: raw.idRequerimiento!,
       numeroConvocatoria: this.numeroConvocatoriaGenerada() || null,
       descripcion: (raw.descripcion ?? '').trim(),
       objetoContratacion: raw.objetoContratacion?.trim() || null,
-      fechaPublicacion: raw.fechaPublicacion || null,
-      fechaIniPostulacion: raw.fechaIniPostulacion || '',
-      fechaFinPostulacion: raw.fechaFinPostulacion || '',
-      fechaEvaluacion: raw.fechaEvaluacion || null,
-      fechaResultado: raw.fechaResultado || null,
+      fechaIniPostulacion: hoy,
+      fechaFinPostulacion: hoy,
     };
 
     this.saving.set(true);
@@ -325,8 +269,16 @@ export class ConvocatoriaFormComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response: ApiResponse<Page<RequerimientoResponse>>) => {
-          this.requerimientosConfigurados.set(response.data.content);
+          // Excluir requerimientos que ya tienen convocatoria asociada
+          const disponibles = response.data.content.filter(r => !r.tieneConvocatoria);
+          this.requerimientosConfigurados.set(disponibles);
           this.loadingRequerimientos.set(false);
+
+          // Autoseleccionar si se navegó desde el listado con query param
+          const preselected = this.preselectedIdRequerimiento();
+          if (preselected) {
+            this.form.patchValue({ idRequerimiento: preselected });
+          }
         },
         error: () => {
           this.requerimientosConfigurados.set([]);
@@ -348,11 +300,7 @@ export class ConvocatoriaFormComponent implements OnInit {
             {
               descripcion: '',
               objetoContratacion: '',
-              fechaPublicacion: '',
-              fechaIniPostulacion: '',
-              fechaFinPostulacion: '',
-              fechaEvaluacion: '',
-              fechaResultado: '',
+     
             },
             { emitEvent: false },
           );
@@ -366,6 +314,14 @@ export class ConvocatoriaFormComponent implements OnInit {
           .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({
             next: (response: ApiResponse<RequerimientoResponse>) => {
+              // Guarda de concurrencia: bloquear si ya tiene convocatoria iniciada
+              if (response.data.tieneConvocatoria === true) {
+                this.loadingDetail.set(false);
+                this.form.patchValue({ idRequerimiento: null }, { emitEvent: false });
+                this.toast.error('Este requerimiento ya cuenta con una convocatoria iniciada.');
+                this.router.navigate(['/sistema/requerimiento']);
+                return;
+              }
               this.selectedRequerimientoDetail.set(response.data);
               this.loadingDetail.set(false);
               if (!this.numeroConvocatoriaGenerada()) {

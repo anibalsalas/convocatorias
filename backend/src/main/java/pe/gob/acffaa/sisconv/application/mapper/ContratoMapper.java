@@ -116,7 +116,7 @@ public class ContratoMapper {
         }
 
         if (n.getConvocatoria() != null && n.getConvocatoria().getEstado() != null) {
-            return n.getConvocatoria().getEstado();
+            return n.getConvocatoria().getEstado().name();
         }
 
         return null;

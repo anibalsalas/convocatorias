@@ -20,6 +20,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         toast.error('Sin conexión al servidor');
       } else if (error.status === 403) {
         toast.error(apiMessage ?? 'No tiene permisos para esta acción');
+      } else if (error.status === 404) {
+        // 404 se maneja silenciosamente en cada componente (recurso aún no creado)
       } else if (error.status === 409) {
         toast.error(apiMessage ?? 'El registro ya existe');
       } else if (error.status >= 400 && error.status < 500 && error.status !== 401) {

@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { startWith } from 'rxjs';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ToastService } from '@core/services/toast.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import { ConfirmDialogComponent } from '@shared/components/confirm-dialog/confirm-dialog.component';
@@ -17,6 +18,9 @@ import {
   MiembroDetalleItem,
 } from '../../models/convocatoria.model';
 import { ApiResponse } from '@shared/models/api-response.model';
+
+/** Validador de dominio @acffaa.gob.pe */
+const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
 
 @Component({
   selector: 'app-comite',
@@ -37,54 +41,111 @@ import { ApiResponse } from '@shared/models/api-response.model';
       } @else {
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- VISTA COMITÉ EXISTENTE: tabla + CRUD individual         -->
+        <!-- COMITÉ EXISTENTE                                        -->
         <!-- ═══════════════════════════════════════════════════════ -->
         @if (comiteExistente()) {
-          <div class="card space-y-4">
-            <div class="flex items-center justify-between">
+
+          <!-- Cabecera del comité -->
+          <div class="card">
+            <div class="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h3 class="font-semibold text-gray-800">Comité registrado</h3>
-                <p class="text-sm text-gray-500">
-                  Resolución: <span class="font-medium text-gray-700">{{ comiteExistente()?.numeroResolucion }}</span>
-                  · Fecha: <span class="font-medium text-gray-700">{{ comiteExistente()?.fechaDesignacion ?? '—' }}</span>
+                <p class="text-sm text-gray-500 mt-0.5">
+                  Resolución: <span class="font-medium text-gray-700">{{ comiteExistente()!.numeroResolucion }}</span>
+                  &nbsp;·&nbsp; Fecha: <span class="font-medium text-gray-700">{{ comiteExistente()!.fechaDesignacion ?? '—' }}</span>
                 </p>
               </div>
               <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
-                [class.bg-green-100]="comiteExistente()?.estado === 'COMITE_CONFORMADO'"
-                [class.text-green-800]="comiteExistente()?.estado === 'COMITE_CONFORMADO'"
-                [class.bg-amber-100]="comiteExistente()?.estado !== 'COMITE_CONFORMADO'"
-                [class.text-amber-800]="comiteExistente()?.estado !== 'COMITE_CONFORMADO'">
-                {{ comiteExistente()?.estado ?? 'ACTIVO' }}
+                [class.bg-green-100]="comiteExistente()!.estado === 'COMITE_CONFORMADO'"
+                [class.text-green-800]="comiteExistente()!.estado === 'COMITE_CONFORMADO'"
+                [class.bg-amber-100]="comiteExistente()!.estado !== 'COMITE_CONFORMADO'"
+                [class.text-amber-800]="comiteExistente()!.estado !== 'COMITE_CONFORMADO'">
+                {{ comiteExistente()!.estado }}
               </span>
             </div>
+          </div>
 
-            <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              <strong>Convocatoria:</strong> {{ convocatoria()?.numeroConvocatoria }}
-              · <strong>ID:</strong> {{ idConvocatoria }}
-              · <strong>ID Comité:</strong> {{ comiteExistente()?.idComite }}
+          <!-- Tarjeta de captura única (agregar / editar miembro) -->
+          <div class="card space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+                {{ editandoMiembro() ? '✏️ Editar miembro' : '+ Agregar miembro' }}
+              </h3>
+              @if (editandoMiembro()) {
+                <button class="btn-ghost text-xs" (click)="cancelarEdicion()">Cancelar</button>
+              }
             </div>
 
-            <!-- Tabla de miembros -->
+            <form [formGroup]="captureForm" (ngSubmit)="onGuardarMiembro()"
+                  class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div>
+                <label class="label-field">Nombres completos <span class="text-red-500">*</span></label>
+                <input formControlName="nombresCompletos" class="input-field" maxlength="200"
+                  placeholder="Nombres y apellidos completos" />
+                @if (captureForm.controls['nombresCompletos'].touched && captureForm.controls['nombresCompletos'].invalid) {
+                  <span class="text-xs text-red-500">Obligatorio</span>
+                }
+              </div>
+
+              <div>
+                <label class="label-field">Cargo</label>
+                <input formControlName="cargo" class="input-field" maxlength="200"
+                  placeholder="Ej. Director de RRHH" />
+              </div>
+
+              <div>
+                <label class="label-field">Rol en comité <span class="text-red-500">*</span></label>
+                <select formControlName="rolComite" class="input-field">
+                  <option value="PRESIDENTE">Presidente</option>
+                  <option value="SECRETARIO">Secretario</option>
+                  <option value="VOCAL">Vocal</option>
+                  <option value="SUPLENTE">Suplente</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="label-field">Correo institucional <span class="text-red-500">*</span></label>
+                <input formControlName="email" class="input-field" maxlength="100"
+                  placeholder="usuario@acffaa.gob.pe" type="email" />
+                @if (captureForm.controls['email'].touched && captureForm.controls['email'].invalid) {
+                  <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido</span>
+                }
+              </div>
+
+              <div class="flex items-end gap-4">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
+                  <input type="checkbox" formControlName="esTitular" />
+                  Titular
+                </label>
+                <button type="submit" class="btn-primary text-sm mb-2" [disabled]="savingMiembro()">
+                  {{ savingMiembro() ? 'Guardando...' : (editandoMiembro() ? 'Actualizar' : 'Agregar') }}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tabla dinámica de miembros existentes -->
+          <div class="card space-y-4">
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
                   <tr class="bg-[#1F2133] text-white">
-                    <th class="px-4 py-3 text-left font-semibold">#</th>
-                    <th class="px-4 py-3 text-left font-semibold">Nombres completos</th>
-                    <th class="px-4 py-3 text-left font-semibold">Cargo</th>
-                    <th class="px-4 py-3 text-center font-semibold">Rol</th>
-                    <th class="px-4 py-3 text-center font-semibold">Titular</th>
-                    <th class="px-4 py-3 text-center font-semibold">N° Convocatoria</th>
-                    <th class="px-4 py-3 text-center font-semibold">Acciones</th>
+                    <th class="px-3 py-2 text-left font-semibold text-xs">#</th>
+                    <th class="px-3 py-2 text-left font-semibold text-xs">Nombres</th>
+                    <th class="px-3 py-2 text-left font-semibold text-xs">Cargo</th>
+                    <th class="px-3 py-2 text-center font-semibold text-xs">Rol</th>
+                    <th class="px-3 py-2 text-center font-semibold text-xs">Titular</th>
+                    <th class="px-3 py-2 text-left font-semibold text-xs">Correo</th>
+                    <th class="px-3 py-2 text-center font-semibold text-xs">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  @for (m of comiteExistente()?.miembros ?? []; track m.idMiembroComite; let i = $index) {
+                  @for (m of comiteExistente()!.miembros; track m.idMiembroComite; let i = $index) {
                     <tr class="border-t hover:bg-gray-50 transition-colors">
-                      <td class="px-4 py-3 text-gray-500 font-mono">{{ i + 1 }}</td>
-                      <td class="px-4 py-3 font-medium text-gray-800">{{ m.nombresCompletos }}</td>
-                      <td class="px-4 py-3 text-gray-700">{{ m.cargo || '—' }}</td>
-                      <td class="px-4 py-3 text-center">
+                      <td class="px-3 py-2 text-gray-400 text-xs font-mono">{{ i + 1 }}</td>
+                      <td class="px-3 py-2 font-medium text-gray-800">{{ m.nombresCompletos }}</td>
+                      <td class="px-3 py-2 text-gray-600 text-xs">{{ m.cargo || '—' }}</td>
+                      <td class="px-3 py-2 text-center">
                         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
                           [class.bg-blue-100]="m.rolComite === 'PRESIDENTE'"
                           [class.text-blue-800]="m.rolComite === 'PRESIDENTE'"
@@ -95,17 +156,9 @@ import { ApiResponse } from '@shared/models/api-response.model';
                           {{ m.rolComite }}
                         </span>
                       </td>
-                      <td class="px-4 py-3 text-center">
-                        @if (m.esTitular) {
-                          <span class="text-green-600 font-semibold">Sí</span>
-                        } @else {
-                          <span class="text-gray-400">No</span>
-                        }
-                      </td>
-                      <td class="px-4 py-3 text-center font-mono text-xs text-gray-600">
-                        {{ convocatoria()?.numeroConvocatoria ?? '—' }}
-                      </td>
-                      <td class="px-4 py-3 text-center">
+                      <td class="px-3 py-2 text-center text-base">{{ m.esTitular ? '✓' : '—' }}</td>
+                      <td class="px-3 py-2 text-xs text-gray-600 font-mono">{{ m.email || '—' }}</td>
+                      <td class="px-3 py-2 text-center">
                         <div class="flex justify-center gap-1">
                           <button class="btn-ghost text-xs text-blue-600" (click)="onEditarMiembro(m)" title="Editar">
                             Editar
@@ -113,7 +166,21 @@ import { ApiResponse } from '@shared/models/api-response.model';
                           <button class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(m)" title="Eliminar">
                             Eliminar
                           </button>
+                          <button class="btn-ghost text-xs transition-colors"
+                            [disabled]="notificandoId() === m.idMiembroComite || !m.email"
+                            [class.text-green-500]="m.fechaUltNotificacion"
+                            [class.text-gray-400]="!m.fechaUltNotificacion"
+                            [title]="buildTooltipNotificar(m)"
+                            (click)="onNotificarMiembro(m)">
+                            {{ notificandoId() === m.idMiembroComite ? '⟳' : '✉' }}
+                          </button>
                         </div>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="7" class="px-3 py-6 text-center text-gray-400 text-sm">
+                        Aún no hay miembros. Use el formulario superior para agregar.
                       </td>
                     </tr>
                   }
@@ -121,57 +188,25 @@ import { ApiResponse } from '@shared/models/api-response.model';
               </table>
             </div>
 
-            <div class="text-xs text-gray-500">
-              Total: {{ comiteExistente()?.miembros?.length ?? 0 }} miembro(s)
+            <!-- Resumen dinámico -->
+            <div class="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
+              <div class="text-center">
+                <div class="text-xs text-gray-500 uppercase tracking-wide">Total miembros</div>
+                <div class="font-bold text-lg text-gray-800">{{ totalMiembrosExistente() }}</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-gray-500 uppercase tracking-wide">Roles base</div>
+                <div class="font-bold text-lg"
+                  [class.text-green-600]="rolesBaseCompletosExistente()"
+                  [class.text-red-500]="!rolesBaseCompletosExistente()">
+                  {{ rolesBaseCompletosExistente() ? 'Completos' : 'Incompletos' }}
+                </div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-gray-500 uppercase tracking-wide">Titulares</div>
+                <div class="font-bold text-lg text-gray-800">{{ titularesExistente() }}</div>
+              </div>
             </div>
-          </div>
-
-          <!-- Formulario agregar / editar miembro individual -->
-          <div class="card space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-gray-800">
-                {{ editandoMiembro() ? 'Editar miembro' : '+ Agregar miembro' }}
-              </h3>
-              @if (editandoMiembro()) {
-                <button class="btn-ghost text-xs" (click)="cancelarEdicion()">Cancelar edición</button>
-              }
-            </div>
-
-            <form [formGroup]="miembroForm" (ngSubmit)="onGuardarMiembro()" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label class="label-field">Nombres completos *</label>
-                <input formControlName="nombresCompletos" class="input-field" maxlength="150"
-                  placeholder="Nombres y apellidos" />
-              </div>
-              <div>
-                <label class="label-field">Cargo</label>
-                <input formControlName="cargo" class="input-field" maxlength="120"
-                  placeholder="Ej. Director de RRHH" />
-              </div>
-              <div>
-                <label class="label-field">Rol en comité *</label>
-                <select formControlName="rolComite" class="input-field">
-                  <option value="PRESIDENTE">Presidente</option>
-                  <option value="SECRETARIO">Secretario</option>
-                  <option value="VOCAL">Vocal</option>
-                  <option value="SUPLENTE">Suplente</option>
-                  <option value="OTRO">Otro...</option>
-                </select>
-                @if (miembroForm.get('rolComite')?.value === 'OTRO') {
-                    <input formControlName="rolComiteCustom" class="input-field mt-2" 
-                      maxlength="20" placeholder="Escriba el rol" />
-                  }
-              </div>
-              <div class="flex items-end gap-3">
-                <label class="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
-                  <input type="checkbox" formControlName="esTitular" />
-                  Titular
-                </label>
-                <button type="submit" class="btn-primary text-sm" [disabled]="savingMiembro()">
-                  {{ savingMiembro() ? 'Guardando...' : (editandoMiembro() ? 'Actualizar' : 'Agregar') }}
-                </button>
-              </div>
-            </form>
           </div>
 
           @if (globalError()) {
@@ -180,119 +215,176 @@ import { ApiResponse } from '@shared/models/api-response.model';
             </div>
           }
 
-          @if (comiteConformado()) {
-            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status">
-              Comité conformado. Puede continuar a Factores.
-             
-            </div>
-          }
-
-          <div class="flex items-center justify-end gap-3">
-            <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'cronograma']" class="btn-ghost"
-              aria-label="Volver a cronograma">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'cronograma']" class="btn-ghost">
               ← Volver a cronograma
             </a>
-            @if (muestraBotonNotificar()) {
-              <button type="button" class="btn-primary"
-                [disabled]="savingNotificar() || !comiteEstructuraConformada()"
-                [attr.aria-disabled]="savingNotificar() || !comiteEstructuraConformada()"
-                [attr.aria-label]="comiteEstructuraConformada() ? 'Notificar al comité de selección' : 'Complete el comité (mín. 3 miembros: Presidente, Secretario, Vocal)'"
-                [title]="comiteEstructuraConformada() ? 'Notificar al comité' : 'Requiere mínimo 3 miembros con roles Presidente, Secretario y Vocal'"
-                (click)="onNotificarComite()">
-                {{ savingNotificar() ? 'Notificando...' : 'Notificar a Comité' }}
-              </button>
-            }
+            <div class="flex gap-3">
+              @if (muestraBotonNotificar()) {
+                <button type="button" class="btn-primary"
+                  [disabled]="savingNotificar() || !comiteEstructuraConformada()"
+                  [title]="comiteEstructuraConformada() ? 'Notificar al comité' : 'Requiere Pdte., Sec. y Vocal'"
+                  (click)="onNotificarComite()">
+                  {{ savingNotificar() ? 'Notificando...' : 'Notificar a Comité' }}
+                </button>
+              }
+              <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']"
+                class="btn-primary"
+                [class.opacity-50]="!puedeIrAFactores()"
+                [class.pointer-events-none]="!puedeIrAFactores()"
+                [attr.aria-disabled]="!puedeIrAFactores()"
+                [title]="puedeIrAFactores() ? 'Ir a Factores' : 'Requiere mínimo 3 miembros con Pdte., Sec. y Vocal'">
+                Continuar a Factores →
+              </a>
+            </div>
           </div>
         }
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- FORMULARIO REGISTRO INICIAL (batch E11)                -->
+        <!-- REGISTRO INICIAL — Tarjeta única + tabla local         -->
         <!-- ═══════════════════════════════════════════════════════ -->
         @if (!comiteExistente()) {
-          <form [formGroup]="form" (ngSubmit)="onSubmitBatch()" class="space-y-6">
+          <div class="space-y-6">
+
+            <!-- Datos de la resolución -->
             <div class="card grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="label-field">N° Resolución *</label>
-                <input formControlName="numeroResolucion" class="input-field" maxlength="80"
+                <label class="label-field">N° Resolución <span class="text-red-500">*</span></label>
+                <input [formControl]="ctrlResolucion" class="input-field" maxlength="80"
                   placeholder="Ej. R-001-2026-ACFFAA" />
+                @if (ctrlResolucion.touched && ctrlResolucion.invalid) {
+                  <span class="text-xs text-red-500">Obligatorio</span>
+                }
               </div>
               <div>
-                <label class="label-field">Fecha designación *</label>
-                <input formControlName="fechaDesignacion" type="date" class="input-field" />
-              </div>
-            </div>
-
-            <div class="card space-y-4">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <h3 class="font-semibold text-gray-800">Miembros del comité</h3>
-                  <p class="text-sm text-gray-500">Mínimo 3 integrantes. Se exige Presidente, Secretario y Vocal.</p>
-                </div>
-                <button type="button" class="btn-primary" (click)="addMiembroBatch()">+ Agregar miembro</button>
-              </div>
-
-              <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                @for (group of miembroBatchControls(); track $index) {
-                  <div [formGroup]="group" class="rounded-xl border border-gray-200 p-4 bg-gray-50/50 space-y-4">
-                    <div class="flex items-center justify-between gap-3">
-                      <h4 class="font-medium text-gray-800">Miembro {{ $index + 1 }}</h4>
-                      @if (miembroBatchControls().length > 3) {
-                        <button type="button" class="btn-ghost text-red-600" (click)="removeMiembroBatch($index)">
-                          Eliminar
-                        </button>
-                      }
-                    </div>
-                    <div>
-                      <label class="label-field">Nombres completos *</label>
-                      <input formControlName="nombresCompletos" class="input-field" maxlength="150"
-                        placeholder="Nombres y apellidos" />
-                    </div>
-                    <div>
-                      <label class="label-field">Cargo</label>
-                      <input formControlName="cargo" class="input-field" maxlength="120"
-                        placeholder="Ej. Director de RRHH" />
-                    </div>
-                    <div>
-                      <label class="label-field">Rol en comité *</label>
-                      <select formControlName="rolComite" class="input-field">
-                        <option value="PRESIDENTE">Presidente</option>
-                        <option value="SECRETARIO">Secretario</option>
-                        <option value="VOCAL">Vocal</option>
-                        <option value="SUPLENTE">Suplente</option>
-                        <option value="OTRO">Otro...</option>
-                      </select>
-                      @if (group.get('rolComite')?.value === 'OTRO') {
-                        <input formControlName="rolComiteCustom" class="input-field mt-2" 
-                          maxlength="20" placeholder="Escriba el rol" />
-                      }
-                    </div>
-                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" formControlName="esTitular" />
-                      Miembro titular
-                    </label>
-                  </div>
+                <label class="label-field">Fecha designación <span class="text-red-500">*</span></label>
+                <input [formControl]="ctrlFechaDesignacion" type="date" class="input-field" />
+                @if (ctrlFechaDesignacion.touched && ctrlFechaDesignacion.invalid) {
+                  <span class="text-xs text-red-500">Obligatorio</span>
                 }
               </div>
             </div>
 
-            <div class="card grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <div class="text-sm text-gray-500">Total miembros</div>
-                <div class="font-semibold text-gray-800">{{ totalMiembrosBatch() }}</div>
-              </div>
-              <div>
-                <div class="text-sm text-gray-500">Roles base completos</div>
-                <div class="font-semibold"
-                  [class.text-green-700]="rolesBaseCompletos()"
-                  [class.text-red-600]="!rolesBaseCompletos()">
-                  {{ rolesBaseCompletos() ? 'Sí' : 'No' }}
+            <!-- Tarjeta de captura única -->
+            <div class="card space-y-4">
+              <h3 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">+ Agregar miembro al comité</h3>
+
+              <form [formGroup]="captureForm" (ngSubmit)="onAgregarALista()"
+                    class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div>
+                  <label class="label-field">Nombres completos <span class="text-red-500">*</span></label>
+                  <input formControlName="nombresCompletos" class="input-field" maxlength="200"
+                    placeholder="Nombres y apellidos completos" />
+                  @if (captureForm.controls['nombresCompletos'].touched && captureForm.controls['nombresCompletos'].invalid) {
+                    <span class="text-xs text-red-500">Obligatorio</span>
+                  }
+                </div>
+
+                <div>
+                  <label class="label-field">Cargo</label>
+                  <input formControlName="cargo" class="input-field" maxlength="200"
+                    placeholder="Ej. Director de RRHH" />
+                </div>
+
+                <div>
+                  <label class="label-field">Rol en comité <span class="text-red-500">*</span></label>
+                  <select formControlName="rolComite" class="input-field">
+                    <option value="PRESIDENTE">Presidente</option>
+                    <option value="SECRETARIO">Secretario</option>
+                    <option value="VOCAL">Vocal</option>
+                    <option value="SUPLENTE">Suplente</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="label-field">Correo institucional <span class="text-red-500">*</span></label>
+                  <input formControlName="email" class="input-field" maxlength="100"
+                    placeholder="usuario@acffaa.gob.pe" type="email" />
+                  @if (captureForm.controls['email'].touched && captureForm.controls['email'].invalid) {
+                    <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido</span>
+                  }
+                </div>
+
+                <div class="flex items-end gap-4">
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
+                    <input type="checkbox" formControlName="esTitular" />
+                    Titular
+                  </label>
+                  <button type="submit" class="btn-primary text-sm mb-2">
+                    Agregar a lista
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Tabla local de miembros pendientes -->
+            @if (batchMiembros().length > 0) {
+              <div class="card space-y-4">
+                <h3 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+                  Miembros a registrar
+                </h3>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="bg-[#1F2133] text-white">
+                        <th class="px-3 py-2 text-left font-semibold text-xs">#</th>
+                        <th class="px-3 py-2 text-left font-semibold text-xs">Nombres</th>
+                        <th class="px-3 py-2 text-left font-semibold text-xs">Cargo</th>
+                        <th class="px-3 py-2 text-center font-semibold text-xs">Rol</th>
+                        <th class="px-3 py-2 text-center font-semibold text-xs">Titular</th>
+                        <th class="px-3 py-2 text-left font-semibold text-xs">Correo</th>
+                        <th class="px-3 py-2 text-center font-semibold text-xs">Quitar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (m of batchMiembros(); track $index; let i = $index) {
+                        <tr class="border-t hover:bg-gray-50 transition-colors">
+                          <td class="px-3 py-2 text-gray-400 text-xs font-mono">{{ i + 1 }}</td>
+                          <td class="px-3 py-2 font-medium text-gray-800">{{ m.nombresCompletos }}</td>
+                          <td class="px-3 py-2 text-gray-600 text-xs">{{ m.cargo || '—' }}</td>
+                          <td class="px-3 py-2 text-center">
+                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                              [class.bg-blue-100]="m.rolComite === 'PRESIDENTE'"
+                              [class.text-blue-800]="m.rolComite === 'PRESIDENTE'"
+                              [class.bg-purple-100]="m.rolComite === 'SECRETARIO'"
+                              [class.text-purple-800]="m.rolComite === 'SECRETARIO'"
+                              [class.bg-amber-100]="m.rolComite !== 'PRESIDENTE' && m.rolComite !== 'SECRETARIO'"
+                              [class.text-amber-800]="m.rolComite !== 'PRESIDENTE' && m.rolComite !== 'SECRETARIO'">
+                              {{ m.rolComite }}
+                            </span>
+                          </td>
+                          <td class="px-3 py-2 text-center">{{ m.esTitular ? '✓' : '—' }}</td>
+                          <td class="px-3 py-2 text-xs text-gray-600 font-mono">{{ m.email || '—' }}</td>
+                          <td class="px-3 py-2 text-center">
+                            <button class="btn-ghost text-xs text-red-600" (click)="quitarDeLista(i)">✕</button>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Resumen dinámico -->
+                <div class="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
+                  <div class="text-center">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">Total miembros</div>
+                    <div class="font-bold text-lg text-gray-800">{{ batchMiembros().length }}</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">Roles base</div>
+                    <div class="font-bold text-lg"
+                      [class.text-green-600]="rolesBaseCompletosBatch()"
+                      [class.text-red-500]="!rolesBaseCompletosBatch()">
+                      {{ rolesBaseCompletosBatch() ? 'Completos' : 'Incompletos' }}
+                    </div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide">Titulares</div>
+                    <div class="font-bold text-lg text-gray-800">{{ titularesBatch() }}</div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <div class="text-sm text-gray-500">Titulares</div>
-                <div class="font-semibold text-gray-800">{{ titularesCount() }}</div>
-              </div>
-            </div>
+            }
 
             @if (globalError()) {
               <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -304,11 +396,21 @@ import { ApiResponse } from '@shared/models/api-response.model';
               <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'cronograma']" class="btn-ghost">
                 ← Volver a cronograma
               </a>
-              <button type="submit" class="btn-primary" [disabled]="saving()">
-                {{ saving() ? 'Guardando...' : 'Guardar y continuar a Factores' }}
+              <button type="button" class="btn-primary"
+                [disabled]="saving() || !puedeGuardarBatch()"
+                (click)="onSubmitBatch()">
+                {{ saving() ? 'Guardando...' : 'Guardar Comité' }}
               </button>
+              <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']"
+                class="btn-primary"
+                [class.opacity-50]="!comiteExistente()"
+                [class.pointer-events-none]="!comiteExistente()"
+                [attr.aria-disabled]="!comiteExistente()"
+                [title]="comiteExistente() ? 'Ir a Factores' : 'Primero guarde el comité'">
+                Continuar →
+              </a>
             </div>
-          </form>
+          </div>
         }
       }
 
@@ -327,7 +429,6 @@ import { ApiResponse } from '@shared/models/api-response.model';
 export class ComiteComponent {
   private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly convocatoriaService = inject(ConvocatoriaService);
   private readonly toast = inject(ToastService);
@@ -339,51 +440,78 @@ export class ComiteComponent {
   readonly saving = signal(false);
   readonly savingMiembro = signal(false);
   readonly savingNotificar = signal(false);
+  readonly notificandoId = signal<number | null>(null);
   readonly globalError = signal('');
 
-  /** Comité existente cargado desde GET /comite */
   readonly comiteExistente = signal<ComiteDetalleResponse | null>(null);
 
   readonly isOrh = () => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']);
   readonly comiteConformado = () => this.comiteExistente()?.estado === 'COMITE_CONFORMADO';
-  readonly muestraBotonNotificar = () =>
-    this.isOrh() && this.comiteExistente() && !this.comiteConformado();
+  readonly muestraBotonNotificar = () => this.isOrh() && this.comiteExistente() && !this.comiteConformado();
 
-  /** Comité con estructura válida: mín. 3 miembros y roles Presidente, Secretario, Vocal. */
   readonly comiteEstructuraConformada = computed(() => {
     const miembros = this.comiteExistente()?.miembros ?? [];
     if (miembros.length < 3) return false;
-    const roles = miembros.map((m) => m.rolComite);
-    return ['PRESIDENTE', 'SECRETARIO', 'VOCAL'].every((r) => roles.includes(r));
+    const roles = miembros.map(m => m.rolComite);
+    return ['PRESIDENTE', 'SECRETARIO', 'VOCAL'].every(r => roles.includes(r));
   });
 
-  /** CRUD individual: miembro en edición */
+  readonly puedeIrAFactores = computed(() => !!this.comiteExistente());
+
+  // ── Métricas tabla existente ──
+  readonly totalMiembrosExistente = computed(() => this.comiteExistente()?.miembros?.length ?? 0);
+  readonly rolesBaseCompletosExistente = computed(() => {
+    const roles = (this.comiteExistente()?.miembros ?? []).map(m => m.rolComite);
+    return ['PRESIDENTE', 'SECRETARIO', 'VOCAL'].every(r => roles.includes(r));
+  });
+  readonly titularesExistente = computed(() =>
+    (this.comiteExistente()?.miembros ?? []).filter(m => m.esTitular).length,
+  );
+
+  // ── Batch local ──
+  readonly batchMiembros = signal<MiembroComiteItem[]>([]);
+  readonly rolesBaseCompletosBatch = computed(() => {
+    const roles = this.batchMiembros().map(m => m.rolComite);
+    return ['PRESIDENTE', 'SECRETARIO', 'VOCAL'].every(r => roles.includes(r));
+  });
+  readonly titularesBatch = computed(() => this.batchMiembros().filter(m => m.esTitular).length);
+  readonly puedeGuardarBatch = computed(() =>
+    this.batchMiembros().length >= 3 &&
+    this.rolesBaseCompletosBatch() &&
+    this.resolucionStatus() === 'VALID' &&
+    this.fechaStatus() === 'VALID',
+  );
+
+  // ── CRUD individual ──
   readonly editandoMiembro = signal(false);
   readonly idMiembroEditando = signal<number | null>(null);
-
-  /** Eliminar: confirm dialog */
   readonly showDeleteConfirm = signal(false);
   readonly miembroAEliminar = signal<MiembroDetalleItem | null>(null);
 
-  // ═══ Formulario CRUD individual ═══
-  readonly miembroForm = this.fb.group({
-    nombresCompletos: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(150)]),
+  // ── Formulario de captura única (compartido entre batch y CRUD) ──
+  readonly captureForm = this.fb.group({
+    nombresCompletos: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
     cargo: this.fb.control<string | null>(null),
     rolComite: this.fb.nonNullable.control('VOCAL', Validators.required),
     esTitular: this.fb.nonNullable.control(true),
-    rolComiteCustom: this.fb.control<string | null>(null),
-  });
-
-  // ═══ Formulario batch E11 (registro inicial) ═══
-  readonly form = this.fb.group({
-    numeroResolucion: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(80)]),
-    fechaDesignacion: this.fb.nonNullable.control('', Validators.required),
-    miembros: this.fb.array([
-      this.createMiembroBatchGroup('PRESIDENTE'),
-      this.createMiembroBatchGroup('SECRETARIO'),
-      this.createMiembroBatchGroup('VOCAL'),
+    email: this.fb.nonNullable.control('', [
+      Validators.required,
+      Validators.maxLength(100),
+      Validators.pattern(ACFFAA_EMAIL_PATTERN),
     ]),
   });
+
+  // ── Controles de cabecera para el batch ──
+  readonly ctrlResolucion = this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(80)]);
+  readonly ctrlFechaDesignacion = this.fb.nonNullable.control('', Validators.required);
+
+  // Signals reactivos del status de los controles (para que computed() los detecte)
+  private readonly resolucionStatus = toSignal(
+    this.ctrlResolucion.statusChanges.pipe(startWith(this.ctrlResolucion.status)),
+  );
+  private readonly fechaStatus = toSignal(
+    this.ctrlFechaDesignacion.statusChanges.pipe(startWith(this.ctrlFechaDesignacion.status)),
+  );
 
   constructor() {
     if (!Number.isFinite(this.idConvocatoria) || this.idConvocatoria <= 0) {
@@ -391,7 +519,6 @@ export class ComiteComponent {
       this.globalError.set('Identificador de convocatoria inválido.');
       return;
     }
-
     this.convocatoriaService.obtener(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -407,68 +534,52 @@ export class ComiteComponent {
   }
 
   // ═══════════════════════════════════════════════
-  // BATCH (E11) — Registro inicial del comité
+  // BATCH — Agregar a lista local y enviar todo
   // ═══════════════════════════════════════════════
 
-  get miembrosArray(): FormArray {
-    return this.form.controls.miembros as FormArray;
+  onAgregarALista(): void {
+    if (this.captureForm.invalid) {
+      this.captureForm.markAllAsTouched();
+      return;
+    }
+    const v = this.captureForm.getRawValue();
+    this.batchMiembros.update(list => [...list, {
+      idUsuario: null,
+      nombresCompletos: v.nombresCompletos.trim(),
+      cargo: v.cargo?.trim() || null,
+      rolComite: v.rolComite,
+      esTitular: v.esTitular,
+      email: v.email.trim(),
+    }]);
+    this.captureForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true, email: '' });
   }
 
-  miembroBatchControls(): FormGroup[] {
-    return this.miembrosArray.controls as FormGroup[];
-  }
-
-  readonly totalMiembrosBatch = computed(() => this.miembroBatchControls().length);
-
-  readonly titularesCount = computed(() =>
-    this.miembroBatchControls().filter(g => Boolean(g.get('esTitular')?.value)).length,
-  );
-
-  readonly rolesBaseCompletos = computed(() => {
-    const roles = this.miembroBatchControls().map(g => String(g.get('rolComite')?.value || ''));
-    return ['PRESIDENTE', 'SECRETARIO', 'VOCAL'].every(r => roles.includes(r));
-  });
-
-  addMiembroBatch(): void {
-    this.miembrosArray.push(this.createMiembroBatchGroup('SUPLENTE'));
-  }
-
-  removeMiembroBatch(index: number): void {
-    this.miembrosArray.removeAt(index);
+  quitarDeLista(index: number): void {
+    this.batchMiembros.update(list => list.filter((_, i) => i !== index));
   }
 
   onSubmitBatch(): void {
     this.globalError.set('');
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.toast.warning('Complete la resolución, fecha y todos los miembros.');
+    this.ctrlResolucion.markAsTouched();
+    this.ctrlFechaDesignacion.markAsTouched();
+
+    if (this.ctrlResolucion.invalid || this.ctrlFechaDesignacion.invalid) {
+      this.toast.warning('Complete el número de resolución y la fecha de designación.');
       return;
     }
-    if (this.totalMiembrosBatch() < 3) {
+    if (this.batchMiembros().length < 3) {
       this.globalError.set('El comité debe tener al menos 3 miembros.');
       return;
     }
-    if (!this.rolesBaseCompletos()) {
+    if (!this.rolesBaseCompletosBatch()) {
       this.globalError.set('Debe registrar Presidente, Secretario y Vocal.');
       return;
     }
 
-    const miembros: MiembroComiteItem[] = this.miembroBatchControls().map(g => ({
-      idUsuario: null,
-      nombresCompletos: (g.get('nombresCompletos')?.value as string).trim(),
-      cargo: (g.get('cargo')?.value as string | null)?.trim() || null,
-      //rolComite: g.get('rolComite')?.value as string,
-      rolComite: (g.get('rolComite')?.value as string) === 'OTRO'
-      ? (g.get('rolComiteCustom')?.value as string ?? '').trim().toUpperCase()
-      : g.get('rolComite')?.value as string,
-
-      esTitular: Boolean(g.get('esTitular')?.value),
-    }));
-
     const payload: ComiteRequest = {
-      numeroResolucion: this.form.controls.numeroResolucion.value.trim(),
-      fechaDesignacion: this.form.controls.fechaDesignacion.value,
-      miembros,
+      numeroResolucion: this.ctrlResolucion.value.trim(),
+      fechaDesignacion: this.ctrlFechaDesignacion.value,
+      miembros: this.batchMiembros(),
     };
 
     this.saving.set(true);
@@ -477,6 +588,7 @@ export class ComiteComponent {
       .subscribe({
         next: (_res: ApiResponse<ComiteResponse>) => {
           this.saving.set(false);
+          this.batchMiembros.set([]);
           this.toast.success('Comité registrado correctamente.');
           this.cargarComiteExistente();
         },
@@ -489,18 +601,136 @@ export class ComiteComponent {
   }
 
   // ═══════════════════════════════════════════════
-  // CRUD INDIVIDUAL — Agregar / Editar / Eliminar
+  // CRUD INDIVIDUAL — Agregar / Editar / Eliminar / Notificar
   // ═══════════════════════════════════════════════
 
   onEditarMiembro(m: MiembroDetalleItem): void {
     this.editandoMiembro.set(true);
     this.idMiembroEditando.set(m.idMiembroComite);
-    this.miembroForm.patchValue({
+    this.captureForm.patchValue({
       nombresCompletos: m.nombresCompletos,
       cargo: m.cargo ?? null,
       rolComite: m.rolComite,
       esTitular: m.esTitular,
+      email: m.email ?? '',
     });
+  }
+
+  cancelarEdicion(): void {
+    this.editandoMiembro.set(false);
+    this.idMiembroEditando.set(null);
+    this.captureForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true, email: '' });
+  }
+
+  onGuardarMiembro(): void {
+    this.globalError.set('');
+    if (this.captureForm.invalid) {
+      this.captureForm.markAllAsTouched();
+      this.toast.warning('Complete todos los campos obligatorios.');
+      return;
+    }
+
+    const v = this.captureForm.getRawValue();
+    const req: MiembroComiteRequest = {
+      nombresCompletos: v.nombresCompletos.trim(),
+      cargo: v.cargo?.trim() || null,
+      rolComite: v.rolComite,
+      esTitular: v.esTitular,
+      email: v.email.trim() || null,
+    };
+
+    this.savingMiembro.set(true);
+
+    if (this.editandoMiembro() && this.idMiembroEditando()) {
+      this.convocatoriaService.actualizarMiembro(this.idConvocatoria, this.idMiembroEditando()!, req)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.savingMiembro.set(false);
+            this.toast.success('Miembro actualizado.');
+            this.cancelarEdicion();
+            this.cargarComiteExistente();
+          },
+          error: (err: { error?: { message?: string } }) => {
+            this.savingMiembro.set(false);
+            this.toast.error(err.error?.message || 'No se pudo actualizar.');
+          },
+        });
+    } else {
+      this.convocatoriaService.agregarMiembro(this.idConvocatoria, req)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.savingMiembro.set(false);
+            this.toast.success('Miembro agregado.');
+            this.captureForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true, email: '' });
+            this.cargarComiteExistente();
+          },
+          error: (err: { error?: { message?: string } }) => {
+            this.savingMiembro.set(false);
+            this.toast.error(err.error?.message || 'No se pudo agregar miembro.');
+          },
+        });
+    }
+  }
+
+  onConfirmarEliminar(m: MiembroDetalleItem): void {
+    this.miembroAEliminar.set(m);
+    this.showDeleteConfirm.set(true);
+  }
+
+  onEliminarConfirmado(): void {
+    this.showDeleteConfirm.set(false);
+    const m = this.miembroAEliminar();
+    if (!m) return;
+    this.convocatoriaService.eliminarMiembro(this.idConvocatoria, m.idMiembroComite)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toast.success('Miembro eliminado.');
+          this.miembroAEliminar.set(null);
+          this.cargarComiteExistente();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.toast.error(err.error?.message || 'No se pudo eliminar.');
+        },
+      });
+  }
+
+  onNotificarMiembro(m: MiembroDetalleItem): void {
+    if (!m.email) return;
+    this.notificandoId.set(m.idMiembroComite);
+    this.convocatoriaService.notificarMiembro(this.idConvocatoria, m.idMiembroComite)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.notificandoId.set(null);
+          // Actualización in-place: sin recargar la página completa
+          const ahora = new Date().toISOString();
+          this.comiteExistente.update(c => c ? {
+            ...c,
+            miembros: c.miembros.map(x =>
+              x.idMiembroComite === m.idMiembroComite
+                ? { ...x, fechaUltNotificacion: ahora }
+                : x,
+            ),
+          } : c);
+          this.toast.success(`Notificación enviada a ${m.email}`);
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.notificandoId.set(null);
+          this.toast.error(err.error?.message || 'No se pudo enviar la notificación.');
+        },
+      });
+  }
+
+  buildTooltipNotificar(m: MiembroDetalleItem): string {
+    if (!m.email) return 'Sin correo registrado';
+    if (m.fechaUltNotificacion) {
+      const fecha = new Date(m.fechaUltNotificacion).toLocaleString('es-PE');
+      return `Notificado el ${fecha} — Reenviar designación`;
+    }
+    return 'Notificar designación al miembro';
   }
 
   onNotificarComite(): void {
@@ -522,94 +752,8 @@ export class ComiteComponent {
       });
   }
 
-  cancelarEdicion(): void {
-    this.editandoMiembro.set(false);
-    this.idMiembroEditando.set(null);
-    this.miembroForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true });
-  }
-
-  onGuardarMiembro(): void {
-    this.globalError.set('');
-    if (this.miembroForm.invalid) {
-      this.miembroForm.markAllAsTouched();
-      this.toast.warning('Complete nombres y rol del miembro.');
-      return;
-    }
-
-    const req: MiembroComiteRequest = {
-      nombresCompletos: this.miembroForm.controls.nombresCompletos.value.trim(),
-      cargo: this.miembroForm.controls.cargo.value?.trim() || null,
-      //rolComite: this.miembroForm.controls.rolComite.value,
-      rolComite: this.miembroForm.controls.rolComite.value === 'OTRO'
-      ? (this.miembroForm.get('rolComiteCustom')?.value as string ?? '').trim().toUpperCase()
-      : this.miembroForm.controls.rolComite.value,
-
-      esTitular: this.miembroForm.controls.esTitular.value,
-    };
-
-    this.savingMiembro.set(true);
-
-    if (this.editandoMiembro() && this.idMiembroEditando()) {
-      // PUT — Actualizar
-      this.convocatoriaService.actualizarMiembro(this.idConvocatoria, this.idMiembroEditando()!, req)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => {
-            this.savingMiembro.set(false);
-            this.toast.success('Miembro actualizado.');
-            this.cancelarEdicion();
-            this.cargarComiteExistente();
-          },
-          error: (err: { error?: { message?: string } }) => {
-            this.savingMiembro.set(false);
-            this.toast.error(err.error?.message || 'No se pudo actualizar.');
-          },
-        });
-    } else {
-      // POST — Agregar
-      this.convocatoriaService.agregarMiembro(this.idConvocatoria, req)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => {
-            this.savingMiembro.set(false);
-            this.toast.success('Miembro agregado.');
-            this.miembroForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true });
-            this.cargarComiteExistente();
-          },
-          error: (err: { error?: { message?: string } }) => {
-            this.savingMiembro.set(false);
-            this.toast.error(err.error?.message || 'No se pudo agregar miembro.');
-          },
-        });
-    }
-  }
-
-  onConfirmarEliminar(m: MiembroDetalleItem): void {
-    this.miembroAEliminar.set(m);
-    this.showDeleteConfirm.set(true);
-  }
-
-  onEliminarConfirmado(): void {
-    this.showDeleteConfirm.set(false);
-    const m = this.miembroAEliminar();
-    if (!m) return;
-
-    this.convocatoriaService.eliminarMiembro(this.idConvocatoria, m.idMiembroComite)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.toast.success('Miembro eliminado.');
-          this.miembroAEliminar.set(null);
-          this.cargarComiteExistente();
-        },
-        error: (err: { error?: { message?: string } }) => {
-          this.toast.error(err.error?.message || 'No se pudo eliminar.');
-        },
-      });
-  }
-
   // ═══════════════════════════════════════════════
-  // CARGA DE DATOS
+  // CARGA
   // ═══════════════════════════════════════════════
 
   private cargarComiteExistente(): void {
@@ -625,15 +769,5 @@ export class ComiteComponent {
           this.loading.set(false);
         },
       });
-  }
-
-  private createMiembroBatchGroup(rol: string): FormGroup {
-    return this.fb.group({
-      nombresCompletos: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(150)]),
-      cargo: this.fb.control<string | null>(null),
-      rolComite: this.fb.nonNullable.control(rol, Validators.required),
-      esTitular: this.fb.nonNullable.control(true),
-      rolComiteCustom: this.fb.control<string | null>(null),
-    });
   }
 }

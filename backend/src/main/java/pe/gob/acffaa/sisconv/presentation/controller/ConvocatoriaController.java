@@ -21,8 +21,15 @@ import pe.gob.acffaa.sisconv.domain.model.Usuario;
 import pe.gob.acffaa.sisconv.domain.repository.IUsuarioRepository;
 import pe.gob.acffaa.sisconv.application.dto.request.MiembroComiteRequest;
 import pe.gob.acffaa.sisconv.application.dto.response.ComiteDetalleResponse;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.UUID;
 import java.time.LocalDate;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 
 /**
  * Controlador REST para gestión de Convocatorias CAS — PKG-02.
@@ -252,6 +259,20 @@ public class ConvocatoriaController {
         return ResponseEntity.ok(ApiResponse.ok(null, "Miembro eliminado"));
     }
     // ══════════════════════════════════════════════════════════════
+    // E11.N — POST /convocatorias/{id}/comite/miembros/{idMiembro}/notificar
+    // ══════════════════════════════════════════════════════════════
+
+    @PostMapping("/{id}/comite/miembros/{idMiembro}/notificar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "E11.N: Notificar miembro individual del comité")
+    public ResponseEntity<ApiResponse<Void>> notificarMiembro(
+            @PathVariable Long id, @PathVariable Long idMiembro,
+            Authentication auth, HttpServletRequest httpReq) {
+        convService.notificarMiembro(id, idMiembro, auth.getName(), httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Notificación enviada al miembro."));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // E13 — POST /convocatorias/{id}/acta-instalacion
     // ══════════════════════════════════════════════════════════════
 
@@ -272,19 +293,53 @@ public class ConvocatoriaController {
     // E14 — PUT /convocatorias/{id}/acta-instalacion/cargar
     // ══════════════════════════════════════════════════════════════
 
+    @GetMapping("/{id}/acta-instalacion")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH', 'COMITE')")
+    @Operation(summary = "Obtener metadata del acta de instalación")
+    public ResponseEntity<ApiResponse<ActaResponse>> obtenerActa(@PathVariable Long id) {
+        ActaResponse acta = convService.obtenerActa(id);
+        return ResponseEntity.ok(ApiResponse.ok(acta));
+    }
+
+    @GetMapping("/{id}/acta-instalacion/pdf")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH', 'COMITE')")
+    @Operation(summary = "Preview/descarga del PDF del acta (firmada si existe, generada si no)")
+    public ResponseEntity<Resource> descargarActaPdf(@PathVariable Long id) {
+        String ruta = convService.obtenerRutaActaPdf(id);
+        Path path = Path.of(ruta);
+        if (!Files.exists(path)) {
+            return ResponseEntity.notFound().build();
+        }
+        Resource resource = new FileSystemResource(path);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"acta.pdf\"")
+                .body(resource);
+    }
+
     @PutMapping("/{id}/acta-instalacion/cargar")
     @PreAuthorize("hasAnyRole('ADMIN', 'COMITE')")
     @Operation(summary = "E14: Cargar Acta de Instalación firmada",
-            description = "CU-09: Recibe multipart/form-data con PDF firmado escaneado")
+            description = "CU-09: Recibe multipart/form-data con PDF firmado escaneado. Almacena en sistema de archivos local.")
     public ResponseEntity<ApiResponse<ActaResponse>> cargarActaFirmada(
             @PathVariable Long id,
             @RequestParam("archivo") MultipartFile archivo,
             @RequestParam(value = "fechaFirma", required = false) LocalDate fechaFirma,
             Authentication auth, HttpServletRequest httpReq) {
 
-        // Registrar ruta del archivo (almacenamiento físico diferido)
-        String rutaArchivo = "/actas/firmados/" + archivo.getOriginalFilename();
+        // Almacenamiento físico con streaming (CLAUDE.md: no byte[] para archivos > 1MB)
+        String nombreSanitizado = UUID.randomUUID() + ".pdf";
+        Path uploadDir = Path.of("actas", "firmados");
+        try {
+            Files.createDirectories(uploadDir);
+            try (InputStream is = archivo.getInputStream()) {
+                Files.copy(is, uploadDir.resolve(nombreSanitizado), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            throw new pe.gob.acffaa.sisconv.domain.exception.DomainException("Error al guardar el archivo: " + e.getMessage());
+        }
 
+        String rutaArchivo = "actas/firmados/" + nombreSanitizado;
         ActaResponse response = convService.cargarActaFirmada(
                 id, rutaArchivo, fechaFirma, auth.getName(), httpReq);
         return ResponseEntity.ok(ApiResponse.ok(response, response.getMensaje()));
@@ -348,6 +403,22 @@ public class ConvocatoriaController {
             description = "Detalle completo con requerimiento asociado")
     public ResponseEntity<ApiResponse<ConvocatoriaResponse>> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(convService.obtenerPorId(id)));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // PUT /convocatorias/{id} — Actualizar datos editables por ORH
+    // ══════════════════════════════════════════════════════════════
+
+    @PutMapping("/{id:\\d+}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Actualizar datos de convocatoria",
+            description = "ORH puede editar descripcion y objetoContratacion. Datos heredados del requerimiento son ignorados.")
+    public ResponseEntity<ApiResponse<ConvocatoriaResponse>> actualizar(
+            @PathVariable Long id,
+            @Valid @RequestBody ConvocatoriaUpdateRequest request,
+            Authentication auth, HttpServletRequest httpReq) {
+        ConvocatoriaResponse response = convService.actualizar(id, request, auth.getName(), httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(response, "Se actualizó correctamente"));
     }
 
     // ══════════════════════════════════════════════════════════════

@@ -19,7 +19,7 @@ public class ConvocatoriaMapper {
                 .numeroConvocatoria(conv.getNumeroConvocatoria())
                 .descripcion(conv.getDescripcion())
                 .objetoContratacion(conv.getObjetoContratacion())
-                .estado(conv.getEstado())
+                .estado(conv.getEstado() != null ? conv.getEstado().name() : null)
                 .pesoEvalCurricular(conv.getPesoEvalCurricular())
                 .pesoEvalTecnica(conv.getPesoEvalTecnica())
                 .pesoEntrevista(conv.getPesoEntrevista())

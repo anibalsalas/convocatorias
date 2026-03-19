@@ -14,6 +14,7 @@ import pe.gob.acffaa.sisconv.application.mapper.SeleccionMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.application.service.PostulacionService;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.exception.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
@@ -77,7 +78,7 @@ class PostulacionServiceTest {
 
     private Convocatoria convPublicada() {
         return Convocatoria.builder().idConvocatoria(1L)
-                .numeroConvocatoria("CAS-001-2026").estado("PUBLICADA").build();
+                .numeroConvocatoria("CAS-001-2026").estado(EstadoConvocatoria.PUBLICADA).build();
     }
 
     private Postulante postulanteMock() {
@@ -133,7 +134,7 @@ class PostulacionServiceTest {
     @DisplayName("E17: Convocatoria estado invalido -> 400")
     void e17_estadoInvalido() {
         Convocatoria c = convPublicada();
-        c.setEstado("EN_ELABORACION");
+        c.setEstado(EstadoConvocatoria.EN_ELABORACION);
         when(convRepo.findById(1L)).thenReturn(Optional.of(c));
         assertThrows(DomainException.class, () -> service.registrar(reqValido(), http));
     }
@@ -265,7 +266,7 @@ class PostulacionServiceTest {
     @DisplayName("E21: Registrar tacha exitosa")
     void e21_tachaExitosa() {
         Convocatoria conv = convPublicada();
-        conv.setEstado("EN_SELECCION");
+        conv.setEstado(EstadoConvocatoria.EN_SELECCION);
         when(convRepo.findById(1L)).thenReturn(Optional.of(conv));
         when(postRepo.findById(100L)).thenReturn(Optional.of(postulacionMock("VERIFICADO")));
         when(tachaRepo.save(any())).thenAnswer(inv -> {

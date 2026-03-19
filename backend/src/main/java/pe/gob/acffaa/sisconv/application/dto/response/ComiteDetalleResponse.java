@@ -28,5 +28,8 @@ public class ComiteDetalleResponse {
         private String rolComite;
         private Boolean esTitular;
         private String estado;
+        private String email;
+        /** ISO-8601 timestamp de la última notificación enviada. Null si nunca se notificó. */
+        private String fechaUltNotificacion;
     }
 }

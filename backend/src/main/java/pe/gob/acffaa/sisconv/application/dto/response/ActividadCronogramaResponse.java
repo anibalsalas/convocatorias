@@ -14,5 +14,8 @@ public record ActividadCronogramaResponse(
         LocalDate fechaFin,
         String responsable,
         String lugar,
-        Integer orden
+        Integer orden,
+        String areaResp1,
+        String areaResp2,
+        String areaResp3
 ) {}

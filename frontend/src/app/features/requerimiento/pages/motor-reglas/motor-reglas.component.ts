@@ -19,7 +19,7 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
         subtitle="ORH — Configurar pesos ponderados y umbrales (CK_CONV_PESOS: suma = 100%)">
         <a routerLink="/sistema/requerimiento/requerimientos" class="btn-ghost">← Volver</a>
       </app-page-header>
-
+      <p class="text-sm text-red-500">* Luego de Configurar el Motor de Reglas,  Sirvase Crear la Convocatoria</p>
       @if (loading()) {
         <div class="card text-center py-12 text-gray-400">Cargando requerimiento...</div>
       } @else if (req()) {

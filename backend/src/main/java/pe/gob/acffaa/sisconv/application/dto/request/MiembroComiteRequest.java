@@ -1,6 +1,8 @@
 package pe.gob.acffaa.sisconv.application.dto.request;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.*;
 
 /**
@@ -20,4 +22,9 @@ public class MiembroComiteRequest {
     private String rolComite;
 
     private Boolean esTitular;
+
+    @Email(message = "El correo electrónico no tiene formato válido")
+    @Pattern(regexp = "^[a-zA-Z0-9._%+\\-]+@acffaa\\.gob\\.pe$",
+             message = "El correo debe pertenecer al dominio @acffaa.gob.pe")
+    private String email;
 }

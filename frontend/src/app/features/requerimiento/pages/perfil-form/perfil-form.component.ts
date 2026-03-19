@@ -13,6 +13,7 @@ import { ApiResponse } from '@shared/models/api-response.model';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import { ToastService } from '@core/services/toast.service';
 import {
+  CondicionPuestoRequest,
   NivelPuestoResponse,
   PerfilConocimientoRequest,
   PerfilExperienciaRequest,
@@ -57,6 +58,12 @@ export class PerfilFormComponent implements OnInit {
   readonly perfilId = signal<number | null>(null);
   readonly registroContext = signal<PerfilRegistroContextResponse | null>(null);
   readonly datosGeneralesGuardado = signal(false);
+  readonly estadoRequerimientoAsociado = signal<string | null>(null);
+  /** Readonly cuando el requerimiento ya superó el estado ELABORADO (OPP aprobó presupuesto) */
+  readonly condicionesReadonly = computed(() => {
+    const estado = this.estadoRequerimientoAsociado();
+    return estado !== null && estado !== 'ELABORADO';
+  });
   readonly editingFormacionIndex = signal<number | null>(null);
   readonly editingConocimientoIndex = signal<number | null>(null);
   readonly editingExperienciaIndex = signal<number | null>(null);
@@ -82,6 +89,7 @@ export class PerfilFormComponent implements OnInit {
     { id: 'formacion', title: 'Formación Académica', subtitle: 'Campo atómico RPE 065-2020' },
     { id: 'conocimientos', title: 'Conocimientos', subtitle: 'Matriz ofimática y dominio' },
     { id: 'experiencia', title: 'Experiencia', subtitle: 'Experiencia general y específica' },
+    { id: 'condicion', title: 'Condiciones', subtitle: 'Remuneración y lugar de trabajo' },
   ];
 
   /** Ley del Servicio Civil Art. 3 — Categoría (rol funcional del puesto) */
@@ -151,6 +159,14 @@ export class PerfilFormComponent implements OnInit {
     detalle: ['', [Validators.required, Validators.maxLength(1000)]],
   });
 
+  readonly condicionForm = this.fb.group({
+    remuneracionMensual: [null as number | null, [Validators.required, Validators.min(0.01)]],
+    duracionContrato: ['', [Validators.required, Validators.maxLength(100)]],
+    lugarPrestacion: ['', [Validators.required, Validators.maxLength(300)]],
+    jornadaSemanal: [48, [Validators.required, Validators.min(1), Validators.max(48)]],
+    otrasCondiciones: ['', [Validators.maxLength(1000)]],
+  });
+
   ngOnInit(): void {
     this.loadContext();
     const idParam = this.route.snapshot.params['id'];
@@ -173,7 +189,7 @@ export class PerfilFormComponent implements OnInit {
   }
 
   nextTab(): void {
-    this.activeTab.update((v) => Math.min(3, v + 1));
+    this.activeTab.update((v) => Math.min(4, v + 1));
   }
 
   goToTab(index: number): void {
@@ -182,6 +198,14 @@ export class PerfilFormComponent implements OnInit {
 
   isControlInvalid(control: AbstractControl | null): boolean {
     return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  onEspecialidadInput(): void {
+    const ctrl = this.formacionForm.controls.especialidad;
+    const val = (ctrl.value ?? '').toUpperCase();
+    if (ctrl.value !== val) {
+      ctrl.setValue(val, { emitEvent: false });
+    }
   }
 
   isDatosGeneralesValid(): boolean {
@@ -260,7 +284,7 @@ export class PerfilFormComponent implements OnInit {
     const raw = this.formacionForm.getRawValue();
     const item: PerfilFormacionAcademicaRequest = {
       gradoAcademico: String(raw.gradoAcademico ?? '').trim(),
-      especialidad: String(raw.especialidad ?? '').trim(),
+      especialidad: String(raw.especialidad ?? '').trim().toUpperCase(),
       requiereColegiatura: Boolean(raw.requiereColegiatura),
       requiereHabilitacionProfesional: Boolean(raw.requiereHabilitacionProfesional),
       orden: 0,
@@ -282,7 +306,7 @@ export class PerfilFormComponent implements OnInit {
     const f = this.formacionesGuardadas()[index];
     this.formacionForm.patchValue({
       gradoAcademico: f.gradoAcademico,
-      especialidad: f.especialidad,
+      especialidad: (f.especialidad ?? '').toUpperCase(),
       requiereColegiatura: f.requiereColegiatura,
       requiereHabilitacionProfesional: f.requiereHabilitacionProfesional,
     });
@@ -419,6 +443,14 @@ export class PerfilFormComponent implements OnInit {
     this.persistFormacionesConocimientosExperiencias();
   }
 
+  guardarCondicion(): void {
+    this.condicionForm.markAllAsTouched();
+    if (!this.condicionForm.valid) return;
+    const id = this.perfilId();
+    if (!id) return;
+    this.persistFormacionesConocimientosExperiencias();
+  }
+
   finalizar(): void {
     this.router.navigate(['/sistema/requerimiento/perfiles']);
   }
@@ -509,6 +541,19 @@ export class PerfilFormComponent implements OnInit {
       formacionesAcademicas: formaciones,
       conocimientos,
       experiencias,
+      condicion: this.buildCondicionRequest(),
+    };
+  }
+
+  private buildCondicionRequest(): CondicionPuestoRequest | undefined {
+    if (!this.condicionForm.valid) return undefined;
+    const raw = this.condicionForm.getRawValue();
+    return {
+      remuneracionMensual: Number(raw.remuneracionMensual ?? 0),
+      duracionContrato: String(raw.duracionContrato ?? '').trim(),
+      lugarPrestacion: String(raw.lugarPrestacion ?? '').trim(),
+      jornadaSemanal: Number(raw.jornadaSemanal ?? 48),
+      otrasCondiciones: String(raw.otrasCondiciones ?? '').trim() || undefined,
     };
   }
 
@@ -580,6 +625,16 @@ export class PerfilFormComponent implements OnInit {
         this.formacionesGuardadas.set(data.formacionesAcademicas ?? []);
         this.conocimientosGuardados.set(data.conocimientos ?? []);
         this.experienciasGuardadas.set(data.experiencias ?? []);
+        this.estadoRequerimientoAsociado.set(data.estadoRequerimientoAsociado ?? null);
+        if (data.condicion) {
+          this.condicionForm.patchValue({
+            remuneracionMensual: data.condicion.remuneracionMensual ?? null,
+            duracionContrato: data.condicion.duracionContrato ?? '',
+            lugarPrestacion: data.condicion.lugarPrestacion ?? '',
+            jornadaSemanal: data.condicion.jornadaSemanal ?? 48,
+            otrasCondiciones: data.condicion.otrasCondiciones ?? '',
+          });
+        }
         this.loading.set(false);
       },
       error: () => {

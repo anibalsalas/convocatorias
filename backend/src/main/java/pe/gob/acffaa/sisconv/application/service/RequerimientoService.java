@@ -17,10 +17,10 @@ import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
 import pe.gob.acffaa.sisconv.domain.model.PerfilPuesto;
 import pe.gob.acffaa.sisconv.domain.model.ReglaMotor;
 import pe.gob.acffaa.sisconv.domain.model.Requerimiento;
+import pe.gob.acffaa.sisconv.domain.repository.IConvocatoriaRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPerfilPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IReglaMotorRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
-import pe.gob.acffaa.sisconv.infrastructure.audit.LogTransparenciaAnnotation;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -51,6 +51,7 @@ public class RequerimientoService {
     private final IRequerimientoRepository reqRepo;
     private final IPerfilPuestoRepository perfilRepo;
     private final IReglaMotorRepository reglaRepo;
+    private final IConvocatoriaRepository convRepo;
     private final RequerimientoMapper mapper;
     private final IAuditPort auditPort;
     private final NotificacionService notificacionService;
@@ -58,12 +59,14 @@ public class RequerimientoService {
     public RequerimientoService(IRequerimientoRepository reqRepo,
                                IPerfilPuestoRepository perfilRepo,
                                IReglaMotorRepository reglaRepo,
+                               IConvocatoriaRepository convRepo,
                                RequerimientoMapper mapper,
                                IAuditPort auditPort,
                                NotificacionService notificacionService) {
         this.reqRepo = reqRepo;
         this.perfilRepo = perfilRepo;
         this.reglaRepo = reglaRepo;
+        this.convRepo = convRepo;
         this.mapper = mapper;
         this.auditPort = auditPort;
         this.notificacionService = notificacionService;
@@ -111,6 +114,16 @@ public class RequerimientoService {
     }
 
     /**
+     * Cuenta requerimientos CONFIGURADO sin convocatoria asociada.
+     * Banner informativo ORH: pendientes de crear convocatoria (inicio Etapa 2 — PKG-02).
+     *
+     * @return Cantidad de requerimientos CONFIGURADO que aún no tienen convocatoria
+     */
+    public long contarConfiguradosSinConvocatoria() {
+        return reqRepo.countConfiguradosSinConvocatoria();
+    }
+
+    /**
      * Obtener detalle de un requerimiento por ID.
      *
      * @param id ID del requerimiento
@@ -124,7 +137,9 @@ public class RequerimientoService {
 
     private RequerimientoResponse toResponseConReglas(Requerimiento req) {
         List<ReglaMotor> reglas = reglaRepo.findByIdRequerimiento(req.getIdRequerimiento());
-        return mapper.toResponseConMotor(req, reglas);
+        RequerimientoResponse response = mapper.toResponseConMotor(req, reglas);
+        response.setTieneConvocatoria(convRepo.existsByIdRequerimiento(req.getIdRequerimiento()));
+        return response;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -148,7 +163,6 @@ public class RequerimientoService {
      * @throws DomainException si el perfil no está APROBADO
      */
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_REQUERIMIENTO", accion = "CREAR")
     public RequerimientoResponse crear(RequerimientoRequest request, String username,
                                        Long idUsuario, HttpServletRequest httpReq) {
         // 1. Validar que el perfil de puesto existe
@@ -220,7 +234,6 @@ public class RequerimientoService {
      * @return Requerimiento con estado CON_PRESUPUESTO o SIN_PRESUPUESTO
      */
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_REQUERIMIENTO", accion = "VERIFICAR_PRESUPUESTO")
     public RequerimientoResponse verificarPresupuesto(Long id, VerificarPresupuestoRequest request,
                                                        String username, Long idUsuario,
                                                        HttpServletRequest httpReq) {
@@ -334,7 +347,6 @@ public class RequerimientoService {
      * @return Requerimiento CONFIGURADO con MotorReglasResumen
      */
     @Transactional
-    @LogTransparenciaAnnotation(entidad = "TBL_REQUERIMIENTO", accion = "CONFIGURAR_REGLAS")
     public RequerimientoResponse configurarReglas(Long id, ConfigurarReglasRequest request,
                                                    String username, Long idUsuario,
                                                    HttpServletRequest httpReq) {

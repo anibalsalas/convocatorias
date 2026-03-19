@@ -59,7 +59,7 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
         <div class="flex justify-end">
           <button type="submit" [disabled]="saving() || form.invalid" class="btn-primary">
             @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-            Registrar Requerimiento
+            Registrar Requerimiento y Notificar a OPP
           </button>
         </div>
       </form>

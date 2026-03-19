@@ -57,7 +57,7 @@ const NAV_ITEMS: NavItem[] = [
         </nav>
         <!-- Collapse toggle -->
         <button (click)="collapsed.set(!collapsed())" class="p-3 border-t border-white/10 hover:bg-white/10 transition text-center text-sm">
-          {{ collapsed() ? '→' : '← Colapsar' }}
+          {{ collapsed() ? '→' : '←' }}
         </button>
       </aside>
 

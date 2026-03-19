@@ -13,6 +13,7 @@ import pe.gob.acffaa.sisconv.application.mapper.ContratoMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.application.service.ContratoService;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoContrato;
+import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.exception.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
@@ -76,7 +77,7 @@ class ContratoServiceTest {
     private Convocatoria convMock() {
         Requerimiento req = Requerimiento.builder().idRequerimiento(1L).cantidadPuestos(1).build();
         return Convocatoria.builder().idConvocatoria(1L).numeroConvocatoria("CAS-001-2026")
-                .estado("EN_SELECCION").anio(2026).requerimiento(req).build();
+                .estado(EstadoConvocatoria.EN_SELECCION).anio(2026).requerimiento(req).build();
     }
 
     private Postulante postulanteMock() {
@@ -166,7 +167,7 @@ class ContratoServiceTest {
         assertEquals("Pedro Quispe Mamani", r.getPostulante());
         assertTrue(r.getNotificacionEnviada());
         verify(notifRepo).save(any(Notificacion.class));
-        verify(audit).registrarConvocatoria(eq(1L), eq("TBL_CONTRATO_CAS"), any(), eq("NOTIFICAR_GANADOR"), isNull(), eq("NOTIFICADO"), eq(http));
+        verify(audit).registrarConvocatoria(eq(1L), eq("TBL_CONTRATO_CAS"), any(), eq("NOTIFICAR_GANADOR"), isNull(), eq("NOTIFICADO"), any(String.class), eq(http));
     }
 
     @Test
