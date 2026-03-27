@@ -202,39 +202,9 @@ export class ConvocatoriasVigentesComponent {
   }
 
   private isVigente(item: ConvocatoriaVigenteItem): boolean {
-    const estadoValido =
-      item.estado === 'PUBLICADA' || item.estado === 'EN_SELECCION';
-
-    if (!estadoValido) {
-      return false;
-    }
-
-    const inicio = this.normalizeDate(item.fechaIniPostulacion);
-    const fin = this.normalizeDate(item.fechaFinPostulacion);
-    const hoy = this.normalizeDate(new Date().toISOString().slice(0, 10));
-
-    if (inicio === null || fin === null || hoy === null) {
-      return false;
-    }
-
-    return hoy >= inicio && hoy <= fin;
-  }
-
-  private normalizeDate(value?: string | null): number | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-    ).getTime();
+    // Solo las convocatorias en estado PUBLICADA son elegibles para postulación.
+    // El estado PUBLICADA es la fuente de verdad de vigencia (máquina de estados BPMN).
+    return item.estado === 'PUBLICADA';
   }
 
   private perfilCompleto(perfil: PostulantePerfil): boolean {

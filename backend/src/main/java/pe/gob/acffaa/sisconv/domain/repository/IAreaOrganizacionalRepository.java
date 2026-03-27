@@ -9,4 +9,7 @@ import java.util.Optional;
  */
 public interface IAreaOrganizacionalRepository {
     Optional<AreaOrganizacional> findById(Long idArea);
+    java.util.List<AreaOrganizacional> findAll();
+    boolean existsByCodigoArea(String codigoArea);
+    AreaOrganizacional save(AreaOrganizacional area);
 }

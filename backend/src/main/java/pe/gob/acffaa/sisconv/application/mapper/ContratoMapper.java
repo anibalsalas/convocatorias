@@ -68,6 +68,8 @@ public class ContratoMapper {
                 .estado(n.getEstado())
                 .estadoProceso(resolverEstadoProceso(n))
                 .fechaCreacion(n.getFechaCreacion())
+                .idConvocatoria(n.getConvocatoria() != null ? n.getConvocatoria().getIdConvocatoria() : null)
+                .numeroConvocatoria(n.getConvocatoria() != null ? n.getConvocatoria().getNumeroConvocatoria() : null)
                 .build();
     }
 

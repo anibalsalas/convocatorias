@@ -16,6 +16,12 @@ public interface JpaConvocatoriaRepository extends JpaRepository<Convocatoria, L
     Page<Convocatoria> findByEstadoIn(List<EstadoConvocatoria> estados, Pageable pageable);
     Page<Convocatoria> findByEstadoInAndAnio(List<EstadoConvocatoria> estados, Integer anio, Pageable pageable);
 
+    @Query("SELECT c FROM Convocatoria c LEFT JOIN FETCH c.requerimiento r LEFT JOIN FETCH r.perfilPuesto WHERE c.estado IN :estados")
+    Page<Convocatoria> findByEstadoInWithPerfil(@Param("estados") List<EstadoConvocatoria> estados, Pageable pageable);
+
+    @Query("SELECT c FROM Convocatoria c LEFT JOIN FETCH c.requerimiento r LEFT JOIN FETCH r.perfilPuesto WHERE c.estado IN :estados AND c.anio = :anio")
+    Page<Convocatoria> findByEstadoInAndAnioWithPerfil(@Param("estados") List<EstadoConvocatoria> estados, @Param("anio") Integer anio, Pageable pageable);
+
     Page<Convocatoria> findByEstadoInAndAnioAndFechaIniPostulacionLessThanEqualAndFechaFinPostulacionGreaterThanEqual(
             List<EstadoConvocatoria> estados,
             Integer anio,

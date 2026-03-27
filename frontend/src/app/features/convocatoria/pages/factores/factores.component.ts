@@ -37,6 +37,12 @@ const ETIQUETAS_FASE: Record<string, string> = {
         <a routerLink="/sistema/convocatoria" class="btn-ghost">← Volver</a>
       </app-page-header>
 
+      @if (modoLectura) {
+        <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Solo lectura — la convocatoria ya fue publicada. No se pueden realizar cambios.
+        </div>
+      }
+
       @if (loading()) {
         <div class="card text-center py-12 text-gray-400">Cargando...</div>
       } @else {
@@ -67,6 +73,7 @@ const ETIQUETAS_FASE: Record<string, string> = {
         <!-- ═══════════════════════════════════════════════════════ -->
         <!-- FORMULARIO: agregar / editar fase o subcriterio        -->
         <!-- ═══════════════════════════════════════════════════════ -->
+        @if (!modoLectura) {
         <div class="card space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">
@@ -82,10 +89,13 @@ const ETIQUETAS_FASE: Record<string, string> = {
               <div>
                 <label class="label-field">Fase *</label>
                 <select formControlName="etapaEvaluacion" class="input-field">
-                  <option value="CURRICULAR">Evaluación curricular</option>
-                  <option value="TECNICA">Evaluación técnica</option>
-                  <option value="ENTREVISTA">Entrevista Personal</option>
+                  <option value="CURRICULAR" [disabled]="!editandoFactor() && fasesUsadas().has('CURRICULAR')">Evaluación curricular</option>
+                  <option value="TECNICA"    [disabled]="!editandoFactor() && fasesUsadas().has('TECNICA')">Evaluación técnica</option>
+                  <option value="ENTREVISTA" [disabled]="!editandoFactor() && fasesUsadas().has('ENTREVISTA')">Entrevista Personal</option>
                 </select>
+                @if (!editandoFactor() && faseDuplicada()) {
+                  <p class="text-xs text-red-500 mt-1">Esta fase ya fue registrada.</p>
+                }
               </div>
             }
             <div [class.lg:col-span-2]="!agregandoSubcriterioDe()">
@@ -93,6 +103,9 @@ const ETIQUETAS_FASE: Record<string, string> = {
               <input formControlName="criterio" class="input-field" maxlength="180"
                 [attr.readonly]="!editandoFactor() && !agregandoSubcriterioDe() ? true : null"
                 [placeholder]="agregandoSubcriterioDe() ? 'Ej. Formación Académica, Experiencia' : null" />
+              @if (factorForm.controls.criterio.touched && factorForm.controls.criterio.errors?.['required']) {
+                <p class="text-xs text-red-500 mt-1">El criterio es obligatorio.</p>
+              }
             </div>
             <div>
               <label class="label-field">Puntaje mínimo</label>
@@ -101,17 +114,32 @@ const ETIQUETAS_FASE: Record<string, string> = {
             <div>
               <label class="label-field">Puntaje máximo *</label>
               <input formControlName="puntajeMaximo" type="number" class="input-field" min="0.01" step="0.01" />
+              @if (factorForm.controls.puntajeMaximo.touched && factorForm.controls.puntajeMaximo.errors?.['required']) {
+                <p class="text-xs text-red-500 mt-1">El puntaje máximo es obligatorio.</p>
+              } @else if (factorForm.controls.puntajeMaximo.touched && factorForm.controls.puntajeMaximo.errors?.['min']) {
+                <p class="text-xs text-red-500 mt-1">Debe ser mayor a 0.</p>
+              }
             </div>
             <div>
               <label class="label-field">Peso (%) *</label>
               <input formControlName="pesoCriterio" type="number" class="input-field" min="0.01" max="100" step="0.01" />
+              @if (factorForm.controls.pesoCriterio.touched && factorForm.controls.pesoCriterio.errors?.['required']) {
+                <p class="text-xs text-red-500 mt-1">El peso es obligatorio.</p>
+              } @else if (factorForm.controls.pesoCriterio.touched && factorForm.controls.pesoCriterio.errors?.['min']) {
+                <p class="text-xs text-red-500 mt-1">Debe ser mayor a 0.</p>
+              } @else if (factorForm.controls.pesoCriterio.touched && factorForm.controls.pesoCriterio.errors?.['max']) {
+                <p class="text-xs text-red-500 mt-1">No puede superar 100%.</p>
+              } @else if (!editandoFactor() && !agregandoSubcriterioDe()) {
+                <p class="text-xs text-gray-400 mt-1">Disponible: {{ pesoRestante() }}%</p>
+              }
             </div>
             <div class="lg:col-span-2">
               <label class="label-field">Descripción</label>
               <textarea formControlName="descripcion" class="input-field" rows="2" maxlength="250" placeholder="Referencia normativa"></textarea>
             </div>
             <div class="flex items-end">
-              <button type="submit" class="btn-primary text-sm" [disabled]="savingFactor() || (puedeAgregarFase() === false && !editandoFactor() && !agregandoSubcriterioDe())">
+              <button type="submit" class="btn-primary text-sm"
+                [disabled]="savingFactor() || factorForm.invalid || faseDuplicada() || (!editandoFactor() && !agregandoSubcriterioDe() && !puedeAgregarFase())">
                 {{ savingFactor() ? 'Guardando...' : (editandoFactor() ? 'Actualizar' : 'Agregar') }}
               </button>
             </div>
@@ -120,6 +148,7 @@ const ETIQUETAS_FASE: Record<string, string> = {
             <p class="text-sm text-amber-700">Máximo {{ MAX_FACTORES }} fases permitidas.</p>
           }
         </div>
+        } <!-- fin @if (!modoLectura) -->
 
         <!-- ═══════════════════════════════════════════════════════ -->
         <!-- TABLA: fases y subcriterios registrados                 -->
@@ -170,11 +199,15 @@ const ETIQUETAS_FASE: Record<string, string> = {
                       <td class="px-4 py-2 text-center font-mono text-xs font-semibold">{{ item.fase.puntajeMaximo }}</td>
                       <td class="px-4 py-2">
                         <div class="flex justify-center gap-1">
-                          <button type="button" class="btn-ghost text-xs text-blue-600" (click)="onEditarFactor(item.fase)" title="Editar">Editar</button>
-                          @if (!item.esSubcriterio) {
-                            <button type="button" class="btn-ghost text-xs text-green-600" (click)="onAgregarSubcriterio(item.fase)" title="Agregar subcriterio">+ Sub</button>
+                          @if (!modoLectura) {
+                            <button type="button" class="btn-ghost text-xs text-blue-600" (click)="onEditarFactor(item.fase)" title="Editar">Editar</button>
+                            @if (!item.esSubcriterio) {
+                              <button type="button" class="btn-ghost text-xs text-green-600" (click)="onAgregarSubcriterio(item.fase)" title="Agregar subcriterio">+ Sub</button>
+                            }
+                            <button type="button" class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(item.fase)" title="Eliminar">Eliminar</button>
+                          } @else {
+                            <span class="text-xs text-gray-400">—</span>
                           }
-                          <button type="button" class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(item.fase)" title="Eliminar">Eliminar</button>
                         </div>
                       </td>
                     </tr>
@@ -197,8 +230,12 @@ const ETIQUETAS_FASE: Record<string, string> = {
         }
 
         <div class="flex items-end justify-end gap-3">
-          <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'comite']" class="btn-ghost">← Volver a comité</a>
-          <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'acta']" class="btn-primary">Continuar a Acta →</a>
+          <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'comite']"
+             [queryParams]="modoLectura ? { modo: 'lectura' } : null"
+             class="btn-ghost">← Volver a comité</a>
+          @if (!modoLectura) {
+            <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'acta']" class="btn-primary">Continuar a Acta →</a>
+          }
         </div>
       }
 
@@ -223,6 +260,7 @@ export class FactoresComponent {
 
   readonly MAX_FACTORES = MAX_FACTORES;
   readonly idConvocatoria = Number(this.route.snapshot.paramMap.get('id'));
+  readonly modoLectura = this.route.snapshot.queryParamMap.get('modo') === 'lectura';
   readonly convocatoria = signal<ConvocatoriaResponse | null>(null);
   readonly loading = signal(true);
   readonly savingFactor = signal(false);
@@ -248,6 +286,22 @@ export class FactoresComponent {
   readonly puedeAgregarFase = computed(() => {
     const lista = this.factoresExistentes();
     return lista ? lista.length < MAX_FACTORES : true;
+  });
+
+  readonly fasesUsadas = computed(() => {
+    const lista = this.factoresExistentes();
+    return new Set((lista ?? []).map(f => f.etapaEvaluacion));
+  });
+
+  readonly etapaSeleccionada = signal<string>('CURRICULAR');
+
+  readonly faseDuplicada = computed(() => {
+    if (this.editandoFactor() || this.agregandoSubcriterioDe()) return false;
+    return this.fasesUsadas().has(this.etapaSeleccionada());
+  });
+
+  readonly pesoRestante = computed(() => {
+    return 100 - this.totalPeso();
   });
 
   constructor() {
@@ -276,6 +330,7 @@ export class FactoresComponent {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe(etapa => {
+        this.etapaSeleccionada.set(etapa ?? 'CURRICULAR');
         if (!this.editandoFactor() && !this.agregandoSubcriterioDe()) {
           const label = ETIQUETAS_FASE[etapa ?? ''] ?? etapa ?? '';
           this.factorForm.controls.criterio.setValue(label.toUpperCase(), { emitEvent: false });
@@ -401,11 +456,30 @@ export class FactoresComponent {
     this.globalError.set('');
     if (this.factorForm.invalid) {
       this.factorForm.markAllAsTouched();
-      this.toast.warning('Complete criterio, puntaje máximo y peso.');
+      this.toast.warning('Complete todos los campos requeridos.');
+      return;
+    }
+
+    const pMin = Number(this.factorForm.controls.puntajeMinimo.value ?? 0);
+    const pMax = Number(this.factorForm.controls.puntajeMaximo.value);
+    if (pMin > pMax) {
+      this.toast.warning('El puntaje mínimo no puede superar al máximo.');
       return;
     }
 
     const padre = this.agregandoSubcriterioDe();
+
+    if (!this.editandoFactor() && !padre) {
+      if (this.faseDuplicada()) {
+        this.toast.warning('La fase «' + (ETIQUETAS_FASE[this.factorForm.controls.etapaEvaluacion.value] ?? '') + '» ya fue registrada.');
+        return;
+      }
+      const pesoNuevo = Number(this.factorForm.controls.pesoCriterio.value);
+      if (this.totalPeso() + pesoNuevo > 100) {
+        this.toast.warning('El peso ingresado supera el 100% total. Disponible: ' + this.pesoRestante() + '%.');
+        return;
+      }
+    }
     const req: FactorFactorRequest = {
       etapaEvaluacion: this.factorForm.controls.etapaEvaluacion.value,
       criterio: this.factorForm.controls.criterio.value!.trim(),

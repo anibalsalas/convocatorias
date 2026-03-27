@@ -33,4 +33,10 @@ public interface JpaPostulacionRepository extends JpaRepository<Postulacion, Lon
     );
 
     long countByConvocatoria_IdConvocatoria(Long idConvocatoria);
+
+    long countByConvocatoria_IdConvocatoriaAndEstado(Long idConvocatoria, String estado);
+
+    boolean existsByConvocatoria_IdConvocatoriaAndEstadoIn(Long idConvocatoria, java.util.List<String> estados);
+
+    List<Postulacion> findByConvocatoria_IdConvocatoriaAndEstadoIn(Long idConvocatoria, java.util.List<String> estados);
 }

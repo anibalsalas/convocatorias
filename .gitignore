@@ -1,18 +1,61 @@
+# --- SEGURIDAD (CRÍTICO) ---
+.env
+.env.*
+*.local
+credentials.json
+
 # --- JAVA / SPRING BOOT ---
 **/target/
-**.jar
-**.war
-**.class
+**/build/
+**/*.class
+**/*.jar
+**/*.war
+**/*.ear
+**/*.log
+.mtj.tmp/
 
 # --- ANGULAR / NODE ---
 **/node_modules/
 **/.angular/
 **/dist/
 **/tmp/
-**.log
+**/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
 
 # --- IDEs & OS ---
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
 .DS_Store
 Thumbs.db
+
+# --- HERRAMIENTAS DE IA & PROYECTO ---
+
+.claude/
+.cursor/
+.cursorrules
+CLAUDE
+dll/
+docs/ 
+# --- ARCHIVOS DE PROCESO Y CARGAS (SISCONV) ---
+# Ignoramos las carpetas completas de almacenamiento de documentos
+**/actas/
+**/sisconv-uploads/
+
+# Por seguridad adicional, ignoramos cualquier PDF o Word en el resto del proyecto
+**/*.pdf
+**/*.docx
+
+# --- ESPECÍFICOS DEL BACKEND ---
+backend/.m2/
+backend/.settings/
+backend/.classpath
+backend/.project
+backend/.factorypath

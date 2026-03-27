@@ -145,7 +145,8 @@
   text-align: left;
   font-weight: 600;
   font-size: 0.68rem;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .publicas-table th.text-center {
@@ -163,6 +164,14 @@
 
 .table-row-hover:hover {
   background: #f9fafb;
+}
+
+.row-finalizada {
+  background: #f0fdf4;
+}
+
+.row-finalizada:hover {
+  background: #dcfce7;
 }
 
 .cell-proceso {
@@ -190,14 +199,30 @@
 }
 
 .link-doc {
-  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #fca5a5;
+  border-radius: 0.2rem;
+  background: #fff5f5;
+  color: #b91c1c;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: color 0.2s ease;
 }
 
-.link-doc:hover {
-  color: #1f2937;
+.link-doc:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+.link-doc:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .table-message-cell {

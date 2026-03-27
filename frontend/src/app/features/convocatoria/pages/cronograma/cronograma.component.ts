@@ -78,6 +78,12 @@ const AREAS_RESPONSABLES: readonly string[] = [
         <a routerLink="/sistema/convocatoria" class="btn-ghost" aria-label="Volver a listado de convocatorias">← Volver</a>
       </app-page-header>
 
+      @if (modoLectura) {
+        <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Solo lectura — la convocatoria ya fue publicada. No se pueden realizar cambios.
+        </div>
+      }
+
       @if (loadingConvocatoria()) {
         <div class="card text-center py-12 text-gray-400" role="status" aria-live="polite">Cargando convocatoria...</div>
       } @else {
@@ -127,14 +133,16 @@ const AREAS_RESPONSABLES: readonly string[] = [
                         <td class="py-3 px-3 text-xs text-gray-700">
                           {{ formatAreas(act.areaResp1, act.areaResp2, act.areaResp3) }}
                         </td>
-                        <td class="py-3 px-3 text-xs">{{ act.lugar || '—' }}</td>
+                        <td class="py-3 px-3 text-xs">{{ lugarLabel(act.lugar) }}</td>
                         <td class="py-3 px-3">
-                          <button type="button" class="btn-ghost text-sm text-[#2D5F8A] hover:underline"
-                                  (click)="onEditarActividad(act)"
-                                  [disabled]="editingId() !== null && editingId() !== act.idCronograma"
-                                  [attr.aria-label]="'Editar actividad ' + act.actividad">
-                            Editar
-                          </button>
+                          @if (!modoLectura) {
+                            <button type="button" class="btn-ghost text-sm text-[#2D5F8A] hover:underline"
+                                    (click)="onEditarActividad(act)"
+                                    [disabled]="editingId() !== null && editingId() !== act.idCronograma"
+                                    [attr.aria-label]="'Editar actividad ' + act.actividad">
+                              Editar
+                            </button>
+                          }
                         </td>
                       </tr>
                     }
@@ -145,7 +153,7 @@ const AREAS_RESPONSABLES: readonly string[] = [
           </div>
 
           <!-- Formulario para agregar/editar actividad -->
-          @if (mostrarFormularioActividad()) {
+          @if (!modoLectura && mostrarFormularioActividad()) {
             <form [formGroup]="form" (ngSubmit)="onGuardarActividad()" class="card space-y-4">
               <h4 class="font-semibold text-gray-800">{{ editingId() ? 'Editar etapa' : 'Agregar etapa' }}</h4>
 
@@ -158,11 +166,21 @@ const AREAS_RESPONSABLES: readonly string[] = [
                       <option [value]="etapa">{{ etiquetaEtapa(etapa) }}</option>
                     }
                   </select>
+                  @if (form.controls.etapa.touched && form.controls.etapa.errors?.['required']) {
+                    <p class="text-xs text-red-500 mt-1" role="alert">Seleccione una etapa.</p>
+                  }
                 </div>
                 <div>
                   <label for="actividad" class="label-field">Actividad *</label>
                   <input id="actividad" formControlName="actividad" class="input-field" maxlength="200"
                          placeholder="Ej. Publicación en portal institucional y Talento Perú" aria-required="true" />
+                  @if (form.controls.actividad.touched && form.controls.actividad.errors) {
+                    @if (form.controls.actividad.errors['required'] || form.controls.actividad.errors['pattern']) {
+                      <p class="text-xs text-red-500 mt-1" role="alert">Ingrese la descripción de la actividad.</p>
+                    } @else if (form.controls.actividad.errors['maxlength']) {
+                      <p class="text-xs text-red-500 mt-1" role="alert">Máximo 200 caracteres.</p>
+                    }
+                  }
                 </div>
               </div>
 
@@ -170,6 +188,12 @@ const AREAS_RESPONSABLES: readonly string[] = [
                 <div>
                   <label for="fechaInicio" class="label-field">Fecha inicio *</label>
                   <input id="fechaInicio" formControlName="fechaInicio" type="date" class="input-field" aria-required="true" />
+                  @if (form.controls.fechaInicio.touched && form.controls.fechaInicio.errors?.['required']) {
+                    <p class="text-xs text-red-500 mt-1" role="alert">Seleccione la fecha de inicio.</p>
+                  }
+                  @if (formFechaInicioError()) {
+                    <p class="text-xs text-red-500 mt-1" role="alert">{{ formFechaInicioError() }}</p>
+                  }
                 </div>
                 <div>
                   <label for="fechaFin" class="label-field">
@@ -180,26 +204,35 @@ const AREAS_RESPONSABLES: readonly string[] = [
                   </label>
                   <input id="fechaFin" formControlName="fechaFin" type="date" class="input-field"
                          [attr.readonly]="esFechaUnicaActual() ? true : null" aria-required="true" />
+                  @if (!esFechaUnicaActual() && form.controls.fechaFin.touched && form.controls.fechaFin.errors?.['required']) {
+                    <p class="text-xs text-red-500 mt-1" role="alert">Seleccione la fecha de fin.</p>
+                  }
                 </div>
                 <div class="lg:col-span-2">
                   <label for="lugar" class="label-field">Lugar</label>
-                  <input id="lugar" formControlName="lugar" class="input-field" maxlength="150"
-                         placeholder="Virtual / Sede institucional" />
+                  <select id="lugar" formControlName="lugar" class="input-field">
+                    <option [value]="null">— Sin especificar —</option>
+                    <option value="V">Virtual</option>
+                    <option value="S">Sede institucional</option>
+                  </select>
                 </div>
               </div>
 
               <!-- Áreas responsables (3 selects independientes) -->
               <div>
-                <p class="label-field mb-2">Áreas responsables</p>
+                <p class="label-field mb-2">Áreas responsables <span class="text-red-500">*</span></p>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label for="areaResp1" class="text-xs text-gray-500 mb-1 block">Área 1</label>
-                    <select id="areaResp1" formControlName="areaResp1" class="input-field">
+                    <label for="areaResp1" class="text-xs text-gray-500 mb-1 block">Área 1 *</label>
+                    <select id="areaResp1" formControlName="areaResp1" class="input-field" aria-required="true">
                       <option [value]="null">— Sin asignar —</option>
                       @for (area of areas; track area) {
                         <option [value]="area">{{ area }}</option>
                       }
                     </select>
+                    @if (form.controls.areaResp1.touched && form.controls.areaResp1.errors?.['required']) {
+                      <p class="text-xs text-red-500 mt-1" role="alert">Seleccione al menos un área responsable.</p>
+                    }
                   </div>
                   <div>
                     <label for="areaResp2" class="text-xs text-gray-500 mb-1 block">Área 2</label>
@@ -220,6 +253,9 @@ const AREAS_RESPONSABLES: readonly string[] = [
                     </select>
                   </div>
                 </div>
+                @if (areasDuplicadas()) {
+                  <p class="text-xs text-red-500 mt-2" role="alert">Las áreas responsables no deben repetirse.</p>
+                }
               </div>
 
               @if (formRangeError()) {
@@ -230,7 +266,8 @@ const AREAS_RESPONSABLES: readonly string[] = [
               }
 
               <div class="flex gap-3">
-                <button type="submit" class="btn-primary" [disabled]="saving() || !form.valid">
+                <button type="submit" class="btn-primary"
+                        [disabled]="saving() || !form.valid || formRangeError() || !!formChronologyError() || areasDuplicadas() || !!formFechaInicioError()">
                   {{ saving() ? 'Guardando...' : (editingId() ? 'Guardar cambios' : 'Agregar etapa') }}
                 </button>
                 @if (editingId()) {
@@ -294,14 +331,16 @@ const AREAS_RESPONSABLES: readonly string[] = [
             </div>
           }
 
-          <div class="flex items-center justify-end gap-3">
-            <a routerLink="/sistema/convocatoria" class="btn-ghost">Cancelar</a>
-            <button type="button" class="btn-primary"
-                    [disabled]="!puedeContinuarComite()"
-                    (click)="onContinuarComite()">
-              Guardar y continuar a Comité
-            </button>
-          </div>
+          @if (!modoLectura) {
+            <div class="flex items-center justify-end gap-3">
+              <a routerLink="/sistema/convocatoria" class="btn-ghost">Cancelar</a>
+              <button type="button" class="btn-primary"
+                      [disabled]="!puedeContinuarComite()"
+                      (click)="onContinuarComite()">
+                Guardar y continuar a Comité
+              </button>
+            </div>
+          }
 
         </div>
       }
@@ -319,6 +358,7 @@ export class CronogramaComponent {
   readonly areas = AREAS_RESPONSABLES;
 
   readonly idConvocatoria = Number(this.route.snapshot.paramMap.get('id'));
+  readonly modoLectura = this.route.snapshot.queryParamMap.get('modo') === 'lectura';
   readonly convocatoria = signal<ConvocatoriaResponse | null>(null);
   readonly loadingConvocatoria = signal(true);
   readonly saving = signal(false);
@@ -328,10 +368,10 @@ export class CronogramaComponent {
 
   readonly form = this.fb.group({
     etapa:     this.fb.nonNullable.control<EtapaCronograma>('PUBLICACION', Validators.required),
-    actividad: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
+    actividad: this.fb.nonNullable.control('', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]),
     fechaInicio: this.fb.nonNullable.control('', Validators.required),
     fechaFin:    this.fb.nonNullable.control('', Validators.required),
-    areaResp1: this.fb.control<string | null>(null),
+    areaResp1: this.fb.control<string | null>(null, Validators.required),
     areaResp2: this.fb.control<string | null>(null),
     areaResp3: this.fb.control<string | null>(null),
     lugar:     this.fb.control<string | null>(null),
@@ -353,6 +393,7 @@ export class CronogramaComponent {
   );
 
   private readonly formValue = signal<{ etapa: EtapaCronograma; fechaInicio: string; fechaFin: string } | null>(null);
+  private readonly formAreasValue = signal<{ a1: string | null; a2: string | null; a3: string | null }>({ a1: null, a2: null, a3: null });
 
   readonly todasActividadesParaValidar = computed(() => {
     const idEdit = this.editingId();
@@ -394,6 +435,22 @@ export class CronogramaComponent {
   readonly esFechaUnicaActual = computed(() =>
     FECHA_UNICA_ETAPAS.includes(this.form.controls.etapa.value),
   );
+
+  /** true si hay áreas duplicadas entre los 3 selects — usa signal reactiva, no getRawValue() */
+  readonly areasDuplicadas = computed(() => {
+    const { a1, a2, a3 } = this.formAreasValue();
+    const areas = [a1, a2, a3].filter(Boolean);
+    return areas.length !== new Set(areas).size;
+  });
+
+  /** Fecha de inicio no puede ser anterior a hoy (solo para nuevas etapas, no edición) */
+  readonly formFechaInicioError = computed(() => {
+    if (this.editingId()) return '';
+    const val = this.formValue()?.fechaInicio;
+    if (!val) return '';
+    const today = new Date().toISOString().substring(0, 10);
+    return val < today ? 'La fecha de inicio no puede ser anterior a la fecha actual.' : '';
+  });
 
   readonly cronogramaCompleto = computed(() => {
     const guardadas = this.actividadesGuardadas();
@@ -449,9 +506,11 @@ export class CronogramaComponent {
     this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       const v = this.form.getRawValue();
       this.formValue.set({ etapa: v.etapa, fechaInicio: v.fechaInicio, fechaFin: v.fechaFin });
+      this.formAreasValue.set({ a1: v.areaResp1, a2: v.areaResp2, a3: v.areaResp3 });
     });
     const raw = this.form.getRawValue();
     this.formValue.set({ etapa: raw.etapa, fechaInicio: raw.fechaInicio, fechaFin: raw.fechaFin });
+    this.formAreasValue.set({ a1: raw.areaResp1, a2: raw.areaResp2, a3: raw.areaResp3 });
 
     // Auto-sync fechaFin para etapas de día único
     this.form.controls.fechaInicio.valueChanges
@@ -480,6 +539,12 @@ export class CronogramaComponent {
     return FECHA_UNICA_ETAPAS.includes(etapa as EtapaCronograma);
   }
 
+  lugarLabel(lugar?: string | null): string {
+    if (lugar === 'V') return 'Virtual';
+    if (lugar === 'S') return 'Sede institucional';
+    return lugar || '—';
+  }
+
   formatAreas(a1?: string | null, a2?: string | null, a3?: string | null): string {
     return [a1, a2, a3].filter(Boolean).join(' / ') || '—';
   }
@@ -501,6 +566,7 @@ export class CronogramaComponent {
       fechaInicio: String(act.fechaInicio),
       fechaFin:    String(act.fechaFin),
     });
+    this.formAreasValue.set({ a1: act.areaResp1 ?? null, a2: act.areaResp2 ?? null, a3: act.areaResp3 ?? null });
     this.globalError.set('');
   }
 
@@ -519,6 +585,11 @@ export class CronogramaComponent {
     }
     if (this.formRangeError()) {
       this.globalError.set('La fecha fin no puede ser anterior a la fecha inicio.');
+      return;
+    }
+    if (this.areasDuplicadas()) {
+      this.globalError.set('Las áreas responsables no deben repetirse.');
+      this.toast.warning('Las áreas responsables no deben repetirse.');
       return;
     }
     const chronologyErr = this.validateFormChronology();

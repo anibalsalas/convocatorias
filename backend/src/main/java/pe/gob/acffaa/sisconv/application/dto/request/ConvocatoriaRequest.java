@@ -34,4 +34,28 @@ public class ConvocatoriaRequest {
 
     private LocalDate fechaEvaluacion;
     private LocalDate fechaResultado;
+
+    // ── Campos V17: canal de postulación y dependencia encargada ──
+
+    @Size(max = 300)
+    private String dependenciaEncargadaProceso;
+
+    /** CORREO, PRESENCIAL, VIRTUAL o MIXTO */
+    @Pattern(regexp = "^(CORREO|PRESENCIAL|VIRTUAL|MIXTO)$",
+             message = "Canal de postulación debe ser CORREO, PRESENCIAL, VIRTUAL o MIXTO")
+    private String canalPostulacion;
+
+    @Email(message = "Correo de postulación inválido")
+    @Size(max = 200)
+    private String correoPostulacion;
+
+    @Min(value = 1, message = "Tamaño mínimo 1 MB")
+    @Max(value = 500, message = "Tamaño máximo 500 MB")
+    private Integer maxTamanoArchivoMb;
+
+    @Size(max = 500)
+    private String formatoNombreArchivo;
+
+    @Size(max = 300)
+    private String formatoAsuntoPostulacion;
 }

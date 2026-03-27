@@ -16,5 +16,6 @@ public interface IUsuarioRepository {
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     List<Usuario> findAllActive();
+    List<Usuario> findAll();
     Usuario save(Usuario usuario);
 }

@@ -29,4 +29,6 @@ public class NotificacionResponse {
     private String estado;          // Estado de la notificación: ENVIADA, LEIDA, FALLIDA
     private String estadoProceso;   // Estado del proceso: ELABORADO, CON_PRESUPUESTO, etc.
     private LocalDateTime fechaCreacion;
+    private Long idConvocatoria;
+    private String numeroConvocatoria;
 }

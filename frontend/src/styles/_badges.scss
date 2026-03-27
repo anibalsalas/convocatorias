@@ -25,4 +25,5 @@
 .badge-gold         { @extend %badge-base; background: #FEF9C3; color: #854D0E; }
 .badge-neutral      { @extend %badge-base; background: #F3F4F6; color: #4B5563; }
 .badge-neutral-dark { @extend %badge-base; background: #E5E7EB; color: #374151; }
-.badge-active       { @extend %badge-base; background: #F3E8FF; color: #6B21A8; }
+.badge-active       { @extend %badge-base; background: #F3E8FF; color: #374151; }
+.badge-nuevo        { @extend %badge-base; background: #D1FAE5; color: #047857; border: 1px solid #6EE7B7; font-weight: 700; }

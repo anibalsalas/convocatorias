@@ -9,7 +9,7 @@ import { StatusBadgeComponent } from '../status-badge/status-badge.component';
   template: `
     <div class="flex items-start justify-between mb-4">
       <div>
-        <h1 class="text-xl font-bold text-gray-800">{{ title() }}</h1>
+        <h1 class="text-base font-bold text-gray-800">{{ title() }}</h1>
         @if (subtitle()) {
           <p class="text-xs text-gray-500 mt-0.5">{{ subtitle() }}</p>
         }
