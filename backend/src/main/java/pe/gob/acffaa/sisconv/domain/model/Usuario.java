@@ -46,6 +46,13 @@ public class Usuario {
     @Column(name = "ULTIMO_ACCESO")
     private LocalDateTime ultimoAcceso;
 
+    @Column(name = "INTENTOS_FALLIDOS", nullable = false)
+    @Builder.Default
+    private Integer intentosFallidos = 0;
+
+    @Column(name = "BLOQUEADO_HASTA")
+    private LocalDateTime bloqueadoHasta;
+
     @Column(name = "FECHA_CREACION", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
 

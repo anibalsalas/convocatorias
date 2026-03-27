@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.server.ResponseStatusException;
 import pe.gob.acffaa.sisconv.application.dto.response.ApiResponse;
 import pe.gob.acffaa.sisconv.domain.exception.DomainException;
 import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
@@ -78,8 +79,18 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error("Error en cronograma. Verifique las fechas y etapas."));
         }
+        // ORA-00001: restricción única en TBL_USUARIO (PK desfasada o documento/email duplicado)
+        if (msg != null && msg.contains("TBL_USUARIO")) {
+            log.warn("Conflicto de integridad en TBL_USUARIO: {}", msg);
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("El documento/email ya está registrado"));
+        }
+        if (msg != null && (msg.contains("UK_EVAL_TEC") || msg.contains("UK_EVAL_CURR"))) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("La evaluación ya fue registrada. Si desea modificarla, vuelva a enviar el formulario completo."));
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("Ya existe una cuenta registrada con este documento o email"));
+                .body(ApiResponse.error("Error de integridad de datos. Contacte al administrador."));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
@@ -102,6 +113,12 @@ public class GlobalExceptionHandler {
         log.warn("Error de binding: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("Datos inválidos. Verifique el formato de fechas y campos numéricos."));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(ApiResponse.error(ex.getReason() != null ? ex.getReason() : ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

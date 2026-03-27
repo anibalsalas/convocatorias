@@ -30,14 +30,16 @@ spring:
       idle-timeout: 300000
       max-lifetime: 1800000
       connection-timeout: 30000
+      keepalive-time: 30000            # Evicta conexiones muertas/sucias cada 30s
+      connection-test-query: SELECT 1 FROM DUAL  # Valida conexión antes de prestarla del pool
   # ============================
   # JPA / HIBERNATE
   # ============================
   mail:
-    host: ${MAIL_HOST:}
+    host: ${MAIL_HOST:sandbox.smtp.mailtrap.io}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    username: ${MAIL_USERNAME:6bdb2508770d64}
+    password: ${MAIL_PASSWORD:c34ca1d96288a3}
     properties:
       mail:
         smtp:
@@ -73,16 +75,26 @@ app:
     base-path: ${STORAGE_PATH:${user.dir}/sisconv-uploads}
   notifications:
     mail:
-      enabled: ${MAIL_ENABLED:false}
+      enabled: ${MAIL_ENABLED:true}
       from: ${MAIL_FROM:no-reply@sisconv.gob.pe}
       portal-base-url: ${PORTAL_BASE_URL:http://localhost:4200/portal}
+  # ── Integraciones externas de publicación (E15) ──────────────────
+  # Talento Perú (SERVIR): no existe API pública documentada al 2026-03.
+  # El registro lo realiza ORH manualmente en https://talentoperu.servir.gob.pe
+  # y luego informa el link en el formulario de publicación.
+  # Cuando SERVIR provea acceso institucional por API, activar aquí:
+  integration:
+    talento-peru:
+      enabled: ${TALENTO_PERU_ENABLED:false}       # false=flujo asistido manual (default dev+prod)
+      # api-url: ${TALENTO_PERU_API_URL:}          # descomentar cuando exista API oficial
+      # api-key: ${TALENTO_PERU_API_KEY:}          # descomentar cuando SERVIR provea credenciales
 
 # ============================
 # JWT — SAD §5.1: Doble token
 # ============================
 sisconv:
   jwt:
-    secret: ${JWT_SECRET:clave-secreta-sisconv-acffaa-2025-cambiar-en-produccion-min-256bits-hmac-sha256}
+    secret: ${JWT_SECRET:sisconv-acffaa-dev-2026-hmac-sha256-local-only-change-in-production}
     access-token-expiration: 1800000   # 30 min (SAD §5.1)
     refresh-token-expiration: 86400000 # 24h    (SAD §5.1)
     issuer: SISCONV-ACFFAA

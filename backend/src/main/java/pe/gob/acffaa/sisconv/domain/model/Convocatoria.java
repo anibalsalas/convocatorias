@@ -87,6 +87,76 @@ public class Convocatoria {
     @Column(name = "LINK_TALENTO_PERU", length = 500)
     private String linkTalentoPeru;
 
+    // ── Canal de postulación (V17 — para Bases PDF E16) ──
+
+    /** Dependencia que conduce el proceso. Default: Oficina General de Administración */
+    @Column(name = "DEPENDENCIA_ENCARGADA_PROCESO", length = 300)
+    private String dependenciaEncargadaProceso;
+
+    /** Canal oficial de recepción de expedientes: CORREO, PRESENCIAL, VIRTUAL, MIXTO */
+    @Column(name = "CANAL_POSTULACION", length = 30)
+    private String canalPostulacion;
+
+    /** Correo electrónico institucional para recibir expedientes */
+    @Column(name = "CORREO_POSTULACION", length = 200)
+    private String correoPostulacion;
+
+    /** Tamaño máximo permitido del expediente en megabytes */
+    @Column(name = "MAX_TAMANO_ARCHIVO_MB")
+    private Integer maxTamanoArchivoMb;
+
+    /** Plantilla de nomenclatura del archivo a enviar. Ej: "APELLIDOS_NOMBRES_DNI_[CONV].pdf" */
+    @Column(name = "FORMATO_NOMBRE_ARCHIVO", length = 500)
+    private String formatoNombreArchivo;
+
+    /** Formato del asunto del correo del postulante. Ej: "POSTULACIÓN [CAS-001-2026] - [APELLIDOS] - [DNI]" */
+    @Column(name = "FORMATO_ASUNTO_POSTULACION", length = 300)
+    private String formatoAsuntoPostulacion;
+
+    // ── Publicación de resultados por etapa ──
+
+    /** true cuando el ROL COMITÉ presiona "Publicar Resultados E24".
+     *  Controla visibilidad pública de resultados curriculares en el portal. */
+    @Column(name = "RESULTADOS_CURRICULAR_PUBLICADOS", nullable = false)
+    @Builder.Default
+    private Boolean resultadosCurricularesPublicados = false;
+
+    /** true cuando el ROL COMITÉ presiona "Publicar Resultados E26".
+     *  Controla visibilidad pública de resultados técnicos en el portal. */
+    @Column(name = "RESULTADOS_TECNICOS_PUBLICADOS", nullable = false)
+    @Builder.Default
+    private Boolean resultadosTecnicosPublicados = false;
+
+    /** true cuando el ROL COMITÉ presiona "Publicar Resultados E27".
+     *  Controla visibilidad pública de resultados de entrevista en el portal. */
+    @Column(name = "ENTREVISTA_PUBLICADA", nullable = false)
+    @Builder.Default
+    private Boolean entrevistaPublicada = false;
+
+    /** true cuando el ROL ORH presiona "Notificar al Comité" en E25.
+     *  Indica que los códigos anónimos ya fueron asignados y el COMITÉ fue avisado. */
+    @Column(name = "NOTIFICACION_CODIGOS_ENVIADA", nullable = false)
+    @Builder.Default
+    private Boolean notificacionCodigosEnviada = false;
+
+    /** true cuando el ROL COMITÉ presiona "Notificar a ORH" en E27.
+     *  Indica que la entrevista está registrada y ORH puede proceder con E28/E31. */
+    @Column(name = "NOTIFICACION_ENTREVISTA_ENVIADA", nullable = false)
+    @Builder.Default
+    private Boolean notificacionEntrevistaEnviada = false;
+
+    /** true cuando el ROL COMITÉ presiona "Notificar a ORH" en E14.
+     *  Indica que el acta está firmada y ORH puede proceder a publicar (E15). */
+    @Column(name = "NOTIFICACION_ACTA_ENVIADA", nullable = false)
+    @Builder.Default
+    private Boolean notificacionActaEnviada = false;
+
+    /** true cuando el ROL ORH ejecuta E28 Bonificaciones RF-15.
+     *  Habilita E29 Cuadro de Méritos y E31 Publicar Resultados. */
+    @Column(name = "BONIFICACIONES_CALCULADAS", nullable = false)
+    @Builder.Default
+    private Boolean bonificacionesCalculadas = false;
+
     // ── Estado BPMN ──
 
     /** Estados BPMN — máquina de estados en EstadoConvocatoria.puedeTransicionarA() */

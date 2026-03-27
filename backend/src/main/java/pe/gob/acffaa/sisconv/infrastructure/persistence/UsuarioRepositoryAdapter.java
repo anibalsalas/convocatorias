@@ -24,5 +24,6 @@ public class UsuarioRepositoryAdapter implements IUsuarioRepository {
     @Override public boolean existsByUsername(String username) { return jpa.existsByUsername(username); }
     @Override public boolean existsByEmail(String email) { return jpa.existsByEmail(email); }
     @Override public List<Usuario> findAllActive() { return jpa.findAllActive(); }
+    @Override public List<Usuario> findAll() { return jpa.findAll(org.springframework.data.domain.Sort.by("apellidos", "nombres")); }
     @Override public Usuario save(Usuario usuario) { return jpa.save(usuario); }
 }

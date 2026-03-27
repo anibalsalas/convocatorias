@@ -1,7 +1,8 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, OnInit, DestroyRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { PerfilPuestoService } from '../../services/perfil-puesto.service';
 import { PerfilPuestoResponse } from '../../models/perfil-puesto.model';
 import { ApiResponse } from '@shared/models/api-response.model';
@@ -51,7 +52,11 @@ import { AuthService } from '@core/auth/auth.service';
       <div class="card flex items-center gap-3 flex-wrap">
         <div>
           <label class="label-field">Estado</label>
-          <select [(ngModel)]="filtroEstado" (ngModelChange)="cargar()" class="input-field w-40" aria-label="Filtrar por estado">
+          <select
+            [ngModel]="filtroEstado()"
+            (ngModelChange)="onFiltroEstado($event)"
+            class="input-field w-40"
+            aria-label="Filtrar por estado">
             <option value="">Todos</option>
             <option value="PENDIENTE">Pendiente</option>
             <option value="VALIDADO">Validado</option>
@@ -61,7 +66,12 @@ import { AuthService } from '@core/auth/auth.service';
         </div>
         <div class="flex-1">
           <label class="label-field">Buscar</label>
-          <input [(ngModel)]="filtroTexto" (input)="cargar()" class="input-field" placeholder="Buscar por denominación o nombre..." aria-label="Buscar perfil" />
+          <input
+            [ngModel]="filtroTexto()"
+            (ngModelChange)="onFiltroTexto($event)"
+            class="input-field"
+            placeholder="Buscar por denominación o nombre..."
+            aria-label="Buscar perfil" />
         </div>
       </div>
 
@@ -156,56 +166,104 @@ import { AuthService } from '@core/auth/auth.service';
     </div>
   `,
 })
-export class PerfilListComponent implements OnInit {
-  private svc = inject(PerfilPuestoService);
-  private auth = inject(AuthService);
-  private destroyRef = inject(DestroyRef);
+export class PerfilListComponent {
+  private readonly svc        = inject(PerfilPuestoService);
+  private readonly auth       = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  readonly canCrearPerfil = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
-  readonly canEditarPerfil = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
-  readonly canCrearRequerimiento = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
-  readonly canVerValidar = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
-  readonly canVerAprobar = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
-  readonly canVerPdf = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
+  // ── Permisos ─────────────────────────────────────────────────────────────
+  readonly canCrearPerfil         = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
+  readonly canEditarPerfil        = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
+  readonly canCrearRequerimiento  = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
+  readonly canVerValidar          = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
+  readonly canVerAprobar          = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
+  readonly canVerPdf              = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
 
-  perfiles = signal<PerfilPuestoResponse[]>([]);
-  loading = signal(false);
-  currentPage = signal(0);
-  totalPages = signal(0);
-  totalElements = signal(0);
-  pendientesRequerimiento = signal(0);
-  pendientesValidarAprobar = signal(0);
-  filtroEstado = '';
-  filtroTexto = '';
+  // ── Estado de la lista ───────────────────────────────────────────────────
+  readonly perfiles        = signal<PerfilPuestoResponse[]>([]);
+  readonly loading         = signal(false);
+  readonly currentPage     = signal(0);
+  readonly totalPages      = signal(0);
+  readonly totalElements   = signal(0);
+  readonly pendientesRequerimiento   = signal(0);
+  readonly pendientesValidarAprobar  = signal(0);
 
-  ngOnInit(): void { this.cargar(); }
+  // ── Filtros — signals para reactividad correcta en OnPush ────────────────
+  readonly filtroEstado = signal('');
+  readonly filtroTexto  = signal('');
 
-  cargar(): void {
+  /** Subject para debounce del filtro de texto — evita HTTP en cada tecla */
+  private readonly textoBusqueda$ = new Subject<string>();
+
+  constructor() {
+    // Debounce 300ms para texto — SRP: solo gestiona el flujo de búsqueda
+    this.textoBusqueda$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.cargarLista());
+
+    // Contadores se cargan UNA sola vez al iniciar — SRP: independientes del filtro
+    this.cargarContadores();
+    this.cargarLista();
+  }
+
+  // ── Handlers de filtros ──────────────────────────────────────────────────
+
+  /** SRP: solo gestiona cambio de estado — resetea página y recarga lista */
+  onFiltroEstado(valor: string): void {
+    this.filtroEstado.set(valor);
+    this.currentPage.set(0);
+    this.cargarLista();
+  }
+
+  /** SRP: solo gestiona cambio de texto — alimenta el Subject con debounce */
+  onFiltroTexto(valor: string): void {
+    this.filtroTexto.set(valor);
+    this.currentPage.set(0);
+    this.textoBusqueda$.next(valor);
+  }
+
+  // ── Paginación ───────────────────────────────────────────────────────────
+
+  prevPage(): void {
+    this.currentPage.update(p => Math.max(0, p - 1));
+    this.cargarLista();
+  }
+
+  nextPage(): void {
+    this.currentPage.update(p => p + 1);
+    this.cargarLista();
+  }
+
+  // ── Privados (SRP: cada método una sola responsabilidad) ─────────────────
+
+  /** SRP: solo carga la lista paginada con los filtros activos */
+  private cargarLista(): void {
     this.loading.set(true);
     const filtros: Record<string, string> = {};
-    if (this.filtroEstado) filtros['estado'] = this.filtroEstado;
+    if (this.filtroEstado()) filtros['estado'] = this.filtroEstado();
 
     this.svc.listar({ page: this.currentPage(), size: 10, sort: 'fechaCreacion,desc' }, filtros)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res: ApiResponse<Page<PerfilPuestoResponse>>) => {
-          const texto = this.filtroTexto.trim().toLowerCase();
-          const content = res.data.content.filter(p =>
-            !texto
-            || (p.denominacionPuesto?.toLowerCase().includes(texto))
-            || (p.nombrePuesto?.toLowerCase().includes(texto))
-          );
+          const texto = this.filtroTexto().trim().toLowerCase();
+          const content = texto
+            ? res.data.content.filter(p =>
+                (p.denominacionPuesto?.toLowerCase().includes(texto)) ||
+                (p.nombrePuesto?.toLowerCase().includes(texto))
+              )
+            : res.data.content;
           this.perfiles.set(content);
           this.totalPages.set(res.data.totalPages);
           this.totalElements.set(res.data.totalElements);
           this.loading.set(false);
         },
-        error: () => {
-          this.perfiles.set([]);
-          this.loading.set(false);
-        },
+        error: () => { this.perfiles.set([]); this.loading.set(false); },
       });
+  }
 
+  /** SRP: solo carga los contadores de alertas — se llama una vez al iniciar */
+  private cargarContadores(): void {
     this.svc.contarPendientesRequerimiento()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -221,15 +279,5 @@ export class PerfilListComponent implements OnInit {
           error: () => this.pendientesValidarAprobar.set(0),
         });
     }
-  }
-
-  prevPage(): void {
-    this.currentPage.update(p => Math.max(0, p - 1));
-    this.cargar();
-  }
-
-  nextPage(): void {
-    this.currentPage.update(p => p + 1);
-    this.cargar();
   }
 }

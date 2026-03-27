@@ -2,6 +2,7 @@ package pe.gob.acffaa.sisconv.application.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,7 +17,11 @@ import pe.gob.acffaa.sisconv.domain.enums.EstadoPostulacion;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -28,6 +33,9 @@ import java.util.*;
  */
 @Service
 public class PostulacionService {
+
+    @Value("${app.storage.base-path:${user.dir}/sisconv-uploads}")
+    private String storagePath;
 
     private final IPostulacionRepository postRepo;
     private final IPostulanteRepository postulanteRepo;
@@ -55,6 +63,15 @@ public class PostulacionService {
     }
 
     private String user() { return SecurityContextHolder.getContext().getAuthentication().getName(); }
+
+    /** Retorna true si el usuario autenticado es un rol interno (ORH, ADMIN, COMITE) — no es Postulante. */
+    private boolean esRolInterno() {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> {
+                    String rol = a.getAuthority();
+                    return "ROLE_ADMIN".equals(rol) || "ROLE_ORH".equals(rol) || "ROLE_COMITE".equals(rol);
+                });
+    }
 
     private Postulante obtenerPostulanteAutenticado() {
         Usuario usuario = usuarioRepo.findByUsername(user())
@@ -125,7 +142,8 @@ public class PostulacionService {
             public PostulacionResponse registrar(PostulacionRequest req, HttpServletRequest http) {
                 Convocatoria conv = convRepo.findById(req.getIdConvocatoria())
                         .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", req.getIdConvocatoria()));
-                if (!"PUBLICADA".equals(conv.getEstado()) && !"EN_SELECCION".equals(conv.getEstado()))
+                if (conv.getEstado() != EstadoConvocatoria.PUBLICADA
+                        && conv.getEstado() != EstadoConvocatoria.EN_SELECCION)
                     throw new DomainException("Convocatoria no esta en estado PUBLICADA o EN_SELECCION");
 
                 // RN-11: Verificar 3 DDJJ obligatorias
@@ -201,6 +219,15 @@ public class PostulacionService {
                 String hash = sha256(contenido);
                 String ruta = "expedientes/" + post.getIdPostulacion() + "/" + nombreArchivo;
 
+                // Escribir archivo al disco
+                try {
+                    Path destino = Paths.get(storagePath).resolve(ruta);
+                    Files.createDirectories(destino.getParent());
+                    Files.write(destino, contenido);
+                } catch (IOException e) {
+                    throw new DomainException("Error al guardar el archivo en disco: " + e.getMessage());
+                }
+
                 ExpedienteVirtual exp = expRepo.save(ExpedienteVirtual.builder()
                         .postulacion(post)
                         .tipoDocumento(tipoDoc)
@@ -221,7 +248,10 @@ public class PostulacionService {
                         "Expediente cargado exitosamente. Hash: " + hash
                 );
             }
-            /** E19 — POST /postulaciones/{id}/verificar-dl1451. CU-14. D.L. 1451 RNSSC/REGIPREC */
+            /** E19 — POST /postulaciones/{id}/verificar-dl1451. CU-14. D.L. 1451 RNSSC/REGIPREC
+             *  Solo graba los flags de inhabilitación. NO cambia estado.
+             *  El estado cambia en E20 (filtroRequisitos): SIN_SANCIONES → VERIFICADO, CON_SANCIONES → NO_APTO.
+             *  La observacion del evaluador queda en OBSERVACION_DL (SERVIR/OCI). */
             @Transactional
             public PostulacionResponse verificarDl1451(Long idPost, VerificacionDl1451Request req, HttpServletRequest http) {
                 Postulacion post = postRepo.findById(idPost)
@@ -231,43 +261,58 @@ public class PostulacionService {
                 post.setVerificacionRnssc(req.getVerificacionRnssc());
                 post.setVerificacionRegiprec(req.getVerificacionRegiprec());
                 post.setFechaVerificacionDl(LocalDateTime.now());
+                post.setObservacionDl(req.getObservacion());
+                // Estado NO cambia — permanece REGISTRADO hasta que ORH ejecute E20 Filtro RF-07
+                post.setUsuarioModificacion(user());
+                postRepo.save(post);
 
                 boolean conSanciones = "CON_SANCIONES".equals(req.getVerificacionRnssc())
                                     || "CON_SANCIONES".equals(req.getVerificacionRegiprec());
-                if (conSanciones) {
-                    validarTransicion(post, "NO_APTO");
-                    post.setEstado("NO_APTO");
-                }
-
-                post.setUsuarioModificacion(user());
-                postRepo.save(post);
-                audit.registrar("POSTULACION", post.getIdPostulacion(), "VERIFICAR_DL1451", ant, post.getEstado(), http,
-                        "RNSSC=" + req.getVerificacionRnssc() + ",REGIPREC=" + req.getVerificacionRegiprec());
+                String sustento = "RNSSC=" + req.getVerificacionRnssc()
+                        + ",REGIPREC=" + req.getVerificacionRegiprec()
+                        + (req.getObservacion() != null && !req.getObservacion().isBlank()
+                           ? ",OBS=" + req.getObservacion() : "");
+                audit.registrar("POSTULACION", post.getIdPostulacion(), "VERIFICAR_DL1451", ant, ant, http, sustento);
                 return mapper.toPostulacionResponse(post,
-                        conSanciones ? "Postulante con sanciones D.L. 1451" : "Verificacion D.L. 1451 OK");
+                        conSanciones ? "D.L. 1451: sanciones registradas. Ejecute E20 Filtro RF-07 para aplicar NO_APTO."
+                                     : "D.L. 1451 OK — sin sanciones. Ejecute E20 Filtro RF-07 para pasar a VERIFICADO.");
             }
 
-            /** E20 — POST /convocatorias/{id}/filtro-requisitos. CU-15, Motor RF-07 */
+            /** E20 — POST /convocatorias/{id}/filtro-requisitos. CU-15, Motor RF-07
+             *  Lee postulantes REGISTRADO (no APTO — E19 ya no cambia estado).
+             *  Aplica DL1451: CON_SANCIONES → NO_APTO, SIN_SANCIONES/sin verificar → VERIFICADO. */
             @Transactional
             public PostulacionResponse filtroRequisitos(Long idConv, HttpServletRequest http) {
                 Convocatoria conv = convRepo.findById(idConv)
                         .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
                 List<Postulacion> registrados = postRepo.findByConvocatoriaIdAndEstado(idConv, "REGISTRADO");
-                if (registrados.isEmpty()) throw new DomainException("No hay postulaciones en estado REGISTRADO");
+                if (registrados.isEmpty()) {
+                    if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
+                        conv.setEstado(EstadoConvocatoria.EN_SELECCION);
+                        conv.setUsuarioModificacion(user());
+                        convRepo.save(conv);
+                        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "INICIO_SELECCION",
+                                EstadoConvocatoria.PUBLICADA.name(), EstadoConvocatoria.EN_SELECCION.name(),
+                                "No hay postulantes REGISTRADO pendientes. Convocatoria → EN_SELECCION", http);
+                    }
+                    return PostulacionResponse.builder()
+                            .idConvocatoria(idConv).estado("EN_SELECCION")
+                            .mensaje("No hay postulantes REGISTRADO pendientes. Convocatoria → EN_SELECCION.").build();
+                }
 
-                int aptos = 0, noAptos = 0;
+                int verificados = 0, noAptos = 0;
                 for (Postulacion p : registrados) {
                     String ant = p.getEstado();
-                    boolean sinSanciones = !"CON_SANCIONES".equals(p.getVerificacionRnssc())
-                                        && !"CON_SANCIONES".equals(p.getVerificacionRegiprec());
-                    // REGISTRADO → VERIFICADO (sin sanciones) | NO_APTO (con sanciones)
-                    String nuevoEstado = sinSanciones ? "VERIFICADO" : "NO_APTO";
+                    boolean conSanciones = "CON_SANCIONES".equals(p.getVerificacionRnssc())
+                                       || "CON_SANCIONES".equals(p.getVerificacionRegiprec());
+                    String nuevoEstado = conSanciones ? "NO_APTO" : "VERIFICADO";
                     validarTransicion(p, nuevoEstado);
                     p.setEstado(nuevoEstado);
                     p.setUsuarioModificacion(user());
                     postRepo.save(p);
-                    audit.registrar("POSTULACION", p.getIdPostulacion(), "FILTRO_REQUISITOS", ant, p.getEstado(), http, null);
-                    if (sinSanciones) aptos++; else noAptos++;
+                    audit.registrar("POSTULACION", p.getIdPostulacion(), "FILTRO_REQUISITOS", ant, nuevoEstado, http,
+                            conSanciones ? "DL1451_CON_SANCIONES" : null);
+                    if (conSanciones) noAptos++; else verificados++;
                 }
 
                 if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
@@ -280,13 +325,12 @@ public class PostulacionService {
                     convRepo.save(conv);
                     audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv, "INICIO_SELECCION",
                             EstadoConvocatoria.PUBLICADA.name(), EstadoConvocatoria.EN_SELECCION.name(),
-                            "Inicio del proceso de selección — primer filtro de requisitos completado",
-                            http);
+                            "Inicio del proceso de selección — filtro de requisitos completado", http);
                 }
 
                 return PostulacionResponse.builder()
                         .idConvocatoria(idConv).estado("EN_SELECCION")
-                        .mensaje("Filtro completado. Aptos: " + aptos + ", No aptos: " + noAptos).build();
+                        .mensaje("Filtro completado. Verificados: " + verificados + ", No aptos (DL1451): " + noAptos).build();
             }
 
             /** E21 — POST /convocatorias/{id}/tachas. CU-16. */
@@ -363,17 +407,23 @@ public class PostulacionService {
             public PostulacionResponse obtenerMiPostulacion(Long idPost) {
                 Postulacion postulacion = postRepo.findById(idPost)
                         .orElseThrow(() -> new ResourceNotFoundException("Postulacion", idPost));
-            
-                validarAccesoPropio(postulacion);
+
+                // Roles internos (ORH/ADMIN/COMITE) pueden ver cualquier postulación sin restricción de propietario
+                if (!esRolInterno()) {
+                    validarAccesoPropio(postulacion);
+                }
                 return enrichPostulacionResponse(postulacion, null);
             }
             
             public List<ExpedienteResponse> listarExpediente(Long idPost) {
                 Postulacion postulacion = postRepo.findById(idPost)
                         .orElseThrow(() -> new ResourceNotFoundException("Postulacion", idPost));
-            
-                validarAccesoPropio(postulacion);
-            
+
+                // Roles internos (COMITE/ORH/ADMIN) pueden ver expedientes de cualquier postulante
+                if (!esRolInterno()) {
+                    validarAccesoPropio(postulacion);
+                }
+
                 return expRepo.findByPostulacionId(idPost).stream()
                         .sorted(Comparator.comparing(
                                 ExpedienteVirtual::getFechaCarga,
@@ -381,6 +431,16 @@ public class PostulacionService {
                         ).reversed())
                         .map(item -> mapper.toExpedienteResponse(item, null))
                         .toList();
+            }
+
+            /** B3 — Metadata de un expediente individual para streaming por COMITÉ/ORH */
+            public ExpedienteResponse obtenerMetaExpediente(Long idPost, Long idExp) {
+                ExpedienteVirtual exp = expRepo.findById(idExp)
+                        .orElseThrow(() -> new ResourceNotFoundException("Expediente", idExp));
+                if (!exp.getPostulacion().getIdPostulacion().equals(idPost)) {
+                    throw new ResourceNotFoundException("Expediente", idExp);
+                }
+                return mapper.toExpedienteResponse(exp, null);
             }
 
             @Transactional
@@ -423,6 +483,57 @@ public class PostulacionService {
                 );
             }
             
+            /**
+             * Rollback Administrativo — ÚNICA excepción a transiciones unidireccionales (.cursorrules §4).
+             * Permite a ADMIN/ORH reiniciar una postulación a REGISTRADO con sustento obligatorio.
+             * Resetea también fechaConfirmacionExpediente para permitir nueva carga de expediente.
+             */
+            @Transactional
+            public PostulacionResponse rollbackAdmin(Long idPost, RollbackAdminRequest req, HttpServletRequest http) {
+                if (req.getSustento() == null || req.getSustento().isBlank()) {
+                    throw new DomainException("El sustento es obligatorio para el rollback administrativo");
+                }
+
+                // Solo REGISTRADO es estado destino válido para rollback
+                if (!"REGISTRADO".equals(req.getEstadoDestino())) {
+                    throw new DomainException("Estado destino no permitido para rollback: " + req.getEstadoDestino());
+                }
+
+                Postulacion post = postRepo.findById(idPost)
+                        .orElseThrow(() -> new ResourceNotFoundException("Postulacion", idPost));
+
+                String estadoAnterior = post.getEstado();
+
+                // Bypass del statechart normal — rollback administrativo es la única excepción permitida
+                post.setEstado("REGISTRADO");
+                post.setCodigoAnonimo(null);                   // reset E25
+                post.setFechaConfirmacionExpediente(null);     // desbloquea nueva carga de expediente
+                post.setUsuarioConfirmacionExpediente(null);
+                post.setVerificacionRnssc(null);
+                post.setVerificacionRegiprec(null);
+                post.setFechaVerificacionDl(null);
+                post.setObservacionDl(null);
+                post.setPuntajeCurricular(null);
+                post.setPuntajeTecnica(null);
+                post.setPuntajeEntrevista(null);
+                post.setPuntajeBonificacion(null);
+                post.setPuntajeTotal(null);
+                post.setOrdenMerito(null);
+                post.setResultado(null);
+                post.setUsuarioModificacion(user());
+                postRepo.save(post);
+
+                // Auditoría obligatoria — trazabilidad legal LOG_TRANSPARENCIA
+                audit.registrar("POSTULACION", post.getIdPostulacion(),
+                        "ROLLBACK_ADMIN",
+                        estadoAnterior, "REGISTRADO",
+                        http,
+                        "ROLLBACK_ADMINISTRATIVO | sustento=" + req.getSustento() + " | operador=" + user());
+
+                return mapper.toPostulacionResponse(post,
+                        "Rollback administrativo aplicado: " + estadoAnterior + " → REGISTRADO. Sustento registrado.");
+            }
+
             private String sha256(byte[] data) {
                 try {
                     MessageDigest md = MessageDigest.getInstance("SHA-256");

@@ -487,6 +487,12 @@ public class PerfilPuestoService {
             perfil.getCondicion().setLugarPrestacion(normalizeToNullValue(req.getCondicion().getLugarPrestacion()));
             perfil.getCondicion().setJornadaSemanal(req.getCondicion().getJornadaSemanal());
             perfil.getCondicion().setOtrasCondiciones(normalizeToNullValue(req.getCondicion().getOtrasCondiciones()));
+            // V16: horario, modalidad y tipo de inicio para Bases PDF (E16)
+            perfil.getCondicion().setHorarioInicio(req.getCondicion().getHorarioInicio());
+            perfil.getCondicion().setHorarioFin(req.getCondicion().getHorarioFin());
+            perfil.getCondicion().setDiasLaborales(normalizeToNullValue(req.getCondicion().getDiasLaborales()));
+            perfil.getCondicion().setModalidadServicio(req.getCondicion().getModalidadServicio());
+            perfil.getCondicion().setTipoInicioContrato(req.getCondicion().getTipoInicioContrato());
             return;
         }
         perfil.setCondicion(CondicionPuesto.builder()
@@ -495,6 +501,12 @@ public class PerfilPuestoService {
                 .lugarPrestacion(normalizeToNullValue(req.getCondicion().getLugarPrestacion()))
                 .jornadaSemanal(req.getCondicion().getJornadaSemanal() != null ? req.getCondicion().getJornadaSemanal() : 48)
                 .otrasCondiciones(normalizeToNullValue(req.getCondicion().getOtrasCondiciones()))
+                // V16: horario, modalidad y tipo de inicio para Bases PDF (E16)
+                .horarioInicio(req.getCondicion().getHorarioInicio())
+                .horarioFin(req.getCondicion().getHorarioFin())
+                .diasLaborales(normalizeToNullValue(req.getCondicion().getDiasLaborales()))
+                .modalidadServicio(req.getCondicion().getModalidadServicio())
+                .tipoInicioContrato(req.getCondicion().getTipoInicioContrato())
                 .perfilPuesto(perfil)
                 .build());
     }

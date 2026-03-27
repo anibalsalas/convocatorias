@@ -26,21 +26,50 @@
       </div>
     </header>
 
+    <!-- Barra de formatos de postulación — archivos estáticos siempre disponibles -->
+    <div style="background:#f8fafcc4; border-left:4px solid #C9A84C; border-radius:8px; padding:10px 16px; margin-bottom:12px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <span style="font-size:12px; font-weight:700; color:#1E3A5F; white-space:nowrap;">
+        📥 Formatos de Postulación:
+      </span>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a href="/assets/formatos/formato-ficha-resumen-curricular.xlsx"
+           download="Formato-Ficha-Resumen-Curricular.xlsx"
+           style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; border:1.5px solid #1D6F42; color:#1D6F42; font-size:11px; font-weight:600; text-decoration:none; background:#fff; transition:all .15s;"
+           onmouseover="this.style.background='#1D6F42';this.style.color='#fff';"
+           onmouseout="this.style.background='#fff';this.style.color='#1D6F42';">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Ficha Resumen Curricular
+        </a>
+        <a href="/assets/formatos/formato-declaraciones-juradas.pdf"
+           download="Formato-Declaraciones-Juradas.pdf"
+           target="_blank"
+           style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; border:1.5px solid #C0392B; color:#C0392B; font-size:11px; font-weight:600; text-decoration:none; background:#fff; transition:all .15s;"
+           onmouseover="this.style.background='#C0392B';this.style.color='#fff';"
+           onmouseout="this.style.background='#fff';this.style.color='#C0392B';">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Declaraciones Juradas
+        </a>
+      </div>
+    </div>
+
     <div class="table-card">
       <div class="table-wrapper">
         <table class="publicas-table">
           <thead>
             <tr>
-              <th>Proceso</th>
-              <th>Fuente</th>
-              <th>Descripción</th>
+              <th>Proceso CAS</th>
+              <th>Puesto</th>
               <th>Oficina</th>
               <th class="text-center">Estado</th>
-              <th class="text-center">Convocatoria</th>
-              <th class="text-center">Eval. Fichas</th>
-              <th class="text-center">Eval. Curricular</th>
+              <th class="text-center">Bases y<br>Formatos</th>
+              <th class="text-center">Eval.<br>Curricular</th>
+              <th class="text-center">Eval.<br>Técnica</th>
               <th class="text-center">Entrevista</th>
-              <th class="text-center">Resultados</th>
+              <th class="text-center">Result.<br>Final</th>
               <th class="text-center">Comunicados</th>
             </tr>
           </thead>
@@ -48,7 +77,6 @@
             @if (loading()) {
               @for (row of skeletonRows; track row) {
                 <tr class="skeleton-row">
-                  <td><span class="skeleton skeleton-text"></span></td>
                   <td><span class="skeleton skeleton-text"></span></td>
                   <td><span class="skeleton skeleton-desc"></span></td>
                   <td><span class="skeleton skeleton-text"></span></td>
@@ -63,46 +91,123 @@
               }
             } @else if (error()) {
               <tr>
-                <td colspan="11" class="table-message-cell">
+                <td colspan="10" class="table-message-cell">
                   No se pudo cargar. Verifique que el servidor esté activo e intente de nuevo.
                 </td>
               </tr>
             } @else if (convocatorias().length === 0) {
               <tr>
-                <td colspan="11" class="table-message-cell">
+                <td colspan="10" class="table-message-cell">
                   No se encontraron convocatorias para el año {{ anioSeleccionado() }}
                 </td>
               </tr>
             } @else {
               @for (c of convocatorias(); track c.idConvocatoria) {
-                <tr class="table-row-hover">
+                <tr class="table-row-hover" [class.row-finalizada]="c.estado === 'FINALIZADA'">
                   <td class="cell-proceso">{{ c.numeroConvocatoria }}</td>
-                  <td>{{ c.fuenteFinanciamiento || '—' }}</td>
-                  <td class="cell-descripcion">{{ c.objetoContratacion || '—' }}</td>
+                  <td class="cell-descripcion">{{ c.nombrePuesto || c.objetoContratacion || '—' }}</td>
                   <td class="cell-uppercase">{{ c.unidadOrganica || '—' }}</td>
                   <td class="text-center">
-                    <app-status-badge [estado]="c.estado" [label]="c.estado" />
+                    <app-status-badge
+                      [estado]="c.estadoPortal ?? c.estado"
+                      [label]="c.estadoPortal ?? c.estado" />
                   </td>
                   <td class="text-center">
-                    @if (c.linkPortalAcffaa) {
-                      <a
-                        [href]="c.linkPortalAcffaa"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      class="link-doc"
+                      title="Descargar bases PDF"
+                      aria-label="Descargar bases de convocatoria"
+                      [disabled]="descargando().has(c.idConvocatoria)"
+                      (click)="descargarBases(c.idConvocatoria, c.numeroConvocatoria)"
+                    >
+                      @if (descargando().has(c.idConvocatoria)) {
+                        <svg class="spinner" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity=".2"/><path d="M12 2a10 10 0 0110 10"/></svg>
+                      } @else {
+                        <svg width="10" height="12" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                      }
+                    </button>
+                  </td>
+                  <td class="text-center">
+                    @if (c.tieneResultadosCurriculares) {
+                      <button
+                        type="button"
                         class="link-doc"
-                        title="Descargar bases"
-                        aria-label="Descargar bases de convocatoria"
+                        title="Descargar resultados evaluación curricular PDF"
+                        aria-label="Descargar resultados evaluación curricular"
+                        [disabled]="descargando().has(c.idConvocatoria)"
+                        (click)="descargarResultadosCurricular(c.idConvocatoria, c.numeroConvocatoria)"
                       >
-                        📄
-                      </a>
+                        @if (descargando().has(c.idConvocatoria)) {
+                        <svg class="spinner" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity=".2"/><path d="M12 2a10 10 0 0110 10"/></svg>
+                      } @else {
+                        <svg width="10" height="12" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                      }
+                      </button>
                     } @else {
                       <span class="cell-empty">—</span>
                     }
                   </td>
-                  <td class="text-center"><span class="cell-empty">—</span></td>
-                  <td class="text-center"><span class="cell-empty">—</span></td>
-                  <td class="text-center"><span class="cell-empty">—</span></td>
-                  <td class="text-center"><span class="cell-empty">—</span></td>
+                  <td class="text-center">
+                    @if (c.tieneResultadosTecnicos) {
+                      <button
+                        type="button"
+                        class="link-doc"
+                        title="Descargar resultados evaluación técnica PDF"
+                        aria-label="Descargar resultados evaluación técnica"
+                        [disabled]="descargando().has(c.idConvocatoria)"
+                        (click)="descargarResultadosTecnica(c.idConvocatoria, c.numeroConvocatoria)"
+                      >
+                        @if (descargando().has(c.idConvocatoria)) {
+                        <svg class="spinner" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity=".2"/><path d="M12 2a10 10 0 0110 10"/></svg>
+                      } @else {
+                        <svg width="10" height="12" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                      }
+                      </button>
+                    } @else {
+                      <span class="cell-empty">—</span>
+                    }
+                  </td>
+                  <td class="text-center">
+                    @if (c.tieneResultadosEntrevista) {
+                      <button
+                        type="button"
+                        class="link-doc"
+                        title="Descargar resultados entrevista PDF"
+                        aria-label="Descargar resultados entrevista"
+                        [disabled]="descargando().has(c.idConvocatoria)"
+                        (click)="descargarResultadosEntrevista(c.idConvocatoria, c.numeroConvocatoria)"
+                      >
+                        @if (descargando().has(c.idConvocatoria)) {
+                        <svg class="spinner" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity=".2"/><path d="M12 2a10 10 0 0110 10"/></svg>
+                      } @else {
+                        <svg width="10" height="12" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                      }
+                      </button>
+                    } @else {
+                      <span class="cell-empty">—</span>
+                    }
+                  </td>
+                  <td class="text-center">
+                    @if (c.tieneResultadoFinal) {
+                      <button
+                        type="button"
+                        class="link-doc"
+                        title="Descargar resultado final PDF"
+                        aria-label="Descargar resultado final"
+                        [disabled]="descargando().has(c.idConvocatoria)"
+                        (click)="descargarResultadoFinal(c.idConvocatoria, c.numeroConvocatoria)"
+                      >
+                        @if (descargando().has(c.idConvocatoria)) {
+                        <svg class="spinner" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" opacity=".2"/><path d="M12 2a10 10 0 0110 10"/></svg>
+                      } @else {
+                        <svg width="10" height="12" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                      }
+                      </button>
+                    } @else {
+                      <span class="cell-empty">—</span>
+                    }
+                  </td>
                   <td class="text-center"><span class="cell-empty">—</span></td>
                 </tr>
               }

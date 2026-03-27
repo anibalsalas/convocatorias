@@ -23,6 +23,7 @@ public class PostulacionResponse {
     private String verificacionRnssc;
     private String verificacionRegiprec;
     private LocalDateTime fechaVerificacionDl;
+    private String observacionDl;
     private BigDecimal puntajeCurricular;
     private BigDecimal puntajeTecnica;
     private BigDecimal puntajeEntrevista;

@@ -7,4 +7,6 @@ public interface IEvaluacionCurricularRepository {
     EvaluacionCurricular save(EvaluacionCurricular e);
     List<EvaluacionCurricular> saveAll(List<EvaluacionCurricular> list);
     List<EvaluacionCurricular> findByPostulacionId(Long id);
+    /** Elimina todas las evaluaciones de una postulación — usado en re-evaluación */
+    void deleteByPostulacionId(Long idPostulacion);
 }

@@ -13,6 +13,8 @@ public class ExpedienteResponse {
     private Long idPostulacion;
     private String tipoDocumento;
     private String nombreArchivo;
+    /** Ruta relativa al storagePath: "expedientes/{idPost}/{nombreArchivo}" */
+    private String rutaArchivo;
     private String hashSha256;
     private Boolean verificado;
     private LocalDateTime fechaVerificacion;

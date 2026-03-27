@@ -1,7 +1,7 @@
 package pe.gob.acffaa.sisconv.application.service;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import pe.gob.acffaa.sisconv.application.dto.request.*;
@@ -41,15 +41,19 @@ public class SeleccionService {
     private final IUsuarioRepository usuarioRepo;
     private final IAuditPort audit;
     private final SeleccionMapper mapper;
+    private final NotificacionService notificacionService;
+    private final ResultadosPdfGenerator pdfGenerator = new ResultadosPdfGenerator();
 
     public SeleccionService(IPostulacionRepository pr, IConvocatoriaRepository cr,
             IEvaluacionCurricularRepository ecr, IEvaluacionTecnicaRepository etr,
             IEntrevistaPersonalRepository epr, IEntrevistaMiembroRepository emr,
             IBonificacionRepository br, ICuadroMeritosRepository mr,
-            IFactorEvaluacionRepository fr, IUsuarioRepository ur, IAuditPort a, SeleccionMapper m) {
+            IFactorEvaluacionRepository fr, IUsuarioRepository ur, IAuditPort a, SeleccionMapper m,
+            NotificacionService ns) {
         this.postRepo=pr; this.convRepo=cr; this.evalCurrRepo=ecr; this.evalTecRepo=etr;
         this.entrevistaRepo=epr; this.entMiembroRepo=emr; this.bonifRepo=br;
         this.meritoRepo=mr; this.factorRepo=fr; this.usuarioRepo=ur; this.audit=a; this.mapper=m;
+        this.notificacionService=ns;
     }
 
     private String user() { return SecurityContextHolder.getContext().getAuthentication().getName(); }
@@ -68,11 +72,28 @@ public class SeleccionService {
     }
 
     /** E24 — POST /convocatorias/{id}/eval-curricular. CU-17, Motor RF-09 */
-    @Transactional
+    @Transactional(timeout = 60)
     public EvalCurricularResponse evalCurricular(Long idConv, EvalCurricularRequest req, HttpServletRequest http) {
         convRepo.findById(idConv).orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
         List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConv);
         if (factores.isEmpty()) throw new DomainException("No hay factores configurados");
+
+        // Umbral = puntajeMinimo del factor PADRE (factorPadre IS NULL) configurado por el Comité en E12
+        BigDecimal umbralCurricular = factores.stream()
+                .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null
+                        && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Fallback: si el Comité no configuró puntajeMinimo, usar 60% del puntajeMaximo del padre
+        if (umbralCurricular.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadreCurr = factores.stream()
+                    .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbralCurricular = maxPadreCurr.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
 
         Usuario evaluador = findEvaluador();
         List<EvalCurricularResponse.ResultadoItem> resultados = new ArrayList<>();
@@ -85,18 +106,23 @@ public class SeleccionService {
                 throw new DomainException("Postulacion " + ei.getIdPostulacion() + " no esta VERIFICADO");
 
             String ant = post.getEstado();
+            // Re-evaluación: eliminar rows anteriores antes de insertar nuevos (evita UK_EVAL_CURR y StaleObjectState)
+            evalCurrRepo.deleteByPostulacionId(post.getIdPostulacion());
+
             BigDecimal total = BigDecimal.ZERO;
             for (EvalCurricularRequest.FactorPuntaje fp : ei.getFactores()) {
                 FactorEvaluacion factor = factores.stream()
                         .filter(f -> f.getIdFactor().equals(fp.getIdFactor())).findFirst()
                         .orElseThrow(() -> new DomainException("Factor " + fp.getIdFactor() + " no encontrado"));
                 evalCurrRepo.save(EvaluacionCurricular.builder()
-                        .postulacion(post).factor(factor).puntajeObtenido(fp.getPuntaje())
-                        .observacion(fp.getObservacion()).evaluador(evaluador).build());
+                        .postulacion(post).factor(factor)
+                        .puntajeObtenido(fp.getPuntaje())
+                        .observacion(fp.getObservacion())
+                        .evaluador(evaluador).build());
                 total = total.add(fp.getPuntaje());
             }
             post.setPuntajeCurricular(total);
-            boolean apto = total.compareTo(new BigDecimal("60.00")) >= 0;
+            boolean apto = total.compareTo(umbralCurricular) >= 0;
             // VERIFICADO → APTO | NO_APTO (DDL CK_POST_ESTADO)
             String nuevoEstado = apto ? "APTO" : "NO_APTO";
             validarTransicion(post, nuevoEstado);
@@ -112,7 +138,8 @@ public class SeleccionService {
         }
         return EvalCurricularResponse.builder().idConvocatoria(idConv)
                 .totalEvaluados(req.getEvaluaciones().size()).totalAptos(aptos).totalNoAptos(noAptos)
-                .resultados(resultados).mensaje("Evaluacion curricular completada").build();
+                .resultados(resultados).umbralAplicado(umbralCurricular)
+                .mensaje("Evaluacion curricular completada").build();
     }
 
     /** E25 — POST /convocatorias/{id}/codigos-anonimos. CU-18, RF-10 */
@@ -135,18 +162,103 @@ public class SeleccionService {
         return result;
     }
 
+    /** E25-NOTIF — POST /convocatorias/{id}/notificar-codigos-anonimos.
+     *  ORH confirma que los códigos están listos y notifica al ROL COMITÉ para proceder con E26. */
+    @Transactional
+    public NotificarCodigosResponse notificarCodigosAnonimos(Long idConv, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> aptos = postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO");
+        if (aptos.isEmpty()) throw new DomainException("No hay postulantes APTO para notificar");
+        long sinCodigo = aptos.stream().filter(p -> p.getCodigoAnonimo() == null).count();
+        if (sinCodigo > 0)
+            throw new DomainException("Faltan " + sinCodigo + " postulante(s) sin código anónimo. Ejecute primero E25.");
+
+        conv.setNotificacionCodigosEnviada(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
+
+        String asunto = "Tiene " + aptos.size() + " Postulante"
+                + (aptos.size() == 1 ? "" : "s") + " al " + conv.getNumeroConvocatoria()
+                + " listo" + (aptos.size() == 1 ? "" : "s") + " para Evaluación Técnica";
+        String contenido = "El ORH ha completado la asignación de códigos anónimos. "
+                + aptos.size() + " postulante(s) están listos para E26 — Evaluación Técnica en la convocatoria "
+                + conv.getNumeroConvocatoria() + ".";
+        notificacionService.notificarRolConTipo("COMITE", conv, "CODIGOS_LISTOS", asunto, contenido, user());
+
+        audit.registrar("CONVOCATORIA", idConv, "NOTIFICAR_CODIGOS_ANONIMOS", "false", "true", http, null);
+
+        return NotificarCodigosResponse.builder()
+                .idConvocatoria(idConv)
+                .numeroConvocatoria(conv.getNumeroConvocatoria())
+                .cantidadAptos(aptos.size())
+                .mensaje("Comité notificado: " + aptos.size() + " postulante(s) con código anónimo asignado.")
+                .build();
+    }
+
+    /** E27-NOTIF — POST /convocatorias/{id}/notificar-entrevista-orh.
+     *  COMITÉ confirma que la entrevista está registrada y notifica al ROL ORH para proceder con E28/E31.
+     *  Patrón simétrico a E25-NOTIF (ORH → COMITÉ). */
+    @Transactional
+    public NotificarCodigosResponse notificarEntrevistaOrh(Long idConv, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> conEntrevista = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeEntrevista() != null)
+                .collect(java.util.stream.Collectors.toList());
+        if (conEntrevista.isEmpty())
+            throw new DomainException("No hay entrevistas registradas. Complete E27 antes de notificar.");
+
+        conv.setNotificacionEntrevistaEnviada(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
+
+        String asunto = conv.getNumeroConvocatoria() + " tiene "
+                + conEntrevista.size() + " postulante(s) con Entrevista registrada — listo para E28/E31";
+        String contenido = "El COMITÉ ha completado la Entrevista Personal (E27). "
+                + conEntrevista.size() + " postulante(s) están listos para Bonificaciones (E28) y Publicación (E31) en la convocatoria "
+                + conv.getNumeroConvocatoria() + ".";
+        notificacionService.notificarRolConTipo("ORH", conv, "ENTREVISTA_LISTA", asunto, contenido, user());
+
+        audit.registrar("CONVOCATORIA", idConv, "NOTIFICAR_ENTREVISTA_ORH", "false", "true", http, null);
+
+        return NotificarCodigosResponse.builder()
+                .idConvocatoria(idConv)
+                .numeroConvocatoria(conv.getNumeroConvocatoria())
+                .cantidadAptos(conEntrevista.size())
+                .mensaje("ORH notificado: " + conEntrevista.size() + " postulante(s) con entrevista registrada.")
+                .build();
+    }
+
     /** E26 — POST /convocatorias/{id}/eval-tecnica. CU-18, Motor RF-11
      *  Nota: Estado permanece APTO. Puntaje se registra en Postulacion.puntajeTecnica */
-    @Transactional
+    @Transactional(timeout = 60)
     public EvalTecnicaResponse evalTecnica(Long idConv, EvalTecnicaRequest req, HttpServletRequest http) {
         convRepo.findById(idConv).orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
-        List<Postulacion> aptos = postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO");
+        List<Postulacion> aptos = postRepo.findByConvocatoriaIdAndEstadoIn(idConv, List.of("APTO", "NO_APTO"));
         Map<String, Postulacion> mapCodigo = aptos.stream()
                 .filter(p -> p.getCodigoAnonimo() != null)
                 .collect(Collectors.toMap(Postulacion::getCodigoAnonimo, p -> p));
 
         Usuario evaluador = findEvaluador();
         List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConv);
+
+        // Umbral = puntajeMinimo del factor PADRE TECNICA configurado por el Comité en E12
+        BigDecimal umbralTecnica = factores.stream()
+                .filter(f -> "TECNICA".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null
+                        && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (umbralTecnica.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadreTec = factores.stream()
+                    .filter(f -> "TECNICA".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbralTecnica = maxPadreTec.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
+
         List<EvalTecnicaResponse.ResultadoTecItem> resultados = new ArrayList<>();
 
         for (EvalTecnicaRequest.EvalTecItem ei : req.getEvaluaciones()) {
@@ -157,6 +269,9 @@ public class SeleccionService {
             FactorEvaluacion factorTec = factores.stream()
                     .filter(f -> "TECNICA".equals(f.getEtapaEvaluacion())).findFirst().orElse(null);
 
+            // Re-evaluación: eliminar rows anteriores antes de insertar (evita UK_EVAL_TEC)
+            evalTecRepo.deleteByPostulacionId(post.getIdPostulacion());
+
             evalTecRepo.save(EvaluacionTecnica.builder()
                     .postulacion(post).factor(factorTec)
                     .codigoAnonimo(ei.getCodigoAnonimo())
@@ -164,7 +279,7 @@ public class SeleccionService {
                     .evaluador(evaluador).build());
 
             post.setPuntajeTecnica(ei.getPuntaje());
-            boolean ok = ei.getPuntaje().compareTo(new BigDecimal("60.00")) >= 0;
+            boolean ok = ei.getPuntaje().compareTo(umbralTecnica) >= 0;
             // Si NO aprueba tecnica → NO_APTO. Si aprueba → permanece APTO
             if (!ok) {
                 validarTransicion(post, "NO_APTO");
@@ -179,6 +294,7 @@ public class SeleccionService {
         }
         return EvalTecnicaResponse.builder().idConvocatoria(idConv)
                 .totalEvaluados(req.getEvaluaciones().size()).resultados(resultados)
+                .umbralAplicado(umbralTecnica)
                 .mensaje("Evaluacion tecnica completada").build();
     }
 
@@ -238,7 +354,7 @@ public class SeleccionService {
      *  CK_BONIF_TIPO: FFAA, DISCAPACIDAD, DEPORTISTA */
     @Transactional
     public BonificacionResponse bonificaciones(Long idConv, HttpServletRequest http) {
-        convRepo.findById(idConv).orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        Convocatoria conv = convRepo.findById(idConv).orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
         // Bonificaciones se aplican a postulaciones APTO que ya completaron todas las etapas
         List<Postulacion> posts = postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO");
         if (posts.isEmpty()) throw new DomainException("No hay postulaciones en estado APTO");
@@ -287,9 +403,42 @@ public class SeleccionService {
             postRepo.save(p);
             audit.registrar("POSTULACION", p.getIdPostulacion(), "BONIFICACION", null, totalBonif.toString(), http, null);
         }
+        // Marcar flag E28 para habilitar E29/E31 en frontend
+        conv.setBonificacionesCalculadas(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
         return BonificacionResponse.builder().idConvocatoria(idConv)
                 .totalBonificados(items.size()).bonificaciones(items)
                 .mensaje("Bonificaciones RF-15 aplicadas").build();
+    }
+
+    /** E29-GET — GET /convocatorias/{id}/cuadro-meritos. Lee cuadro ya calculado sin recalcular. */
+    public CuadroMeritosResponse obtenerCuadroMeritos(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<CuadroMeritos> meritos = new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConv));
+        if (meritos.isEmpty()) throw new ResourceNotFoundException("CuadroMeritos", idConv);
+        meritos.sort(Comparator.comparingInt(CuadroMeritos::getOrdenMerito));
+        List<CuadroMeritosResponse.MeritoItem> cuadro = meritos.stream()
+                .map(cm -> CuadroMeritosResponse.MeritoItem.builder()
+                        .ordenMerito(cm.getOrdenMerito())
+                        .idPostulacion(cm.getPostulacion().getIdPostulacion())
+                        .nombrePostulante(mapper.nombreCompleto(cm.getPostulacion().getPostulante()))
+                        .puntajeCurricular(cm.getPuntajeCurricular())
+                        .puntajeTecnica(cm.getPuntajeTecnica())
+                        .puntajeEntrevista(cm.getPuntajeEntrevista())
+                        .puntajeBonificacion(cm.getPuntajeBonificacion())
+                        .puntajeTotal(cm.getPuntajeTotal())
+                        .resultado(cm.getResultado())
+                        .build())
+                .collect(Collectors.toList());
+        return CuadroMeritosResponse.builder()
+                .idConvocatoria(idConv)
+                .numeroConvocatoria(conv.getNumeroConvocatoria())
+                .totalPostulantes(meritos.size())
+                .cuadro(cuadro)
+                .mensaje("Cuadro de meritos RF-16 calculado")
+                .build();
     }
 
     /** E29 — POST /convocatorias/{id}/cuadro-meritos. CU-21, Motor RF-16
@@ -298,7 +447,10 @@ public class SeleccionService {
     public CuadroMeritosResponse cuadroMeritos(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
-        List<Postulacion> posts = new java.util.ArrayList<>(postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO"));
+        // Opción A: también acepta estados finales para permitir re-cálculo RF-16
+        List<Postulacion> posts = new java.util.ArrayList<>(
+                postRepo.findByConvocatoriaIdAndEstadoIn(idConv,
+                        java.util.List.of("APTO", "GANADOR", "ACCESITARIO", "NO_SELECCIONADO")));
         if (posts.isEmpty()) throw new DomainException("No hay postulaciones para cuadro de meritos");
 
         BigDecimal pesoCurr = conv.getPesoEvalCurricular().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
@@ -324,6 +476,7 @@ public class SeleccionService {
         for (int i = 0; i < posts.size(); i++) {
             Postulacion p = posts.get(i);
             // CK_CUADRO_RESULTADO: GANADOR, ACCESITARIO, NO_SELECCIONADO
+            String estadoAnterior = p.getEstado();
             String resultado;
             if (i < cantPuestos) resultado = "GANADOR";
             else if (i < cantPuestos * 2) resultado = "ACCESITARIO";
@@ -343,7 +496,7 @@ public class SeleccionService {
                     .puntajeTotal(p.getPuntajeTotal()).ordenMerito(i + 1)
                     .resultado(resultado).usuarioCreacion(user()).build());
 
-            audit.registrar("POSTULACION", p.getIdPostulacion(), "CUADRO_MERITOS", "APTO", resultado, http, null);
+            audit.registrar("POSTULACION", p.getIdPostulacion(), "CUADRO_MERITOS", estadoAnterior, resultado, http, null);
             cuadro.add(CuadroMeritosResponse.MeritoItem.builder()
                     .ordenMerito(i + 1).idPostulacion(p.getIdPostulacion())
                     .nombrePostulante(mapper.nombreCompleto(p.getPostulante()))
@@ -357,29 +510,188 @@ public class SeleccionService {
                 .mensaje("Cuadro de meritos RF-16 calculado").build();
     }
 
-    /** E30 — GET /convocatorias/{id}/resultados-pdf. CU-22 (placeholder texto) */
+    /** E24-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-curricular.
+     *  Acción explícita del ROL COMITÉ: persiste el flag resultadosCurricularesPublicados=true
+     *  y retorna el PDF para descarga inmediata.
+     *  Solo después de esta acción el portal muestra el ícono 📄 en la columna. */
+    @Transactional
+    public byte[] publicarResultadosCurricular(Long idConv, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> aptos  = postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO");
+        List<Postulacion> noAptos = postRepo.findByConvocatoriaIdAndEstado(idConv, "NO_APTO");
+        if (aptos.isEmpty() && noAptos.isEmpty())
+            throw new DomainException("No hay resultados de evaluación curricular para publicar");
+
+        conv.setResultadosCurricularesPublicados(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
+        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                "PUBLICAR_RESULT_CURRICULAR", "false", "true",
+                "Publicación de resultados E24 — ROL COMITÉ", http);
+
+        // Umbral para PDF consistente con scores (mismo cálculo que evalCurricular)
+        List<FactorEvaluacion> factoresPub = factorRepo.findByConvocatoriaId(idConv);
+        BigDecimal umbralPub = factoresPub.stream()
+                .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (umbralPub.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadrePub = factoresPub.stream()
+                    .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbralPub = maxPadrePub.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
+        List<Postulacion> todos = new java.util.ArrayList<>();
+        todos.addAll(aptos);
+        todos.addAll(noAptos);
+        final BigDecimal umbralPubFinal = umbralPub;
+        todos.sort(Comparator
+                .comparing((Postulacion p) -> p.getPuntajeCurricular() != null
+                        && p.getPuntajeCurricular().compareTo(umbralPubFinal) >= 0 ? 0 : 1)
+                .thenComparing(p -> Optional.ofNullable(p.getPuntajeCurricular()).orElse(BigDecimal.ZERO), Comparator.reverseOrder()));
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralPubFinal);
+    }
+
+    /** E24-PDF — GET /convocatorias/{id}/resultados-curricular-pdf.
+     *  Genera PDF con listado APTO/NO_APTO de evaluación curricular.
+     *  APTO/NO_APTO se determina por puntajeCurricular >= umbralCurricular (RF-09),
+     *  no por el estado almacenado, para ser consistente cuando el postulante avanzó a E29. */
+    public byte[] generarResultadosCurricularPdf(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        // Calcular umbral igual que evalCurricular()
+        List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConv);
+        BigDecimal umbral = factores.stream()
+                .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (umbral.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadre = factores.stream()
+                    .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbral = maxPadre.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
+        // Todos los postulantes con puntaje curricular registrado
+        List<Postulacion> todos = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeCurricular() != null)
+                .collect(Collectors.toList());
+        if (todos.isEmpty()) throw new DomainException("No hay resultados de evaluación curricular para esta convocatoria");
+        final BigDecimal umbralFinal = umbral;
+        todos.sort(Comparator
+                .comparing((Postulacion p) -> p.getPuntajeCurricular().compareTo(umbralFinal) >= 0 ? 0 : 1)
+                .thenComparing(p -> p.getPuntajeCurricular(), Comparator.reverseOrder()));
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
+    }
+
+    /** E26-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-tecnica.
+     *  Acción explícita del ROL COMITÉ: persiste el flag resultadosTecnicosPublicados=true
+     *  y retorna el PDF para descarga inmediata.
+     *  Solo después de esta acción el portal muestra el ícono 📄 en la columna Resultados Técnica. */
+    @Transactional
+    public byte[] publicarResultadosTecnica(Long idConv, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> conPuntaje = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeTecnica() != null)
+                .collect(java.util.stream.Collectors.toList());
+        if (conPuntaje.isEmpty())
+            throw new DomainException("No hay resultados de evaluación técnica para publicar");
+
+        conv.setResultadosTecnicosPublicados(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
+        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                "PUBLICAR_RESULT_TECNICA", "false", "true",
+                "Publicación de resultados E26 — ROL COMITÉ", http);
+
+        conPuntaje.sort(Comparator
+                .comparing((Postulacion p) -> "APTO".equals(p.getEstado()) ? 0 : 1)
+                .thenComparing(p -> Optional.ofNullable(p.getPuntajeTecnica()).orElse(BigDecimal.ZERO),
+                        Comparator.reverseOrder()));
+        return new ResultadosTecnicaPdfGenerator().generar(conv, conPuntaje);
+    }
+
+    /** E26-PDF — GET /convocatorias/{id}/resultados-tecnica-pdf.
+     *  Genera PDF con puntajes técnicos registrados.
+     *  Accesible por COMITÉ (descarga interna) y portal público (sin auth, via /publicas/). */
+    public byte[] generarResultadosTecnicaPdf(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> conPuntaje = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeTecnica() != null)
+                .collect(java.util.stream.Collectors.toList());
+        if (conPuntaje.isEmpty())
+            throw new DomainException("No hay resultados de evaluación técnica para esta convocatoria");
+        conPuntaje.sort(Comparator
+                .comparing(p -> Optional.ofNullable(p.getPuntajeTecnica()).orElse(BigDecimal.ZERO),
+                        Comparator.reverseOrder()));
+        return new ResultadosTecnicaPdfGenerator().generar(conv, conPuntaje);
+    }
+
+    /** E27-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-entrevista.
+     *  Acción explícita del ROL COMITÉ: persiste el flag entrevistaPublicada=true
+     *  y retorna el PDF para descarga inmediata. */
+    @Transactional
+    public byte[] publicarResultadosEntrevista(Long idConv, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> conPuntaje = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeEntrevista() != null)
+                .collect(java.util.stream.Collectors.toList());
+        if (conPuntaje.isEmpty())
+            throw new DomainException("No hay resultados de entrevista para publicar");
+
+        conv.setEntrevistaPublicada(true);
+        conv.setUsuarioModificacion(user());
+        convRepo.save(conv);
+        audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                "PUBLICAR_RESULT_ENTREVISTA", "false", "true",
+                "Publicación de resultados E27 — ROL COMITÉ", http);
+
+        conPuntaje.sort(Comparator
+                .comparing(p -> Optional.ofNullable(p.getPuntajeEntrevista()).orElse(BigDecimal.ZERO),
+                        Comparator.reverseOrder()));
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+    }
+
+    /** E27-PDF — GET /convocatorias/{id}/resultados-entrevista-pdf. */
+    public byte[] generarResultadosEntrevistaPdf(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        List<Postulacion> conPuntaje = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeEntrevista() != null)
+                .collect(java.util.stream.Collectors.toList());
+        if (conPuntaje.isEmpty())
+            throw new DomainException("No hay resultados de entrevista para esta convocatoria");
+        conPuntaje.sort(Comparator
+                .comparing(p -> Optional.ofNullable(p.getPuntajeEntrevista()).orElse(BigDecimal.ZERO),
+                        Comparator.reverseOrder()));
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+    }
+
+    /** E30 — GET /convocatorias/{id}/resultados-pdf. CU-22 */
     public byte[] generarResultadosPdf(Long idConv) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
         List<CuadroMeritos> meritos = new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConv));
         if (meritos.isEmpty()) throw new DomainException("No hay cuadro de meritos calculado");
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("RESULTADOS FINALES - CONVOCATORIA ").append(conv.getNumeroConvocatoria()).append("\n");
-        sb.append("=".repeat(60)).append("\n\n");
         meritos.sort(Comparator.comparingInt(CuadroMeritos::getOrdenMerito));
-        for (CuadroMeritos cm : meritos) {
-            Postulante pt = cm.getPostulacion().getPostulante();
-            sb.append(String.format("%d. %s %s - Total: %s - %s%n",
-                    cm.getOrdenMerito(), pt.getNombres(), pt.getApellidoPaterno(),
-                    cm.getPuntajeTotal(), cm.getResultado()));
-        }
-        return sb.toString().getBytes();
+        return pdfGenerator.generar(conv, meritos);
     }
 
-    /** E31 — POST /convocatorias/{id}/publicar-resultados. CU-22 */
+    /** E31 — POST /convocatorias/{id}/publicar-resultados. CU-22
+     *  Phase 1 (sync/REQUIRED TX): transición FINALIZADA + log transparencia + encolado PENDIENTE.
+     *  Phase 2 (@Async) es disparada desde el controller DESPUÉS de que esta TX se confirma. */
     @Transactional
-    public CuadroMeritosResponse publicarResultados(Long idConv, HttpServletRequest http) {
+    public PublicarResultadosResponse publicarResultados(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
         if (conv.getEstado() != EstadoConvocatoria.EN_SELECCION)
@@ -399,6 +711,11 @@ public class SeleccionService {
                 "Publicación de resultados finales y cuadro de méritos",
                 http);
 
+        // Phase 1: encolar notificaciones PENDIENTE (misma TX — irreversible aunque SMTP esté caído)
+        List<Postulacion> postulaciones = meritos.stream()
+                .map(CuadroMeritos::getPostulacion).collect(Collectors.toList());
+        int encoladas = notificacionService.encolarNotificacionesMasivas(conv, postulaciones, user());
+
         meritos.sort(Comparator.comparingInt(CuadroMeritos::getOrdenMerito));
         List<CuadroMeritosResponse.MeritoItem> cuadro = meritos.stream()
                 .map(cm -> CuadroMeritosResponse.MeritoItem.builder()
@@ -408,10 +725,10 @@ public class SeleccionService {
                         .puntajeEntrevista(cm.getPuntajeEntrevista()).puntajeBonificacion(cm.getPuntajeBonificacion())
                         .puntajeTotal(cm.getPuntajeTotal()).resultado(cm.getResultado()).build())
                 .collect(Collectors.toList());
-        return CuadroMeritosResponse.builder().idConvocatoria(idConv)
+        return PublicarResultadosResponse.builder().idConvocatoria(idConv)
                 .numeroConvocatoria(conv.getNumeroConvocatoria())
-                .totalPostulantes(meritos.size()).cuadro(cuadro)
-                .mensaje("Resultados publicados. Convocatoria FINALIZADA").build();
+                .totalPostulantes(meritos.size()).notificacionesEncoladas(encoladas).cuadro(cuadro)
+                .mensaje("Resultados publicados. Convocatoria FINALIZADA. " + encoladas + " notificaciones encoladas.").build();
     }
 
     private BigDecimal calcularPuntajeBase(Postulacion p) {

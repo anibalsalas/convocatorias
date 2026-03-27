@@ -58,13 +58,13 @@ import { ToastService } from '@core/services/toast.service';
           </div>
 
           <form [formGroup]="form" (ngSubmit)="onRequestPublish()" class="space-y-4">
-            <div>
+            <div [class.hidden]="form.get('linkTalentoPeru')?.disabled">
               <label class="label-field">Link Talento Perú</label>
               <input formControlName="linkTalentoPeru" class="input-field" placeholder="https://talentoperu.servir.gob.pe/..." />
             </div>
             <div>
               <label class="label-field">Link Portal ACFFAA</label>
-              <input formControlName="linkPortalAcffaa" class="input-field" placeholder="https://www.acffaa.gob.pe/convocatorias/..." />
+              <input formControlName="linkPortalAcffaa" readonly class="input-field" placeholder="https://www.acffaa.gob.pe/convocatorias/..." />
             </div>
 
             @if (globalError()) {
@@ -126,6 +126,10 @@ export class PublicarComponent {
     linkPortalAcffaa: ['', [Validators.maxLength(500)]],
   });
 
+  // La publicación en Talento Perú no aplica — solo se publica en portal ACFFAA.
+  // disable() excluye el campo del JSON enviado al backend.
+  _ = this.form.controls.linkTalentoPeru.disable();
+
   constructor() {
     if (!Number.isFinite(this.idConvocatoria) || this.idConvocatoria <= 0) {
       this.loadingConvocatoria.set(false);
@@ -138,7 +142,16 @@ export class PublicarComponent {
           this.convocatoria.set(r.data);
           this.loadingConvocatoria.set(false);
           if (r.data.linkTalentoPeru) this.form.controls.linkTalentoPeru.setValue(r.data.linkTalentoPeru);
-          if (r.data.linkPortalAcffaa) this.form.controls.linkPortalAcffaa.setValue(r.data.linkPortalAcffaa);
+          // Si ya fue publicada, muestra el link guardado.
+          // Si aún no, pre-rellena el URL esperado para que ORH lo verifique antes de confirmar.
+          // El backend generará este mismo link automáticamente si el campo llega vacío.
+          if (r.data.linkPortalAcffaa) {
+            this.form.controls.linkPortalAcffaa.setValue(r.data.linkPortalAcffaa);
+          } else if (r.data.numeroConvocatoria) {
+            this.form.controls.linkPortalAcffaa.setValue(
+              `${window.location.origin}/portal/convocatorias/${r.data.numeroConvocatoria}`
+            );
+          }
         },
         error: () => this.loadingConvocatoria.set(false),
       });

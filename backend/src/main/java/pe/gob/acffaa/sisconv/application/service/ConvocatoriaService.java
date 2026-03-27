@@ -2,6 +2,7 @@ package pe.gob.acffaa.sisconv.application.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -69,12 +70,18 @@ public class ConvocatoriaService {
     private final IFactorEvaluacionRepository factorRepo;
     private final IActaRepository actaRepo;
     private final IReglaMotorRepository reglaRepo;
+    private final IPostulacionRepository postRepo;
     private final ConvocatoriaMapper mapper;
     private final IAuditPort auditPort;
     private final NotificacionService notificacionService;
 
     private final JpaMiembroComiteRepository miembroJpaRepo;
     private final BasesPdfGenerator basesPdfGenerator;
+    private final ICuadroMeritosRepository meritoRepo;
+
+    /** URL base del portal público institucional — se usa para auto-construir el link de la convocatoria. */
+    @Value("${app.notifications.mail.portal-base-url:http://localhost:4200/portal}")
+    private String portalBaseUrl;
 
     public ConvocatoriaService(IConvocatoriaRepository convRepo,
                                IRequerimientoRepository reqRepo,
@@ -83,10 +90,12 @@ public class ConvocatoriaService {
                                IFactorEvaluacionRepository factorRepo,
                                IActaRepository actaRepo,
                                IReglaMotorRepository reglaRepo,
+                               IPostulacionRepository postRepo,
                                ConvocatoriaMapper mapper,
                                IAuditPort auditPort,
                                NotificacionService notificacionService,
-                               JpaMiembroComiteRepository miembroJpaRepo)
+                               JpaMiembroComiteRepository miembroJpaRepo,
+                               ICuadroMeritosRepository meritoRepo)
                                 {
         this.convRepo = convRepo;
         this.reqRepo = reqRepo;
@@ -95,11 +104,13 @@ public class ConvocatoriaService {
         this.factorRepo = factorRepo;
         this.actaRepo = actaRepo;
         this.reglaRepo = reglaRepo;
+        this.postRepo = postRepo;
         this.mapper = mapper;
         this.auditPort = auditPort;
         this.notificacionService = notificacionService;
         this.miembroJpaRepo = miembroJpaRepo;
         this.basesPdfGenerator = new BasesPdfGenerator();
+        this.meritoRepo = meritoRepo;
     }
 
         private static final List<String> ETAPAS_CRONOGRAMA_ORDENADAS = List.of(
@@ -190,6 +201,13 @@ public class ConvocatoriaService {
         Convocatoria conv = buscarConvocatoria(id);
         conv.setDescripcion(request.getDescripcion());
         conv.setObjetoContratacion(request.getObjetoContratacion());
+        // V17: campos de canal de postulación (solo actualiza si el request trae valor)
+        if (request.getDependenciaEncargadaProceso() != null) conv.setDependenciaEncargadaProceso(request.getDependenciaEncargadaProceso());
+        if (request.getCanalPostulacion() != null) conv.setCanalPostulacion(request.getCanalPostulacion());
+        if (request.getCorreoPostulacion() != null) conv.setCorreoPostulacion(request.getCorreoPostulacion());
+        if (request.getMaxTamanoArchivoMb() != null) conv.setMaxTamanoArchivoMb(request.getMaxTamanoArchivoMb());
+        if (request.getFormatoNombreArchivo() != null) conv.setFormatoNombreArchivo(request.getFormatoNombreArchivo());
+        if (request.getFormatoAsuntoPostulacion() != null) conv.setFormatoAsuntoPostulacion(request.getFormatoAsuntoPostulacion());
         Convocatoria saved = convRepo.save(conv);
         auditPort.registrar(
                 "CONVOCATORIA", saved.getIdConvocatoria(),
@@ -214,6 +232,20 @@ public class ConvocatoriaService {
         r.setTieneFactoresPeso100(tieneFactoresPeso100);
         r.setTieneActaFirmada(tieneActaFirmada);
         r.setBasesGeneradas(cronogramaConformado && tieneFactoresPeso100);
+        r.setResultadosCurricularPublicados(Boolean.TRUE.equals(conv.getResultadosCurricularesPublicados()));
+        r.setNotificacionCodigosEnviada(Boolean.TRUE.equals(conv.getNotificacionCodigosEnviada()));
+        r.setResultadosTecnicosPublicados(Boolean.TRUE.equals(conv.getResultadosTecnicosPublicados()));
+        r.setEntrevistaPublicada(Boolean.TRUE.equals(conv.getEntrevistaPublicada()));
+        r.setNotificacionEntrevistaEnviada(Boolean.TRUE.equals(conv.getNotificacionEntrevistaEnviada()));
+        r.setBonificacionesCalculadas(Boolean.TRUE.equals(conv.getBonificacionesCalculadas()));
+        r.setNotificacionActaEnviada(Boolean.TRUE.equals(conv.getNotificacionActaEnviada()));
+        if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
+            r.setPostulantesRegistrados((int) postRepo.countByConvocatoriaIdAndEstado(conv.getIdConvocatoria(), "REGISTRADO"));
+        }
+        if (conv.getEstado() == EstadoConvocatoria.EN_SELECCION) {
+            r.setPostulantesVerificados((int) postRepo.countByConvocatoriaIdAndEstado(conv.getIdConvocatoria(), "VERIFICADO"));
+            r.setPostulantesAptos((int) postRepo.countByConvocatoriaIdAndEstado(conv.getIdConvocatoria(), "APTO"));
+        }
         return r;
     }
 
@@ -314,7 +346,29 @@ public class ConvocatoriaService {
                 .fechaResultado(conv.getFechaResultado())
                 .linkPortalAcffaa(conv.getLinkPortalAcffaa())
                 .linkTalentoPeru(conv.getLinkTalentoPeru())
+                .estadoPortal(calcularEstadoPortal(conv))
+                .tieneResultadosCurriculares(
+                        Boolean.TRUE.equals(conv.getResultadosCurricularesPublicados()))
+                .tieneResultadosTecnicos(
+                        Boolean.TRUE.equals(conv.getResultadosTecnicosPublicados()))
+                .tieneResultadosEntrevista(
+                        Boolean.TRUE.equals(conv.getEntrevistaPublicada()))
+                .tieneResultadoFinal(
+                        conv.getEstado() == EstadoConvocatoria.FINALIZADA)
                 .build());
+    }
+
+    /**
+     * Proyección de estado para vista pública (portal/postulante).
+     * El estado interno PUBLICADA nunca se expone al exterior — se mapea a "NUEVO"
+     * para indicar que la convocatoria está abierta a postulantes.
+     * Una vez que inicia la evaluación (EN_SELECCION) se muestra el estado real.
+     */
+    private String calcularEstadoPortal(Convocatoria conv) {
+        if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
+            return "NUEVO";
+        }
+        return conv.getEstado() != null ? conv.getEstado().name() : null;
     }
 
     public String obtenerSiguienteNumeroConvocatoria() {
@@ -386,6 +440,13 @@ public class ConvocatoriaService {
                 .fechaFinPostulacion(request.getFechaFinPostulacion())
                 .fechaEvaluacion(request.getFechaEvaluacion())
                 .fechaResultado(request.getFechaResultado())
+                // V17: canal de postulación y dependencia encargada para Bases PDF (E16)
+                .dependenciaEncargadaProceso(request.getDependenciaEncargadaProceso())
+                .canalPostulacion(request.getCanalPostulacion())
+                .correoPostulacion(request.getCorreoPostulacion())
+                .maxTamanoArchivoMb(request.getMaxTamanoArchivoMb())
+                .formatoNombreArchivo(request.getFormatoNombreArchivo())
+                .formatoAsuntoPostulacion(request.getFormatoAsuntoPostulacion())
                 .estado(EstadoConvocatoria.EN_ELABORACION)
                 .usuarioCreacion(username)
                 .build();
@@ -1141,6 +1202,44 @@ public class ConvocatoriaService {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // E14-NOTIF — POST /convocatorias/{id}/notificar-acta-orh
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * E14-NOTIF — COMITÉ notifica a ORH que el acta está firmada y la convocatoria
+     * está lista para publicar (E15).
+     * Patrón simétrico a E27-NOTIF (notificarEntrevistaOrh en SeleccionService).
+     */
+    @Transactional
+    public ConvocatoriaResponse notificarActaOrh(Long idConvocatoria, String username,
+                                                  HttpServletRequest httpReq) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+
+        if (Boolean.TRUE.equals(conv.getNotificacionActaEnviada())) {
+            throw new DomainException("La notificación a ORH ya fue enviada para esta convocatoria");
+        }
+
+        if (!isTieneActaFirmada(idConvocatoria)) {
+            throw new DomainException("El acta de instalación debe estar firmada antes de notificar a ORH");
+        }
+
+        conv.setNotificacionActaEnviada(true);
+        convRepo.save(conv);
+
+        String asunto = "Convocatoria lista para publicar: " + conv.getNumeroConvocatoria();
+        String contenido = "El " + conv.getNumeroConvocatoria()
+                + " está listo para su Publicación. El Comité de Selección ha firmado el acta de instalación.";
+
+        notificacionService.notificarRolConTipo("ORH", conv, "ACTA_LISTA_PUBLICAR",
+                asunto, contenido, username);
+
+        auditPort.registrar("CONVOCATORIA", idConvocatoria,
+                "NOTIFICAR_ACTA_ORH", httpReq);
+
+        return enriquecerResponse(conv);
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // GET /acta-instalacion  |  GET /acta-instalacion/pdf
     // ══════════════════════════════════════════════════════════════
 
@@ -1205,7 +1304,20 @@ public class ConvocatoriaService {
                     "Transición inválida: %s → %s", estadoAnterior, estadoDestino));
         }
         conv.setEstado(estadoDestino);
-        conv.setLinkPortalAcffaa(request.getLinkPortalAcffaa());
+
+        // Auto-construir link Portal ACFFAA si el usuario no lo proporcionó.
+        // Usa PORTAL_BASE_URL (ya existente en config para notificaciones).
+        // Dev: http://localhost:4200/portal/convocatorias/CAS-001-2026
+        // Prod: https://www.acffaa.gob.pe/portal/convocatorias/CAS-001-2026
+        String linkPortal = (request.getLinkPortalAcffaa() != null && !request.getLinkPortalAcffaa().isBlank())
+                ? request.getLinkPortalAcffaa()
+                : portalBaseUrl + "/convocatorias/" + conv.getNumeroConvocatoria();
+        conv.setLinkPortalAcffaa(linkPortal);
+
+        // Talento Perú: link manual asistido — sin integración automática.
+        // SERVIR no expone API pública documentada; el registro en el portal
+        // lo completa ORH directamente. El link final se guarda aquí cuando
+        // el usuario lo proporciona tras el registro manual.
         conv.setLinkTalentoPeru(request.getLinkTalentoPeru());
         if (conv.getFechaPublicacion() == null) {
             conv.setFechaPublicacion(LocalDate.now());
@@ -1252,8 +1364,10 @@ public class ConvocatoriaService {
     /**
      * E16: GET /convocatorias/{id}/bases-pdf — CU-11.
      * Genera bases PDF con perfil, requisitos, cronograma, factores, pesos, bases legales.
-     * Nota: JasperReports diferido — genera texto placeholder como E5.
+     * @Transactional garantiza sesión JPA activa para lazy-load de colecciones del perfil
+     * (formacionesAcademicas, experiencias, conocimientos, funciones, condicion).
      */
+    @Transactional
     public byte[] generarBasesPdf(Long idConvocatoria) {
         Convocatoria conv = buscarConvocatoria(idConvocatoria);
         PerfilPuesto perfil = conv.getRequerimiento() != null
@@ -1264,6 +1378,163 @@ public class ConvocatoriaService {
         List<Cronograma> cronograma = cronoRepo.findByConvocatoriaId(idConvocatoria);
         List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConvocatoria);
         return basesPdfGenerator.generar(conv, perfil, cronograma, factores);
+    }
+
+    /**
+     * Descarga pública de bases PDF — solo convocatorias PUBLICADAS, EN_SELECCION o FINALIZADAS.
+     * Accesible sin autenticación vía GET /convocatorias/publicas/{id}/bases-pdf.
+     * Reutiliza BasesPdfGenerator; la validación de estado impide exponer borradores.
+     */
+    @Transactional
+    public byte[] generarBasesPdfPublico(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        if (conv.getEstado() != EstadoConvocatoria.PUBLICADA
+                && conv.getEstado() != EstadoConvocatoria.EN_SELECCION
+                && conv.getEstado() != EstadoConvocatoria.FINALIZADA) {
+            throw new DomainException(
+                    "Las bases de esta convocatoria no están disponibles para descarga pública");
+        }
+        PerfilPuesto perfil = conv.getRequerimiento() != null
+                ? conv.getRequerimiento().getPerfilPuesto() : null;
+        if (perfil == null) {
+            throw new DomainException("Convocatoria sin perfil de puesto asociado");
+        }
+        List<Cronograma> cronograma = cronoRepo.findByConvocatoriaId(idConvocatoria);
+        List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConvocatoria);
+        return basesPdfGenerator.generar(conv, perfil, cronograma, factores);
+    }
+
+    /**
+     * Descarga pública de resultados de evaluación curricular — portal sin autenticación.
+     * Solo disponible si ya existen postulaciones APTO o NO_APTO (E24 ejecutado).
+     */
+    public byte[] generarResultadosCurricularPdfPublico(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        // Calcular umbral igual que evalCurricular() para consistencia con scores mostrados
+        List<pe.gob.acffaa.sisconv.domain.model.FactorEvaluacion> factores =
+                factorRepo.findByConvocatoriaId(idConvocatoria);
+        java.math.BigDecimal umbral = factores.stream()
+                .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null && f.getPuntajeMinimo() != null)
+                .map(pe.gob.acffaa.sisconv.domain.model.FactorEvaluacion::getPuntajeMinimo)
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        if (umbral.compareTo(java.math.BigDecimal.ZERO) == 0) {
+            java.math.BigDecimal maxPadre = factores.stream()
+                    .filter(f -> "CURRICULAR".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(pe.gob.acffaa.sisconv.domain.model.FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            umbral = maxPadre.multiply(new java.math.BigDecimal("0.60"))
+                    .setScale(2, java.math.RoundingMode.HALF_UP);
+        }
+        List<pe.gob.acffaa.sisconv.domain.model.Postulacion> todos =
+                postRepo.findByConvocatoriaId(idConvocatoria).stream()
+                        .filter(p -> p.getPuntajeCurricular() != null)
+                        .collect(java.util.stream.Collectors.toList());
+        if (todos.isEmpty())
+            throw new DomainException("No hay resultados de evaluación curricular publicados para esta convocatoria");
+        final java.math.BigDecimal umbralFinal = umbral;
+        todos.sort(java.util.Comparator
+                .comparing((pe.gob.acffaa.sisconv.domain.model.Postulacion p) ->
+                        p.getPuntajeCurricular().compareTo(umbralFinal) >= 0 ? 0 : 1)
+                .thenComparing(p -> p.getPuntajeCurricular(), java.util.Comparator.reverseOrder()));
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
+    }
+
+    /**
+     * Descarga pública de resultados de evaluación técnica — portal sin autenticación.
+     * Solo disponible si resultadosTecnicosPublicados=true (E26 publicado por COMITÉ).
+     */
+    public byte[] generarResultadosTecnicaPdfPublico(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        if (!Boolean.TRUE.equals(conv.getResultadosTecnicosPublicados()))
+            throw new DomainException("Los resultados de evaluación técnica aún no han sido publicados para esta convocatoria");
+        List<pe.gob.acffaa.sisconv.domain.model.Postulacion> tecAptos =
+                postRepo.findByConvocatoriaIdAndEstado(idConvocatoria, "TEC_APTO");
+        List<pe.gob.acffaa.sisconv.domain.model.Postulacion> tecNoAptos =
+                postRepo.findByConvocatoriaIdAndEstado(idConvocatoria, "TEC_NO_APTO");
+        // También incluye APTO y NO_APTO anteriores que ya tienen puntajeTecnica
+        List<pe.gob.acffaa.sisconv.domain.model.Postulacion> todos = new java.util.ArrayList<>();
+        todos.addAll(tecAptos);
+        todos.addAll(tecNoAptos);
+        if (todos.isEmpty()) {
+            // Fallback: buscar APTO/ENTREVISTA que tienen puntajeTecnica asignado
+            List<pe.gob.acffaa.sisconv.domain.model.Postulacion> conPuntaje =
+                    postRepo.findByConvocatoriaId(idConvocatoria).stream()
+                            .filter(p -> p.getPuntajeTecnica() != null)
+                            .collect(java.util.stream.Collectors.toList());
+            todos.addAll(conPuntaje);
+        }
+        if (todos.isEmpty())
+            throw new DomainException("No hay resultados de evaluación técnica publicados para esta convocatoria");
+        todos.sort(java.util.Comparator
+                .comparingInt((pe.gob.acffaa.sisconv.domain.model.Postulacion p) ->
+                        p.getPuntajeTecnica() != null ? 0 : 1)
+                .thenComparing(p -> java.util.Optional.ofNullable(p.getPuntajeTecnica())
+                        .orElse(java.math.BigDecimal.ZERO), java.util.Comparator.reverseOrder()));
+        return new ResultadosTecnicaPdfGenerator().generar(conv, todos);
+    }
+
+    /**
+     * Descarga pública del resultado final — portal sin autenticación.
+     * Solo disponible si estado = FINALIZADA (E31 ejecutado por ORH).
+     */
+    public byte[] generarResultadosFinalPdfPublico(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        if (conv.getEstado() != EstadoConvocatoria.FINALIZADA)
+            throw new DomainException("Los resultados finales aún no han sido publicados para esta convocatoria");
+        List<pe.gob.acffaa.sisconv.domain.model.CuadroMeritos> meritos =
+                new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConvocatoria));
+        if (meritos.isEmpty())
+            throw new DomainException("No hay cuadro de méritos para esta convocatoria");
+        meritos.sort(java.util.Comparator.comparingInt(
+                pe.gob.acffaa.sisconv.domain.model.CuadroMeritos::getOrdenMerito));
+        return new ResultadosPdfGenerator().generar(conv, meritos);
+    }
+
+    /**
+     * Descarga pública de resultados de entrevista — portal sin autenticación.
+     * Solo disponible si entrevistaPublicada=true (E27 publicado por ORH).
+     */
+    public byte[] generarResultadosEntrevistaPdfPublico(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        if (!Boolean.TRUE.equals(conv.getEntrevistaPublicada()))
+            throw new DomainException("Los resultados de entrevista aún no han sido publicados para esta convocatoria");
+        List<pe.gob.acffaa.sisconv.domain.model.Postulacion> conPuntaje =
+                postRepo.findByConvocatoriaId(idConvocatoria).stream()
+                        .filter(p -> p.getPuntajeEntrevista() != null)
+                        .sorted(java.util.Comparator.comparing(
+                                p -> java.util.Optional.ofNullable(p.getPuntajeEntrevista())
+                                        .orElse(java.math.BigDecimal.ZERO),
+                                java.util.Comparator.reverseOrder()))
+                        .collect(java.util.stream.Collectors.toList());
+        if (conPuntaje.isEmpty())
+            throw new DomainException("No hay resultados de entrevista publicados para esta convocatoria");
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Iniciar Selección — POST /convocatorias/{id}/iniciar-seleccion
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Transición explícita PUBLICADA → EN_SELECCION sin ejecutar el filtro de requisitos.
+     * Permite al ORH marcar el inicio formal del proceso antes de ejecutar E20.
+     */
+    @Transactional
+    public ConvocatoriaResponse iniciarSeleccion(Long idConvocatoria, String username, HttpServletRequest http) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        validarEstado(conv, EstadoConvocatoria.PUBLICADA, "iniciar seleccion");
+        conv.setEstado(EstadoConvocatoria.EN_SELECCION);
+        conv.setUsuarioModificacion(username);
+        convRepo.save(conv);
+        auditPort.registrarConvocatoria(idConvocatoria, "TBL_CONVOCATORIA", idConvocatoria,
+                "INICIAR_SELECCION",
+                EstadoConvocatoria.PUBLICADA.name(), EstadoConvocatoria.EN_SELECCION.name(),
+                "Inicio formal del proceso de seleccion por ORH", http);
+        ConvocatoriaResponse r = mapper.toResponse(conv);
+        r.setMensaje("Proceso de seleccion iniciado correctamente");
+        return r;
     }
 
     // ══════════════════════════════════════════════════════════════

@@ -6,4 +6,6 @@ export interface NotificacionResponse {
     estado: string;
     estadoProceso?: string | null;
     fechaCreacion: string;
+    idConvocatoria?: number | null;
+    numeroConvocatoria?: string | null;
   }

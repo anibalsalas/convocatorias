@@ -11,4 +11,5 @@ public class EvaluacionTecnicaRepositoryAdapter implements IEvaluacionTecnicaRep
     public EvaluacionTecnicaRepositoryAdapter(JpaEvaluacionTecnicaRepository j){this.jpa=j;}
     @Override public EvaluacionTecnica save(EvaluacionTecnica e){return jpa.save(e);}
     @Override public List<EvaluacionTecnica> findByPostulacionId(Long id){return jpa.findByPostulacionIdPostulacion(id);}
+    @Override public void deleteByPostulacionId(Long id){jpa.deleteByPostulacionIdPostulacion(id);}
 }

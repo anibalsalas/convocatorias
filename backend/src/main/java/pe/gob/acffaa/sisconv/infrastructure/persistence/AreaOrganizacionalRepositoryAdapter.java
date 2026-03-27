@@ -19,4 +19,19 @@ public class AreaOrganizacionalRepositoryAdapter implements IAreaOrganizacionalR
     public Optional<AreaOrganizacional> findById(Long idArea) {
         return jpaRepository.findById(idArea);
     }
+
+    @Override
+    public java.util.List<AreaOrganizacional> findAll() {
+        return jpaRepository.findAll(org.springframework.data.domain.Sort.by("codigoArea"));
+    }
+
+    @Override
+    public boolean existsByCodigoArea(String codigoArea) {
+        return jpaRepository.existsByCodigoArea(codigoArea);
+    }
+
+    @Override
+    public AreaOrganizacional save(AreaOrganizacional area) {
+        return jpaRepository.save(area);
+    }
 }

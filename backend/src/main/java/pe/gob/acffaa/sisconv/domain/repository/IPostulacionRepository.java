@@ -16,4 +16,7 @@ public interface IPostulacionRepository {
     Page<Postulacion> findByConvocatoriaId(Long idConv, Pageable pageable);
     Page<Postulacion> findByPostulanteId(Long idPostulante, Pageable pageable);
     long countByConvocatoriaId(Long idConv);
+    long countByConvocatoriaIdAndEstado(Long idConv, String estado);
+    boolean existsByConvocatoriaIdAndEstadoIn(Long idConv, java.util.List<String> estados);
+    List<Postulacion> findByConvocatoriaIdAndEstadoIn(Long idConv, java.util.List<String> estados);
 }

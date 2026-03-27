@@ -207,21 +207,23 @@ class PostulacionServiceTest {
     // ── E19 Tests ──
 
     @Test
-    @DisplayName("E19: Verificacion DL1451 sin sanciones")
+    @DisplayName("E19: Verificacion DL1451 sin sanciones -> estado NO cambia (sigue REGISTRADO)")
     void e19_sinSanciones() {
         Postulacion p = postulacionMock("REGISTRADO");
         when(postRepo.findById(100L)).thenReturn(Optional.of(p));
-        when(postRepo.save(any())).thenReturn(p);
+        when(postRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         VerificacionDl1451Request req = VerificacionDl1451Request.builder()
-                .verificacionRnssc("SIN_SANCIONES").verificacionRegiprec("SIN_SANCIONES").build();
+                .verificacionRnssc("SIN_SANCIONES").verificacionRegiprec("SIN_SANCIONES")
+                .observacion("Verificado en RNSSC y REGIPREC sin observaciones").build();
 
         PostulacionResponse r = service.verificarDl1451(100L, req, http);
+        // E19 solo graba flags, NO cambia estado — el estado pasa a VERIFICADO recién en E20
         assertEquals("REGISTRADO", r.getEstado());
     }
 
     @Test
-    @DisplayName("E19: Verificacion DL1451 con sanciones -> NO_APTO")
+    @DisplayName("E19: Verificacion DL1451 con sanciones -> estado NO cambia (sigue REGISTRADO, E20 aplica NO_APTO)")
     void e19_conSanciones() {
         Postulacion p = postulacionMock("REGISTRADO");
         when(postRepo.findById(100L)).thenReturn(Optional.of(p));
@@ -231,13 +233,14 @@ class PostulacionServiceTest {
                 .verificacionRnssc("CON_SANCIONES").observacion("Sancion vigente").build();
 
         PostulacionResponse r = service.verificarDl1451(100L, req, http);
-        assertEquals("NO_APTO", r.getEstado());
+        // E19 solo graba flags — E20 es quien transiciona a NO_APTO al leer el flag CON_SANCIONES
+        assertEquals("REGISTRADO", r.getEstado());
     }
 
     // ── E20 Tests ──
 
     @Test
-    @DisplayName("E20: Filtro requisitos exitoso -> VERIFICADO")
+    @DisplayName("E20: Filtro requisitos exitoso -> VERIFICADO (sin sanciones DL1451)")
     void e20_filtroExitoso() {
         Convocatoria conv = convPublicada();
         when(convRepo.findById(1L)).thenReturn(Optional.of(conv));
@@ -249,15 +252,20 @@ class PostulacionServiceTest {
 
         PostulacionResponse r = service.filtroRequisitos(1L, http);
         assertNotNull(r);
-        assertTrue(r.getMensaje().contains("Aptos:"));
+        assertTrue(r.getMensaje().contains("Verificados:"));
     }
 
     @Test
-    @DisplayName("E20: Sin postulaciones REGISTRADO -> 400")
+    @DisplayName("E20: Sin postulaciones REGISTRADO -> convocatoria pasa a EN_SELECCION sin error")
     void e20_sinRegistrados() {
-        when(convRepo.findById(1L)).thenReturn(Optional.of(convPublicada()));
+        Convocatoria conv = convPublicada();
+        when(convRepo.findById(1L)).thenReturn(Optional.of(conv));
+        when(convRepo.save(any())).thenReturn(conv);
         when(postRepo.findByConvocatoriaIdAndEstado(1L, "REGISTRADO")).thenReturn(List.of());
-        assertThrows(DomainException.class, () -> service.filtroRequisitos(1L, http));
+
+        PostulacionResponse r = service.filtroRequisitos(1L, http);
+        assertNotNull(r);
+        assertTrue(r.getMensaje().contains("EN_SELECCION"));
     }
 
     // ── E21 Tests ──
@@ -347,18 +355,22 @@ class PostulacionServiceTest {
     // ── Statechart Validation Tests ──
 
     @Test
-    @DisplayName("Statechart: REGISTRADO → NO_APTO permitido (D.L.1451 sanciones)")
-    void statechart_registrado_a_noApto_permitido() {
+    @DisplayName("Statechart: E20 REGISTRADO(CON_SANCIONES) → NO_APTO via filtroRequisitos")
+    void statechart_registrado_a_noApto_via_e20() {
+        Convocatoria conv = convPublicada();
+        conv.setEstado(EstadoConvocatoria.EN_SELECCION);
+        when(convRepo.findById(1L)).thenReturn(Optional.of(conv));
+        when(convRepo.save(any())).thenReturn(conv);
+
         Postulacion p = postulacionMock("REGISTRADO");
         p.setVerificacionRnssc("CON_SANCIONES");
-        when(postRepo.findById(100L)).thenReturn(Optional.of(p));
-        when(postRepo.save(any())).thenReturn(p);
+        p.setVerificacionRegiprec("SIN_SANCIONES");
+        when(postRepo.findByConvocatoriaIdAndEstado(1L, "REGISTRADO")).thenReturn(List.of(p));
+        when(postRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        VerificacionDl1451Request req = VerificacionDl1451Request.builder()
-                .verificacionRnssc("CON_SANCIONES").verificacionRegiprec("SIN_SANCIONES").build();
-
-        PostulacionResponse r = service.verificarDl1451(100L, req, http);
-        assertEquals("NO_APTO", r.getEstado());
+        PostulacionResponse r = service.filtroRequisitos(1L, http);
+        // E20 aplica NO_APTO cuando DL1451 tiene CON_SANCIONES
+        assertTrue(r.getMensaje().contains("No aptos (DL1451): 1"));
     }
 
     @Test

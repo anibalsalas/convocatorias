@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 /**
  * Condiciones esenciales del contrato CAS — D.Leg. 1057 Art. 6.
  * Tabla: TBL_CONDICION_PUESTO (V4 PKG-01). Relación 1:1 con TBL_PERFIL_PUESTO.
+ * V16: agrega horario, días laborales, modalidad y tipo de inicio (para Bases PDF E16).
  */
 @Entity
 @Table(name = "TBL_CONDICION_PUESTO")
@@ -40,4 +41,26 @@ public class CondicionPuesto {
 
     @Column(name = "OTRAS_CONDICIONES", length = 1000)
     private String otrasCondiciones;
+
+    // ── Campos V16: horario, modalidad y tipo de inicio (para Bases PDF E16) ──
+
+    /** Hora de inicio de jornada laboral, formato HH:MM. Ej: "08:30" */
+    @Column(name = "HORARIO_INICIO", length = 5)
+    private String horarioInicio;
+
+    /** Hora de fin de jornada laboral, formato HH:MM. Ej: "17:00" */
+    @Column(name = "HORARIO_FIN", length = 5)
+    private String horarioFin;
+
+    /** Días laborales. Ej: "Lunes a viernes", "Lunes a sábado" */
+    @Column(name = "DIAS_LABORALES", length = 100)
+    private String diasLaborales;
+
+    /** Modalidad de prestación del servicio: PRESENCIAL, REMOTO, SEMIPRESENCIAL */
+    @Column(name = "MODALIDAD_SERVICIO", length = 30)
+    private String modalidadServicio;
+
+    /** Tipo de inicio: INMEDIATO, FECHA_FIJA, A_LA_FIRMA */
+    @Column(name = "TIPO_INICIO_CONTRATO", length = 30)
+    private String tipoInicioContrato;
 }

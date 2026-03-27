@@ -34,10 +34,15 @@ public enum EstadoConvocatoria {
 
     /**
      * Valida transiciones BPMN permitidas.
+     *
+     * EN_ELABORACION permite ir directamente a PUBLICADA porque E15 (CU-10) combina
+     * aprobación y publicación simultánea en un solo paso (D.S. 065-2011-PCM).
+     * La ruta EN_ELABORACION → APROBADA queda reservada para flujos con aprobación
+     * previa separada (si se implementase en el futuro).
      */
     public boolean puedeTransicionarA(EstadoConvocatoria nuevo) {
         return switch (this) {
-            case EN_ELABORACION -> nuevo == APROBADA || nuevo == CANCELADA;
+            case EN_ELABORACION -> nuevo == APROBADA || nuevo == PUBLICADA || nuevo == CANCELADA;
             case APROBADA -> nuevo == PUBLICADA || nuevo == CANCELADA;
             case PUBLICADA -> nuevo == EN_SELECCION || nuevo == DESIERTA || nuevo == CANCELADA;
             case EN_SELECCION -> nuevo == FINALIZADA || nuevo == DESIERTA || nuevo == CANCELADA;

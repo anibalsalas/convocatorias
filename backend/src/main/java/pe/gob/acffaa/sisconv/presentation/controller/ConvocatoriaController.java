@@ -346,6 +346,20 @@ public class ConvocatoriaController {
     }
 
     // ══════════════════════════════════════════════════════════════
+    // E14-NOTIF — POST /convocatorias/{id}/notificar-acta-orh
+    // ══════════════════════════════════════════════════════════════
+
+    @PostMapping("/{id}/notificar-acta-orh")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMITE')")
+    @Operation(summary = "E14-NOTIF: COMITÉ notifica a ORH que el acta está firmada y lista para publicar")
+    public ResponseEntity<ApiResponse<ConvocatoriaResponse>> notificarActaOrh(
+            @PathVariable Long id,
+            Authentication auth, HttpServletRequest httpReq) {
+        ConvocatoriaResponse response = convService.notificarActaOrh(id, auth.getName(), httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(response, "Notificación enviada a ORH correctamente"));
+    }
+
+    // ══════════════════════════════════════════════════════════════
     // E15 — PUT /convocatorias/{id}/aprobar
     // ══════════════════════════════════════════════════════════════
 
@@ -360,6 +374,21 @@ public class ConvocatoriaController {
         Long idUsuario = resolverIdUsuario(auth.getName());
         ConvocatoriaResponse response = convService.aprobar(
                 id, request, auth.getName(), idUsuario, httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(response, response.getMensaje()));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Iniciar Selección — POST /convocatorias/{id}/iniciar-seleccion
+    // ══════════════════════════════════════════════════════════════
+
+    @PostMapping("/{id}/iniciar-seleccion")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Iniciar proceso de selección",
+            description = "Transición PUBLICADA → EN_SELECCION. Registrada en auditoría.")
+    public ResponseEntity<ApiResponse<ConvocatoriaResponse>> iniciarSeleccion(
+            @PathVariable Long id,
+            Authentication auth, HttpServletRequest httpReq) {
+        ConvocatoriaResponse response = convService.iniciarSeleccion(id, auth.getName(), httpReq);
         return ResponseEntity.ok(ApiResponse.ok(response, response.getMensaje()));
     }
 
@@ -424,6 +453,74 @@ public class ConvocatoriaController {
     // ══════════════════════════════════════════════════════════════
     // Endpoint público — ETAPA6 B5 (sin autenticación)
     // ══════════════════════════════════════════════════════════════
+
+    @GetMapping("/publicas/{id}/bases-pdf")
+    @Operation(summary = "Descarga pública de bases PDF",
+            description = "Sin autenticación. Solo disponible para convocatorias PUBLICADAS, EN_SELECCION o FINALIZADAS. "
+                        + "Cubierto por permitAll() de SecurityConfig en /convocatorias/publicas/**.")
+    public ResponseEntity<byte[]> descargarBasesPdfPublico(@PathVariable Long id) {
+        byte[] pdf = convService.generarBasesPdfPublico(id);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("BASES-CAS-" + id + ".pdf")
+                .build());
+
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/publicas/{id}/resultados-curricular-pdf")
+    @Operation(summary = "Descarga pública de resultados evaluación curricular",
+            description = "Sin autenticación. Solo disponible cuando E24 ya fue ejecutado (existen APTO/NO_APTO).")
+    public ResponseEntity<byte[]> descargarResultadosCurricularPdfPublico(@PathVariable Long id) {
+        byte[] pdf = convService.generarResultadosCurricularPdfPublico(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("RESULT-CURRICULAR-" + id + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/publicas/{id}/resultados-tecnica-pdf")
+    @Operation(summary = "Descarga pública de resultados evaluación técnica",
+            description = "Sin autenticación. Solo disponible cuando el COMITÉ publicó los resultados E26.")
+    public ResponseEntity<byte[]> descargarResultadosTecnicaPdfPublico(@PathVariable Long id) {
+        byte[] pdf = convService.generarResultadosTecnicaPdfPublico(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("RESULT-TECNICA-" + id + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/publicas/{id}/resultados-pdf")
+    @Operation(summary = "Descarga pública de resultado final",
+            description = "Sin autenticación. Solo disponible cuando la convocatoria está FINALIZADA (E31).")
+    public ResponseEntity<byte[]> descargarResultadosFinalPdfPublico(@PathVariable Long id) {
+        byte[] pdf = convService.generarResultadosFinalPdfPublico(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("RESULTADO-FINAL-" + id + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/publicas/{id}/resultados-entrevista-pdf")
+    @Operation(summary = "Descarga pública de resultados entrevista",
+            description = "Sin autenticación. Solo disponible cuando ORH publicó los resultados E27.")
+    public ResponseEntity<byte[]> descargarResultadosEntrevistaPdfPublico(@PathVariable Long id) {
+        byte[] pdf = convService.generarResultadosEntrevistaPdfPublico(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename("RESULT-ENTREVISTA-" + id + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
 
     @GetMapping("/publicas")
     @Operation(summary = "Listado público de convocatorias",

@@ -6,4 +6,5 @@ import java.util.List;
 public interface IEvaluacionTecnicaRepository {
     EvaluacionTecnica save(EvaluacionTecnica e);
     List<EvaluacionTecnica> findByPostulacionId(Long id);
+    void deleteByPostulacionId(Long id);
 }

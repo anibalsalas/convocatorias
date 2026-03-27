@@ -8,4 +8,5 @@ import pe.gob.acffaa.sisconv.domain.model.Notificacion;
 public interface JpaNotificacionRepository extends JpaRepository<Notificacion, Long> {
     Page<Notificacion> findByUsuarioDestinoIdUsuario(Long idUsuario, Pageable pageable);
     Page<Notificacion> findByUsuarioDestinoIdUsuarioAndEstado(Long idUsuario, String estado, Pageable pageable);
+    java.util.List<Notificacion> findByConvocatoria_IdConvocatoriaAndEstado(Long idConvocatoria, String estado);
 }

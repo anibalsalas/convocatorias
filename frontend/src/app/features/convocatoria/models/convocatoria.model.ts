@@ -136,6 +136,10 @@ export interface ConvocatoriaResponse {
   tieneActaFirmada?: boolean | null;
   /** Bases generables: cronograma + factores 100% */
   basesGeneradas?: boolean | null;
+  /** E25: ORH ya notificó al COMITÉ que los códigos anónimos están asignados */
+  notificacionCodigosEnviada?: boolean | null;
+  /** E14: COMITÉ ya notificó a ORH que el acta está firmada y la convocatoria lista para publicar */
+  notificacionActaEnviada?: boolean | null;
   mensaje?: string | null;
 }
 
