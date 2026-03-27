@@ -23,6 +23,12 @@ import { ToastService } from '@core/services/toast.service';
         <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']" class="btn-ghost">← Volver a factores</a>
       </app-page-header>
 
+      @if (modoLectura) {
+        <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Solo lectura — la convocatoria ya fue publicada. No se pueden realizar cambios.
+        </div>
+      }
+
       @if (loadingConvocatoria()) {
         <div class="card text-center py-12 text-gray-400">Cargando convocatoria...</div>
       } @else if (convocatoria()) {
@@ -38,28 +44,30 @@ import { ToastService } from '@core/services/toast.service';
           </div>
         </div>
 
-        <div class="card flex flex-wrap items-center gap-3">
-          <button (click)="onGenerarActa()" class="btn-primary" [disabled]="generating() || uploading()">
-            {{ generating() ? 'Generando...' : 'Generar acta de instalación' }}
-          </button>
+        @if (!modoLectura) {
+          <div class="card flex flex-wrap items-center gap-3">
+            <button (click)="onGenerarActa()" class="btn-primary" [disabled]="generating() || uploading()">
+              {{ generating() ? 'Generando...' : 'Generar acta de instalación' }}
+            </button>
 
-          <label class="btn-outline cursor-pointer" [class.opacity-60]="uploading()">
-            {{ selectedFileName() || 'Seleccionar PDF firmado' }}
-            <input type="file" accept="application/pdf" class="hidden" (change)="onFileSelected($event)" />
-          </label>
+            <label class="btn-outline cursor-pointer" [class.opacity-60]="uploading()">
+              {{ selectedFileName() || 'Seleccionar PDF firmado' }}
+              <input type="file" accept="application/pdf" class="hidden" (change)="onFileSelected($event)" />
+            </label>
 
-          <div>
-            <label class="label-field">Fecha de firma</label>
-            <input #fechaFirmaInput type="date" class="input-field min-w-40" />
+            <div>
+              <label class="label-field">Fecha de firma</label>
+              <input #fechaFirmaInput type="date" class="input-field min-w-40" />
+            </div>
+
+            <button
+              (click)="onCargarActa(fechaFirmaInput.value)"
+              class="btn-primary"
+              [disabled]="!selectedFile() || uploading() || generating()">
+              {{ uploading() ? 'Cargando...' : 'Cargar acta firmada' }}
+            </button>
           </div>
-
-          <button
-            (click)="onCargarActa(fechaFirmaInput.value)"
-            class="btn-primary"
-            [disabled]="!selectedFile() || uploading() || generating()">
-            {{ uploading() ? 'Cargando...' : 'Cargar acta firmada' }}
-          </button>
-        </div>
+        }
 
         @if (globalError()) {
           <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ globalError() }}</div>
@@ -116,11 +124,24 @@ import { ToastService } from '@core/services/toast.service';
               </div>
             }
 
-            <div class="flex justify-end">
-              <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'publicar']" class="btn-primary" [class.opacity-50]="!acta()?.firmada">
-                Continuar a publicar →
-              </a>
-            </div>
+            @if (!modoLectura) {
+              <div class="flex justify-end">
+                @if (convocatoria()?.notificacionActaEnviada) {
+                  <button class="btn-primary opacity-70 cursor-default" disabled
+                    title="Notificación ya enviada a ORH">
+                    ✓ ORH notificado
+                  </button>
+                } @else {
+                  <button
+                    (click)="onNotificarOrh()"
+                    class="btn-primary"
+                    [disabled]="!acta()?.firmada || notificando()"
+                    title="Al Notificar a ORH ésta convocatoria ya está lista para su publicación.">
+                    {{ notificando() ? 'Notificando...' : 'Notificar a ORH' }}
+                  </button>
+                }
+              </div>
+            }
           </div>
 
           <div class="card">
@@ -150,6 +171,7 @@ export class ActaComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly idConvocatoria = Number(this.route.snapshot.paramMap.get('id'));
+  readonly modoLectura = this.route.snapshot.queryParamMap.get('modo') === 'lectura';
   readonly convocatoria = signal<ConvocatoriaResponse | null>(null);
   readonly acta = signal<ActaResponse | null>(null);
   readonly loadingConvocatoria = signal(true);
@@ -158,6 +180,8 @@ export class ActaComponent {
   readonly globalError = signal('');
   readonly selectedFile = signal<File | null>(null);
   readonly previewUrl = signal<string>('');
+
+  readonly notificando = signal(false);
 
   readonly selectedFileName = computed(() => this.selectedFile()?.name ?? '');
   readonly actaEstado = computed(() => this.acta()?.firmada ? 'FIRMADA' : (this.acta()?.estado || 'PENDIENTE'));
@@ -278,6 +302,25 @@ export class ActaComponent {
         error: (err: { error?: { message?: string } }) => {
           this.uploading.set(false);
           this.globalError.set(err.error?.message || 'No se pudo cargar el acta firmada.');
+          this.toast.error(this.globalError());
+        },
+      });
+  }
+
+  onNotificarOrh(): void {
+    this.globalError.set('');
+    this.notificando.set(true);
+    this.convocatoriaService.notificarActaOrh(this.idConvocatoria)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.notificando.set(false);
+          this.convocatoria.set(response.data);
+          this.toast.success(response.message || 'ORH notificado correctamente.');
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.notificando.set(false);
+          this.globalError.set(err.error?.message || 'No se pudo notificar a ORH.');
           this.toast.error(this.globalError());
         },
       });

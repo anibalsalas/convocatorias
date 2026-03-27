@@ -11,6 +11,7 @@ import pe.gob.acffaa.sisconv.application.dto.request.*;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.mapper.SeleccionMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
+import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.application.service.SeleccionService;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.exception.*;
@@ -48,6 +49,7 @@ class SeleccionServiceTest {
     @Mock private IFactorEvaluacionRepository factorRepo;
     @Mock private IUsuarioRepository usuarioRepo;
     @Mock private IAuditPort audit;
+    @Mock private NotificacionService notificacionService;
     @Mock private HttpServletRequest http;
 
     @InjectMocks private SeleccionService service;
@@ -57,7 +59,7 @@ class SeleccionServiceTest {
     void setUp() {
         service = new SeleccionService(postRepo, convRepo, evalCurrRepo, evalTecRepo,
                 entrevistaRepo, entMiembroRepo, bonifRepo, meritoRepo, factorRepo,
-                usuarioRepo, audit, mapper);
+                usuarioRepo, audit, mapper, notificacionService);
         // FIX: Configurar SecurityContext para que user() no lance NPE
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("admin_test", null, List.of()));
@@ -349,7 +351,7 @@ class SeleccionServiceTest {
                 .postulacion(postulacionConEstado("GANADOR")).build();
         when(meritoRepo.findByConvocatoriaId(1L)).thenReturn(List.of(cm));
 
-        CuadroMeritosResponse r = service.publicarResultados(1L, http);
+        PublicarResultadosResponse r = service.publicarResultados(1L, http);
         assertTrue(r.getMensaje().contains("FINALIZADA"));
         assertEquals(1, r.getTotalPostulantes());
     }

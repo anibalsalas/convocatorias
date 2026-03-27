@@ -1,0 +1,718 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
+import { forkJoin, take, finalize, timeout, TimeoutError, switchMap } from 'rxjs';
+import { SeleccionService } from '../../services/seleccion.service';
+import { ToastService } from '@core/services/toast.service';
+import { AuthService } from '@core/auth/auth.service';
+import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
+import {
+  PostulacionSeleccion,
+  FactorDetalle,
+  EvalCurricularResponse,
+  ExpedienteItem,
+} from '../../models/seleccion.model';
+
+/** Subcriterio listo para input */
+interface SubcriterioEval {
+  idFactor: number;
+  criterio: string;
+  puntaje: number;
+  puntajeMaximo: number;
+  puntajeMinimo: number;
+  idPadre: number;
+}
+
+interface EntradaEval {
+  idPostulacion: number;
+  nombre: string;
+  /** Subcriterios agrupados por padre: Map<idPadre, SubcriterioEval[]> */
+  subcriterios: SubcriterioEval[];
+  totalCache: number;
+  expandido: boolean;
+  documentos: ExpedienteItem[];
+  cargandoDocs: boolean;
+  /** Estado real de la postulación — usado para detectar modo resultados */
+  estado: string;
+}
+
+const PAGE_SIZE = 10;
+const UMBRAL_PAGINADO = 15;
+
+@Component({
+  selector: 'app-eval-curricular',
+  standalone: true,
+  imports: [RouterLink, FormsModule, PageHeaderComponent, DecimalPipe],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <div class="space-y-4">
+      <app-page-header
+        title="Evaluación Curricular"
+        [subtitle]="subtitleDinamico()">
+        <a [routerLink]="['/sistema/seleccion', idConv, 'postulantes']"
+           class="btn-ghost text-sm">← Postulantes</a>
+      </app-page-header>
+
+      <!-- Banner RF-09 + barra de progreso -->
+      <div class="card border-l-4 border-blue-500 bg-blue-50 py-3 px-4 space-y-2">
+        <div class="flex items-start gap-3">
+          <span class="text-lg">📋</span>
+          <div class="text-xs text-blue-800 flex-1">
+            <p class="font-semibold">Evaluación Curricular RF-09 — Motor de Reglas</p>
+            <p class="mt-0.5">
+              @if (modoResultados() || yaTodosEvaluados()) {
+                Resultados registrados de la evaluación curricular. Vista de solo lectura.
+              } @else {
+                Ingrese el puntaje por criterio para cada postulante en estado
+                <strong>VERIFICADO</strong>. Expanda cada fila para ver los documentos del expediente.
+              }
+            </p>
+            @if (umbralEfectivo() > 0) {
+              <p class="mt-1 font-semibold">
+                Umbral mínimo:
+                <span class="bg-blue-200 px-2 py-0.5 rounded font-mono">
+                  {{ umbralEfectivo() | number:'1.0-0' }} pts
+                </span>
+                · Máximo posible:
+                <span class="bg-blue-200 px-2 py-0.5 rounded font-mono">
+                  {{ puntajeMaximoTotal() | number:'1.0-0' }} pts
+                </span>
+              </p>
+            }
+          </div>
+        </div>
+
+        <!-- Barra de progreso -->
+        @if (!loading() && entradas().length > 0) {
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs text-blue-700 font-medium">
+              <span>
+                {{ evaluadosCount() }} de {{ entradas().length }} evaluados
+                @if (aptosPreview() > 0) {
+                  · <span class="text-green-700">{{ aptosPreview() }} APTOS</span>
+                }
+                @if (noAptosPreview() > 0) {
+                  · <span class="text-red-600">{{ noAptosPreview() }} NO APTOS</span>
+                }
+              </span>
+              <span>{{ progresoPct() }}%</span>
+            </div>
+            <div class="w-full bg-blue-200 rounded-full h-2">
+              <div
+                class="h-2 rounded-full transition-all duration-300"
+                [class]="progresoPct() === 100 ? 'bg-green-500' : 'bg-blue-500'"
+                [style.width]="progresoPct() + '%'"
+              ></div>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (loading()) {
+        <div class="card py-10 text-center text-gray-400">
+          <span class="animate-spin inline-block mr-2 text-xl">⟳</span>
+          <p class="mt-2 text-sm">Cargando postulantes verificados y criterios...</p>
+        </div>
+
+      } @else if (entradas().length === 0) {
+        <div class="card py-10 text-center space-y-3">
+          @if (modoResultados()) {
+            <p class="text-gray-500 font-medium">No se encontraron resultados de evaluación curricular.</p>
+          } @else {
+            <p class="text-gray-500 font-medium">No hay postulantes en estado VERIFICADO para evaluar.</p>
+          }
+          <a [routerLink]="['/sistema/seleccion', idConv, 'postulantes']"
+             class="btn-secondary text-sm inline-block">← Ir a Postulantes</a>
+        </div>
+
+      } @else {
+        <!-- Panel resultado post-envío -->
+        @if (resultado()) {
+          <div class="card border border-green-300 bg-green-50 p-4 space-y-2">
+            <p class="font-semibold text-green-700 text-sm">
+              ✓ Evaluación registrada — {{ resultado()!.mensaje }}
+            </p>
+            <div class="flex flex-wrap gap-6 text-sm">
+              <div>Evaluados: <strong>{{ resultado()!.totalEvaluados }}</strong></div>
+              <div class="text-green-700">APTO: <strong>{{ resultado()!.totalAptos }}</strong></div>
+              <div class="text-red-600">NO APTO: <strong>{{ resultado()!.totalNoAptos }}</strong></div>
+              @if (resultado()!.umbralAplicado) {
+                <div class="text-blue-700">
+                  Umbral aplicado:
+                  <strong>{{ resultado()!.umbralAplicado | number:'1.2-2' }} pts</strong>
+                </div>
+              }
+            </div>
+            <div class="flex flex-wrap gap-2 mt-2">
+              @if (esComiteOAdmin()) {
+                <button
+                  (click)="publicarResultados()"
+                  [disabled]="publicando()"
+                  class="btn-primary text-sm disabled:opacity-50"
+                >
+                  {{ publicando() ? '⟳ Generando PDF...' : '📄 Publicar Resultados E24' }}
+                </button>
+              }
+              @if (esOrhOAdmin()) {
+                <a [routerLink]="['/sistema/seleccion', idConv, 'codigos-anonimos']"
+                   class="btn-secondary text-sm inline-block">
+                  Continuar → E25 Códigos Anónimos
+                </a>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Tabla de evaluación -->
+        <div class="card overflow-x-auto">
+          <div class="px-3 py-2 border-b flex items-center justify-between">
+            <p class="text-xs text-gray-500 font-semibold">
+              {{ entradas().length }} postulante(s)
+              {{ (modoResultados() || yaTodosEvaluados()) ? '— Resultados E24' : 'en estado VERIFICADO' }}
+              @if (paginado()) {
+                <span class="text-gray-400 font-normal">
+                  · mostrando {{ entradasPagina().length }} por página
+                </span>
+              }
+            </p>
+            <div class="flex gap-4 text-xs">
+              <span class="text-green-600 font-medium">≥ umbral: {{ aptosPreview() }}</span>
+              <span class="text-red-500">&lt; umbral: {{ noAptosPreview() }}</span>
+            </div>
+          </div>
+
+          <table class="w-full text-xs border-collapse">
+            <thead>
+              <!-- Fila 1: grupos (factores padre con colspan) -->
+              <tr class="bg-[#1F2133] text-white">
+                <th class="px-3 py-2 text-left font-semibold sticky left-0 bg-[#1F2133] z-10 min-w-[200px]"
+                    rowspan="2">
+                  Postulante
+                </th>
+                @for (padre of factoresPadre(); track padre.idFactor) {
+                  <th
+                    class="px-2 py-1 text-center font-semibold border-l border-blue-700"
+                    [attr.colspan]="padre.subcriterios?.length || 1"
+                  >
+                    {{ padre.criterio }}
+                    <span class="font-normal text-gray-300 text-xs ml-1">
+                      (máx. {{ padre.puntajeMaximo }})
+                    </span>
+                  </th>
+                }
+                <th class="px-3 py-1 text-center font-semibold min-w-[70px] bg-[#0F3460]"
+                    rowspan="2">Total</th>
+                <th class="px-3 py-1 text-center font-semibold min-w-[85px] bg-[#0F3460]"
+                    rowspan="2">Estado</th>
+              </tr>
+              <!-- Fila 2: subcriterios con puntaje máximo -->
+              <tr class="bg-[#2D3250] text-white">
+                @for (padre of factoresPadre(); track padre.idFactor) {
+                  @for (sub of (padre.subcriterios || []); track sub.idFactor) {
+                    <th class="px-2 py-1 text-center font-normal min-w-[100px] border-l border-blue-800 text-gray-200">
+                      {{ sub.criterio }}
+                      <br>
+                      <span class="text-gray-400 text-xs">(máx. {{ sub.puntajeMaximo }})</span>
+                    </th>
+                  }
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (e of entradasPagina(); track e.idPostulacion; let i = $index) {
+                <!-- Fila de puntajes -->
+                <tr
+                  class="border-t transition-colors"
+                  [class]="i % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'"
+                >
+                  <!-- Nombre + botón expandir docs -->
+                  <td
+                    class="px-3 py-2 sticky left-0 z-10"
+                    [class]="i % 2 === 0 ? 'bg-white' : 'bg-gray-50'"
+                  >
+                    <div class="flex items-center gap-2">
+                      <button
+                        (click)="toggleDocs(e)"
+                        class="text-blue-500 hover:text-blue-700 text-sm font-bold
+                               w-5 h-5 flex items-center justify-center rounded
+                               hover:bg-blue-100 transition-colors flex-shrink-0"
+                        [title]="e.expandido ? 'Ocultar documentos' : 'Ver documentos del expediente'"
+                      >{{ e.expandido ? '▼' : '▶' }}</button>
+                      <span class="font-medium text-xs">{{ e.nombre }}</span>
+                    </div>
+                  </td>
+
+                  <!-- Inputs por subcriterio -->
+                  @for (sub of e.subcriterios; track sub.idFactor) {
+                    <td class="px-2 py-1 text-center border-l border-gray-100">
+                      <input
+                        type="number"
+                        [(ngModel)]="sub.puntaje"
+                        (ngModelChange)="onPuntajeChange(e)"
+                        [min]="0"
+                        [max]="sub.puntajeMaximo"
+                        step="0.5"
+                        [disabled]="modoLectura()"
+                        class="w-20 text-center border rounded px-1 py-0.5 text-xs
+                               focus:ring-1 focus:ring-blue-500 focus:outline-none
+                               disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-70"
+                        [class]="sub.puntaje > sub.puntajeMaximo
+                          ? 'border-red-400 bg-red-50'
+                          : sub.puntaje > 0
+                          ? 'border-green-400 bg-green-50'
+                          : 'border-gray-300'"
+                        [attr.aria-label]="'Puntaje ' + sub.criterio + ' para ' + e.nombre"
+                      />
+                    </td>
+                  }
+
+                  <!-- Total -->
+                  <td class="px-3 py-2 text-center font-bold text-sm">
+                    {{ e.totalCache | number:'1.1-1' }}
+                  </td>
+
+                  <!-- Estado en tiempo real -->
+                  <td class="px-3 py-2 text-center">
+                    @if (e.totalCache === 0) {
+                      <span class="text-gray-300 text-xs">—</span>
+                    } @else if (umbralEfectivo() > 0 && e.totalCache >= umbralEfectivo()) {
+                      <span class="text-xs font-semibold text-green-700
+                                   bg-green-100 px-2 py-0.5 rounded-full">APTO ✓</span>
+                    } @else if (umbralEfectivo() > 0) {
+                      <span class="text-xs font-semibold text-red-700
+                                   bg-red-100 px-2 py-0.5 rounded-full">NO APTO</span>
+                    }
+                  </td>
+                </tr>
+
+                <!-- Fila expandible: documentos del expediente -->
+                @if (e.expandido) {
+                  <tr [class]="i % 2 === 0 ? 'bg-blue-50' : 'bg-blue-50'">
+                    <td [attr.colspan]="colspanTotal()" class="px-4 py-3">
+                      @if (e.cargandoDocs) {
+                        <span class="text-xs text-gray-400">
+                          <span class="animate-spin inline-block mr-1">⟳</span>
+                          Cargando documentos...
+                        </span>
+                      } @else if (e.documentos.length === 0) {
+                        <span class="text-xs text-gray-400 italic">
+                          Este postulante no tiene documentos cargados en el expediente.
+                        </span>
+                      } @else {
+                        <div class="flex flex-wrap gap-2">
+                          @for (doc of e.documentos; track doc.idExpediente) {
+                            <button
+                              (click)="abrirDoc(e.idPostulacion, doc.idExpediente, doc.nombreArchivo)"
+                              [disabled]="descargando() === doc.idExpediente"
+                              class="flex items-center gap-1.5 text-xs bg-white border border-blue-200
+                                     rounded px-2 py-1.5 hover:bg-blue-100 hover:border-blue-400
+                                     transition-colors text-blue-700 font-medium disabled:opacity-50
+                                     disabled:cursor-wait"
+                              [title]="doc.nombreArchivo + ' · ' + doc.tamanoKb + ' KB'"
+                            >
+                              @if (descargando() === doc.idExpediente) {
+                                <span class="animate-spin">⟳</span>
+                              } @else {
+                                <span>📄</span>
+                              }
+                              <span>{{ doc.tipoDocumento }}</span>
+                              <span class="text-gray-400 font-normal text-xs">
+                                {{ doc.tamanoKb }} KB
+                              </span>
+                            </button>
+                          }
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+
+          <!-- Paginación -->
+          @if (paginado()) {
+            <div class="px-4 py-3 border-t flex items-center justify-between text-xs text-gray-500">
+              <span>Página {{ currentPage() + 1 }} de {{ totalPaginas() }}</span>
+              <div class="flex gap-2">
+                <button
+                  (click)="currentPage.set(currentPage() - 1)"
+                  [disabled]="currentPage() === 0"
+                  class="btn-ghost text-xs px-2 py-1 disabled:opacity-40"
+                >← Anterior</button>
+                <button
+                  (click)="currentPage.set(currentPage() + 1)"
+                  [disabled]="currentPage() >= totalPaginas() - 1"
+                  class="btn-ghost text-xs px-2 py-1 disabled:opacity-40"
+                >Siguiente →</button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Advertencia puntajes inválidos -->
+        @if (hayPuntajeInvalido()) {
+          <div class="card border border-red-300 bg-red-50 p-3 text-xs text-red-700">
+            ⚠ Hay puntajes que superan el máximo permitido por criterio. Corrija antes de guardar.
+          </div>
+        }
+
+        <!-- Acciones -->
+        <div class="flex gap-2 justify-end items-center">
+          <a [routerLink]="['/sistema/seleccion', idConv, 'postulantes']"
+             class="btn-ghost">← Volver</a>
+          @if (modoLectura()) {
+            <span class="text-xs text-gray-400 italic px-2">
+              🔒 Modo lectura — evaluación ya registrada
+            </span>
+          } @else {
+            <button
+              (click)="evaluar()"
+              [disabled]="enviando() || !puedeEnviar()"
+              class="btn-primary disabled:opacity-50"
+              [title]="!puedeEnviar() ? 'Complete el puntaje de todos los postulantes para continuar' : ''"
+            >
+              {{ enviando() ? '⟳ Registrando...' : 'Registrar Evaluación Curricular (E24)' }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+  `,
+})
+export class EvalCurricularComponent {
+  private readonly route = inject(ActivatedRoute);
+  private readonly svc = inject(SeleccionService);
+  private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly esOrhOAdmin = computed(() =>
+    this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_ORH']),
+  );
+
+  protected readonly esComiteOAdmin = computed(() =>
+    this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_COMITE']),
+  );
+
+  /**
+   * Modo resultados: activado via queryParam ?resultados=1 desde postulantes.
+   * Indica que E24 ya fue ejecutado y el COMITÉ/ORH quiere ver resultados, no re-evaluar.
+   */
+  protected readonly modoResultados = signal(
+    this.route.snapshot.queryParamMap.get('resultados') === '1',
+  );
+
+  /**
+   * true cuando todos los participantes cargados son APTO o NO_APTO
+   * (ningún VERIFICADO) — protección adicional contra re-evaluación accidental.
+   */
+  protected readonly yaTodosEvaluados = computed(() => {
+    const list = this.entradas();
+    return list.length > 0 && list.every((e) => e.estado === 'APTO' || e.estado === 'NO_APTO');
+  });
+
+  /** Modo lectura: resultado en sesión actual, modo resultados explícito, o todos ya evaluados */
+  protected readonly modoLectura = computed(
+    () => this.resultado() !== null || this.modoResultados() || this.yaTodosEvaluados(),
+  );
+
+  readonly idConv = Number(this.route.snapshot.paramMap.get('id'));
+
+  // ── Signals base ────────────────────────────────────────────────────────────
+  readonly loading       = signal(true);
+  readonly enviando      = signal(false);
+  readonly publicando    = signal(false);
+  readonly entradas      = signal<EntradaEval[]>([]);
+  readonly factoresPadre = signal<FactorDetalle[]>([]);
+  readonly resultado     = signal<EvalCurricularResponse | null>(null);
+  readonly currentPage   = signal(0);
+  readonly descargando   = signal<number | null>(null);
+
+  // ── Computed — umbral y máximo ──────────────────────────────────────────────
+  readonly umbralEfectivo = computed(() => {
+    const padres = this.factoresPadre();
+    // El umbral es puntajeMinimo del PADRE (configurado por el Comité en E12)
+    const sumMin = padres.reduce((acc, p) => acc + (p.puntajeMinimo ?? 0), 0);
+    if (sumMin > 0) return sumMin;
+    // Fallback: 60% del puntajeMaximo padre si no fue configurado
+    const sumMax = padres.reduce((acc, p) => acc + (p.puntajeMaximo ?? 0), 0);
+    return Math.round(sumMax * 0.60 * 10) / 10;
+  });
+
+  readonly puntajeMaximoTotal = computed(() =>
+    this.factoresPadre().reduce((acc, padre) => {
+      const subMax = (padre.subcriterios ?? []).reduce(
+        (s, sub) => s + (sub.puntajeMaximo ?? 0), 0,
+      );
+      return acc + subMax;
+    }, 0),
+  );
+
+  readonly subtitleDinamico = computed(() => {
+    const umbral = this.umbralEfectivo();
+    const max = this.puntajeMaximoTotal();
+    if (umbral > 0 && max > 0) {
+      return `E24 · RF-09 · Umbral: ${umbral} pts de ${max} pts máximos`;
+    }
+    return 'E24 · RF-09 · Evaluación por criterios configurados';
+  });
+
+  /** Total de columnas para colspan de la fila de documentos */
+  readonly colspanTotal = computed(() => {
+    const subTotal = this.factoresPadre().reduce(
+      (acc, p) => acc + ((p.subcriterios ?? []).length || 1), 0,
+    );
+    return subTotal + 3; // +1 postulante sticky, +1 total, +1 estado
+  });
+
+  // ── Computed — progreso ─────────────────────────────────────────────────────
+  readonly evaluadosCount = computed(() =>
+    this.entradas().filter((e) => e.totalCache > 0).length,
+  );
+
+  readonly progresoPct = computed(() => {
+    const total = this.entradas().length;
+    return total > 0 ? Math.round((this.evaluadosCount() / total) * 100) : 0;
+  });
+
+  readonly aptosPreview = computed(() =>
+    this.umbralEfectivo() > 0
+      ? this.entradas().filter((e) => e.totalCache >= this.umbralEfectivo()).length
+      : 0,
+  );
+
+  readonly noAptosPreview = computed(() =>
+    this.umbralEfectivo() > 0
+      ? this.entradas().filter(
+          (e) => e.totalCache > 0 && e.totalCache < this.umbralEfectivo(),
+        ).length
+      : 0,
+  );
+
+  readonly hayPuntajeInvalido = computed(() =>
+    this.entradas().some((e) =>
+      e.subcriterios.some((s) => s.puntaje > s.puntajeMaximo),
+    ),
+  );
+
+  // ── Computed — paginación ───────────────────────────────────────────────────
+  readonly paginado = computed(() => this.entradas().length > UMBRAL_PAGINADO);
+
+  readonly totalPaginas = computed(() =>
+    Math.ceil(this.entradas().length / PAGE_SIZE),
+  );
+
+  readonly entradasPagina = computed(() => {
+    if (!this.paginado()) return this.entradas();
+    const start = this.currentPage() * PAGE_SIZE;
+    return this.entradas().slice(start, start + PAGE_SIZE);
+  });
+
+  readonly puedeEnviar = computed(() =>
+    !this.enviando() &&
+    !this.hayPuntajeInvalido() &&
+    this.entradas().length > 0 &&
+    this.evaluadosCount() === this.entradas().length,
+  );
+
+  constructor() {
+    this.cargar();
+  }
+
+  /** Recalcula totalCache y dispara change detection OnPush */
+  protected onPuntajeChange(entrada: EntradaEval): void {
+    entrada.totalCache = entrada.subcriterios.reduce(
+      (acc, s) => acc + (Number(s.puntaje) || 0),
+      0,
+    );
+    this.entradas.set([...this.entradas()]);
+  }
+
+  /** Expande/colapsa la fila de documentos y los carga lazy */
+  protected toggleDocs(entrada: EntradaEval): void {
+    entrada.expandido = !entrada.expandido;
+    if (entrada.expandido && entrada.documentos.length === 0 && !entrada.cargandoDocs) {
+      entrada.cargandoDocs = true;
+      this.entradas.set([...this.entradas()]);
+      this.svc
+        .listarExpedientePostulante(entrada.idPostulacion)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (docs) => {
+            entrada.documentos = docs;
+            entrada.cargandoDocs = false;
+            this.entradas.set([...this.entradas()]);
+          },
+          error: () => {
+            entrada.cargandoDocs = false;
+            this.entradas.set([...this.entradas()]);
+          },
+        });
+    } else {
+      this.entradas.set([...this.entradas()]);
+    }
+  }
+
+  /** Descarga el archivo via HttpClient (con JWT) y lo abre en nueva pestaña */
+  protected abrirDoc(idPost: number, idExp: number, nombreArchivo: string): void {
+    if (this.descargando() === idExp) return;
+    this.descargando.set(idExp);
+
+    this.svc
+      .descargarExpedienteBlob(idPost, idExp)
+      .pipe(take(1))
+      .subscribe({
+        next: (blob) => {
+          const objectUrl = URL.createObjectURL(blob);
+          window.open(objectUrl, '_blank');
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+          this.descargando.set(null);
+        },
+        error: () => {
+          this.toast.error(`No se pudo abrir el documento: ${nombreArchivo}`);
+          this.descargando.set(null);
+        },
+      });
+  }
+
+  private cargar(): void {
+    forkJoin({
+      postulantes: this.svc.listarPostulantes(this.idConv, 0, 200),
+      factores: this.svc.listarFactores(this.idConv),
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ postulantes, factores }) => {
+          // Solo factores CURRICULAR padre (subcriterios vienen anidados)
+          const padres = factores.filter(
+            (f) => f.etapaEvaluacion === 'CURRICULAR' && !f.idFactorPadre,
+          );
+          this.factoresPadre.set(padres);
+
+          // Aplanar subcriterios para los inputs
+          const subcritFlat: SubcriterioEval[] = padres.flatMap((padre) =>
+            (padre.subcriterios ?? []).map((sub) => ({
+              idFactor: sub.idFactor,
+              criterio: sub.criterio,
+              puntaje: 0,
+              puntajeMaximo: sub.puntajeMaximo ?? 100,
+              puntajeMinimo: sub.puntajeMinimo ?? 0,
+              idPadre: padre.idFactor,
+            })),
+          );
+
+          /**
+           * En modo resultados (queryParam ?resultados=1) se incluyen APTO y NO_APTO
+           * para que COMITÉ/ORH puedan consultar los resultados de E24.
+           * En modo normal solo se cargan VERIFICADO (lógica original intacta).
+           */
+          const enModoResultados = this.modoResultados();
+          const paraEvaluar = postulantes.content.filter(
+            (p: PostulacionSeleccion) =>
+              enModoResultados
+                ? ['VERIFICADO', 'APTO', 'NO_APTO'].includes(p.estado)
+                : p.estado === 'VERIFICADO',
+          );
+
+          this.entradas.set(
+            paraEvaluar.map((p: PostulacionSeleccion) => ({
+              idPostulacion: p.idPostulacion,
+              nombre: p.postulante.nombreCompleto,
+              /**
+               * Para APTO/NO_APTO: pre-poblar con puntajeCurricular registrado.
+               * Para VERIFICADO: 0 (aún sin evaluar).
+               */
+              totalCache: (p.estado === 'APTO' || p.estado === 'NO_APTO')
+                ? (p.puntajeCurricular ?? 0)
+                : 0,
+              estado: p.estado,
+              expandido: false,
+              documentos: [],
+              cargandoDocs: false,
+              subcriterios: subcritFlat.map((s) => ({ ...s })),
+            })),
+          );
+          this.loading.set(false);
+        },
+        error: () => {
+          this.toast.error('No se pudo cargar los datos de evaluación.');
+          this.loading.set(false);
+        },
+      });
+  }
+
+  /** Genera y descarga el PDF de resultados curriculares (E24-PDF) */
+  protected publicarResultados(): void {
+    if (this.publicando()) return;
+    this.publicando.set(true);
+    this.svc
+      .publicarResultadosCurricular(this.idConv)
+      .pipe(take(1))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULT-CURRICULAR-CONV-${this.idConv}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.publicando.set(false);
+          this.toast.success('Resultados E24 publicados. PDF descargado.');
+        },
+        error: () => {
+          this.publicando.set(false);
+          this.toast.error('No se pudo publicar los resultados E24.');
+        },
+      });
+  }
+
+  protected evaluar(): void {
+    if (!this.puedeEnviar()) return;
+
+    this.enviando.set(true);
+
+    const req = {
+      evaluaciones: this.entradas().map((e) => ({
+        idPostulacion: e.idPostulacion,
+        factores: e.subcriterios.map((s) => ({
+          idFactor: s.idFactor,
+          puntaje: Number(s.puntaje),
+          observacion: '',
+        })),
+      })),
+    };
+
+    this.svc
+      .evalCurricular(this.idConv, req as Parameters<typeof this.svc.evalCurricular>[1])
+      .pipe(
+        timeout(20000),
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.enviando.set(false)),
+      )
+      .subscribe({
+        next: (res) => {
+          this.resultado.set(res);
+          this.toast.success(
+            `Evaluación registrada: ${res?.totalAptos ?? 0} APTOS, ${res?.totalNoAptos ?? 0} NO APTOS`,
+          );
+        },
+        error: (err: unknown) => {
+          if (err instanceof TimeoutError) {
+            this.toast.error('El servidor tardó demasiado en responder. Revise el backend.');
+          } else {
+            this.toast.error('Error al registrar la evaluación curricular.');
+          }
+        },
+      });
+  }
+}

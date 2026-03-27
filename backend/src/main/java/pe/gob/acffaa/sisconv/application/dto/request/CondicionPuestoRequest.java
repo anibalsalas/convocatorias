@@ -27,4 +27,29 @@ public class CondicionPuestoRequest {
 
     @Size(max = 1000, message = "Otras condiciones no debe exceder 1000 caracteres")
     private String otrasCondiciones;
+
+    // ── Campos V16: horario, modalidad y tipo de inicio ──
+
+    /** Formato HH:MM. Ej: "08:30" */
+    @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$",
+             message = "Horario de inicio debe tener formato HH:MM (ej: 08:30)")
+    private String horarioInicio;
+
+    /** Formato HH:MM. Ej: "17:00" */
+    @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$",
+             message = "Horario de fin debe tener formato HH:MM (ej: 17:00)")
+    private String horarioFin;
+
+    @Size(max = 100, message = "Días laborales no debe exceder 100 caracteres")
+    private String diasLaborales;
+
+    /** PRESENCIAL, REMOTO o SEMIPRESENCIAL */
+    @Pattern(regexp = "^(PRESENCIAL|REMOTO|SEMIPRESENCIAL)$",
+             message = "Modalidad debe ser PRESENCIAL, REMOTO o SEMIPRESENCIAL")
+    private String modalidadServicio;
+
+    /** INMEDIATO, FECHA_FIJA o A_LA_FIRMA */
+    @Pattern(regexp = "^(INMEDIATO|FECHA_FIJA|A_LA_FIRMA)$",
+             message = "Tipo de inicio debe ser INMEDIATO, FECHA_FIJA o A_LA_FIRMA")
+    private String tipoInicioContrato;
 }

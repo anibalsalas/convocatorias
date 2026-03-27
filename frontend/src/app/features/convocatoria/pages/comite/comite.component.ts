@@ -36,6 +36,12 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
         <a routerLink="/sistema/convocatoria" class="btn-ghost">← Volver</a>
       </app-page-header>
 
+      @if (modoLectura) {
+        <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          Solo lectura — la convocatoria ya fue publicada. No se pueden realizar cambios.
+        </div>
+      }
+
       @if (loading()) {
         <div class="card text-center py-12 text-gray-400">Cargando...</div>
       } @else {
@@ -65,7 +71,8 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
             </div>
           </div>
 
-          <!-- Tarjeta de captura única (agregar / editar miembro) -->
+          <!-- Tarjeta de captura única (agregar / editar miembro) — solo en modo edición -->
+          @if (!modoLectura) {
           <div class="card space-y-4">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-gray-800 text-sm uppercase tracking-wide">
@@ -107,8 +114,14 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                 <label class="label-field">Correo institucional <span class="text-red-500">*</span></label>
                 <input formControlName="email" class="input-field" maxlength="100"
                   placeholder="usuario@acffaa.gob.pe" type="email" />
-                @if (captureForm.controls['email'].touched && captureForm.controls['email'].invalid) {
-                  <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido</span>
+                @if (captureForm.controls['email'].touched && captureForm.controls['email'].errors) {
+                  @if (captureForm.controls['email'].errors['required']) {
+                    <span class="text-xs text-red-500">El correo institucional es obligatorio.</span>
+                  } @else if (captureForm.controls['email'].errors['pattern']) {
+                    <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido.</span>
+                  } @else if (captureForm.controls['email'].errors['maxlength']) {
+                    <span class="text-xs text-red-500">Máximo 100 caracteres.</span>
+                  }
                 }
               </div>
 
@@ -117,12 +130,14 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                   <input type="checkbox" formControlName="esTitular" />
                   Titular
                 </label>
-                <button type="submit" class="btn-primary text-sm mb-2" [disabled]="savingMiembro()">
+                <button type="submit" class="btn-primary text-sm mb-2"
+                        [disabled]="savingMiembro() || captureForm.invalid">
                   {{ savingMiembro() ? 'Guardando...' : (editandoMiembro() ? 'Actualizar' : 'Agregar') }}
                 </button>
               </div>
             </form>
           </div>
+          } <!-- fin @if (!modoLectura) -->
 
           <!-- Tabla dinámica de miembros existentes -->
           <div class="card space-y-4">
@@ -160,20 +175,24 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                       <td class="px-3 py-2 text-xs text-gray-600 font-mono">{{ m.email || '—' }}</td>
                       <td class="px-3 py-2 text-center">
                         <div class="flex justify-center gap-1">
-                          <button class="btn-ghost text-xs text-blue-600" (click)="onEditarMiembro(m)" title="Editar">
-                            Editar
-                          </button>
-                          <button class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(m)" title="Eliminar">
-                            Eliminar
-                          </button>
-                          <button class="btn-ghost text-xs transition-colors"
-                            [disabled]="notificandoId() === m.idMiembroComite || !m.email"
-                            [class.text-green-500]="m.fechaUltNotificacion"
-                            [class.text-gray-400]="!m.fechaUltNotificacion"
-                            [title]="buildTooltipNotificar(m)"
-                            (click)="onNotificarMiembro(m)">
-                            {{ notificandoId() === m.idMiembroComite ? '⟳' : '✉' }}
-                          </button>
+                          @if (!modoLectura) {
+                            <button class="btn-ghost text-xs text-blue-600" (click)="onEditarMiembro(m)" title="Editar">
+                              Editar
+                            </button>
+                            <button class="btn-ghost text-xs text-red-600" (click)="onConfirmarEliminar(m)" title="Eliminar">
+                              Eliminar
+                            </button>
+                            <button class="btn-ghost text-xs transition-colors"
+                              [disabled]="notificandoId() === m.idMiembroComite || !m.email"
+                              [class.text-green-500]="m.fechaUltNotificacion"
+                              [class.text-gray-400]="!m.fechaUltNotificacion"
+                              [title]="buildTooltipNotificar(m)"
+                              (click)="onNotificarMiembro(m)">
+                              {{ notificandoId() === m.idMiembroComite ? '⟳' : '✉' }}
+                            </button>
+                          } @else {
+                            <span class="text-xs text-gray-400">—</span>
+                          }
                         </div>
                       </td>
                     </tr>
@@ -216,27 +235,31 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
           }
 
           <div class="flex items-center justify-between gap-3 flex-wrap">
-            <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'cronograma']" class="btn-ghost">
+            <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'cronograma']"
+               [queryParams]="modoLectura ? { modo: 'lectura' } : null"
+               class="btn-ghost">
               ← Volver a cronograma
             </a>
-            <div class="flex gap-3">
-              @if (muestraBotonNotificar()) {
-                <button type="button" class="btn-primary"
-                  [disabled]="savingNotificar() || !comiteEstructuraConformada()"
-                  [title]="comiteEstructuraConformada() ? 'Notificar al comité' : 'Requiere Pdte., Sec. y Vocal'"
-                  (click)="onNotificarComite()">
-                  {{ savingNotificar() ? 'Notificando...' : 'Notificar a Comité' }}
-                </button>
-              }
-              <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']"
-                class="btn-primary"
-                [class.opacity-50]="!puedeIrAFactores()"
-                [class.pointer-events-none]="!puedeIrAFactores()"
-                [attr.aria-disabled]="!puedeIrAFactores()"
-                [title]="puedeIrAFactores() ? 'Ir a Factores' : 'Requiere mínimo 3 miembros con Pdte., Sec. y Vocal'">
-                Continuar a Factores →
-              </a>
-            </div>
+            @if (!modoLectura) {
+              <div class="flex gap-3">
+                @if (muestraBotonNotificar()) {
+                  <button type="button" class="btn-primary"
+                    [disabled]="savingNotificar() || !comiteEstructuraConformada()"
+                    [title]="comiteEstructuraConformada() ? 'Notificar al comité' : 'Requiere Pdte., Sec. y Vocal'"
+                    (click)="onNotificarComite()">
+                    {{ savingNotificar() ? 'Notificando...' : 'Notificar a Comité' }}
+                  </button>
+                }
+                <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']"
+                  class="btn-primary"
+                  [class.opacity-50]="!puedeIrAFactores()"
+                  [class.pointer-events-none]="!puedeIrAFactores()"
+                  [attr.aria-disabled]="!puedeIrAFactores()"
+                  [title]="puedeIrAFactores() ? 'Ir a Factores' : 'Requiere mínimo 3 miembros con Pdte., Sec. y Vocal'">
+                  Continuar a Factores →
+                </a>
+              </div>
+            }
           </div>
         }
 
@@ -251,16 +274,25 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
               <div>
                 <label class="label-field">N° Resolución <span class="text-red-500">*</span></label>
                 <input [formControl]="ctrlResolucion" class="input-field" maxlength="80"
-                  placeholder="Ej. R-001-2026-ACFFAA" />
-                @if (ctrlResolucion.touched && ctrlResolucion.invalid) {
-                  <span class="text-xs text-red-500">Obligatorio</span>
+                  placeholder="Ej. R-001-2026-ACFFAA"
+                  (input)="sanitizarResolucion($event)" />
+                @if (ctrlResolucion.touched && ctrlResolucion.errors) {
+                  @if (ctrlResolucion.errors['required']) {
+                    <span class="text-xs text-red-500">Ingrese el N° de resolución.</span>
+                  } @else if (ctrlResolucion.errors['pattern']) {
+                    <span class="text-xs text-red-500">Solo letras, números y guiones (–).</span>
+                  }
                 }
               </div>
               <div>
                 <label class="label-field">Fecha designación <span class="text-red-500">*</span></label>
-                <input [formControl]="ctrlFechaDesignacion" type="date" class="input-field" />
-                @if (ctrlFechaDesignacion.touched && ctrlFechaDesignacion.invalid) {
-                  <span class="text-xs text-red-500">Obligatorio</span>
+                <input [formControl]="ctrlFechaDesignacion" type="date" class="input-field" [attr.max]="hoy" />
+                @if (ctrlFechaDesignacion.touched && ctrlFechaDesignacion.errors) {
+                  @if (ctrlFechaDesignacion.errors['required']) {
+                    <span class="text-xs text-red-500">Seleccione la fecha de designación.</span>
+                  } @else if (ctrlFechaDesignacion.errors['maxDate']) {
+                    <span class="text-xs text-red-500">La fecha de designación no puede ser futura.</span>
+                  }
                 }
               </div>
             </div>
@@ -274,7 +306,8 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                 <div>
                   <label class="label-field">Nombres completos <span class="text-red-500">*</span></label>
                   <input formControlName="nombresCompletos" class="input-field" maxlength="200"
-                    placeholder="Nombres y apellidos completos" />
+                    placeholder="Nombres y apellidos completos"
+                    (input)="sanitizarNombre($event, captureForm.controls['nombresCompletos'])" />
                   @if (captureForm.controls['nombresCompletos'].touched && captureForm.controls['nombresCompletos'].invalid) {
                     <span class="text-xs text-red-500">Obligatorio</span>
                   }
@@ -283,7 +316,8 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                 <div>
                   <label class="label-field">Cargo</label>
                   <input formControlName="cargo" class="input-field" maxlength="200"
-                    placeholder="Ej. Director de RRHH" />
+                    placeholder="Ej. Director de RRHH"
+                    (input)="sanitizarNombre($event, captureForm.controls['cargo'])" />
                 </div>
 
                 <div>
@@ -300,8 +334,14 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                   <label class="label-field">Correo institucional <span class="text-red-500">*</span></label>
                   <input formControlName="email" class="input-field" maxlength="100"
                     placeholder="usuario@acffaa.gob.pe" type="email" />
-                  @if (captureForm.controls['email'].touched && captureForm.controls['email'].invalid) {
-                    <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido</span>
+                  @if (captureForm.controls['email'].touched && captureForm.controls['email'].errors) {
+                    @if (captureForm.controls['email'].errors['required']) {
+                      <span class="text-xs text-red-500">El correo institucional es obligatorio.</span>
+                    } @else if (captureForm.controls['email'].errors['pattern']) {
+                      <span class="text-xs text-red-500">Debe ser un correo &#64;acffaa.gob.pe válido.</span>
+                    } @else if (captureForm.controls['email'].errors['maxlength']) {
+                      <span class="text-xs text-red-500">Máximo 100 caracteres.</span>
+                    }
                   }
                 </div>
 
@@ -310,7 +350,7 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                     <input type="checkbox" formControlName="esTitular" />
                     Titular
                   </label>
-                  <button type="submit" class="btn-primary text-sm mb-2">
+                  <button type="submit" class="btn-primary text-sm mb-2" [disabled]="captureForm.invalid">
                     Agregar a lista
                   </button>
                 </div>
@@ -435,6 +475,7 @@ export class ComiteComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly idConvocatoria = Number(this.route.snapshot.paramMap.get('id'));
+  readonly modoLectura = this.route.snapshot.queryParamMap.get('modo') === 'lectura';
   readonly convocatoria = signal<ConvocatoriaResponse | null>(null);
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -490,7 +531,7 @@ export class ComiteComponent {
 
   // ── Formulario de captura única (compartido entre batch y CRUD) ──
   readonly captureForm = this.fb.group({
-    nombresCompletos: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
+    nombresCompletos: this.fb.nonNullable.control('', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]),
     cargo: this.fb.control<string | null>(null),
     rolComite: this.fb.nonNullable.control('VOCAL', Validators.required),
     esTitular: this.fb.nonNullable.control(true),
@@ -502,8 +543,21 @@ export class ComiteComponent {
   });
 
   // ── Controles de cabecera para el batch ──
-  readonly ctrlResolucion = this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(80)]);
-  readonly ctrlFechaDesignacion = this.fb.nonNullable.control('', Validators.required);
+  readonly ctrlResolucion = this.fb.nonNullable.control('', [
+    Validators.required,
+    Validators.maxLength(80),
+    Validators.pattern(/^[A-Z0-9\-]+$/),
+  ]);
+  readonly ctrlFechaDesignacion = this.fb.nonNullable.control('', [
+    Validators.required,
+    (control: any) => {
+      if (!control.value) return null;
+      return control.value > new Date().toISOString().substring(0, 10) ? { maxDate: true } : null;
+    },
+  ]);
+
+  /** Fecha máxima aceptada para la fecha de designación (hoy) */
+  readonly hoy = new Date().toISOString().substring(0, 10);
 
   // Signals reactivos del status de los controles (para que computed() los detecte)
   private readonly resolucionStatus = toSignal(
@@ -538,11 +592,31 @@ export class ComiteComponent {
   // ═══════════════════════════════════════════════
 
   onAgregarALista(): void {
+    this.globalError.set('');
     if (this.captureForm.invalid) {
       this.captureForm.markAllAsTouched();
       return;
     }
     const v = this.captureForm.getRawValue();
+    const lista = this.batchMiembros();
+
+    // Guard 1: rol único — PRESIDENTE y SECRETARIO solo puede haber uno
+    const rolesUnicos = ['PRESIDENTE', 'SECRETARIO'];
+    if (rolesUnicos.includes(v.rolComite) && lista.some(m => m.rolComite === v.rolComite)) {
+      const label = v.rolComite === 'PRESIDENTE' ? 'Presidente' : 'Secretario';
+      this.globalError.set(`Ya existe un ${label} en la lista. Solo puede haber uno por comité.`);
+      this.toast.warning(`Ya existe un ${label} en el comité.`);
+      return;
+    }
+
+    // Guard 2: email duplicado
+    const emailNorm = v.email.trim().toLowerCase();
+    if (lista.some(m => m.email?.toLowerCase() === emailNorm)) {
+      this.globalError.set('Este correo institucional ya está registrado en la lista.');
+      this.toast.warning('Correo duplicado en la lista del comité.');
+      return;
+    }
+
     this.batchMiembros.update(list => [...list, {
       idUsuario: null,
       nombresCompletos: v.nombresCompletos.trim(),
@@ -552,6 +626,22 @@ export class ComiteComponent {
       email: v.email.trim(),
     }]);
     this.captureForm.reset({ nombresCompletos: '', cargo: null, rolComite: 'VOCAL', esTitular: true, email: '' });
+  }
+
+  sanitizarNombre(event: Event, control: any): void {
+    const input = event.target as HTMLInputElement;
+    const limpio = input.value
+      .replace(/[^A-Za-záéíóúÁÉÍÓÚàèìòùÀÈÌÒÙâêîôûÂÊÎÔÛäëïöüÄËÏÖÜñÑ ]/g, '')
+      .toUpperCase();
+    input.value = limpio;
+    control.setValue(limpio, { emitEvent: false });
+  }
+
+  sanitizarResolucion(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const limpio = input.value.replace(/[^A-Za-z0-9\-]/g, '').toUpperCase().slice(0, 80);
+    input.value = limpio;
+    this.ctrlResolucion.setValue(limpio, { emitEvent: false });
   }
 
   quitarDeLista(index: number): void {

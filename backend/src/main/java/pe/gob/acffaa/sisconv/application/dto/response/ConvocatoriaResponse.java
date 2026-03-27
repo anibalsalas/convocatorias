@@ -48,6 +48,36 @@ public class ConvocatoriaResponse {
     private Boolean tieneActaFirmada;
     private Boolean basesGeneradas;
 
+    // Flag E24 — ORH publicó resultados de evaluación curricular
+    private Boolean resultadosCurricularPublicados;
+
+    // Flag E25 — ORH notificó al COMITÉ que los códigos anónimos están listos
+    private Boolean notificacionCodigosEnviada;
+
+    // Flag E26 — COMITÉ publicó resultados de evaluación técnica
+    private Boolean resultadosTecnicosPublicados;
+
+    // Flag E27 — COMITÉ publicó resultados de entrevista personal
+    private Boolean entrevistaPublicada;
+
+    // Flag E27 — COMITÉ notificó a ORH que la entrevista está lista para E28/E31
+    private Boolean notificacionEntrevistaEnviada;
+
+    // Flag E14 — COMITÉ notificó a ORH que el acta está firmada y la convocatoria lista para publicar
+    private Boolean notificacionActaEnviada;
+
+    // Flag E28 — ORH ejecutó bonificaciones RF-15 (gate para habilitar E29/E31)
+    private Boolean bonificacionesCalculadas;
+
+    // Contador de postulantes en estado REGISTRADO (pendientes de verificar E19) — solo PUBLICADA
+    private Integer postulantesRegistrados;
+
+    // Contador de postulantes en estado VERIFICADO (pasaron E20, listos para E24) — solo EN_SELECCION
+    private Integer postulantesVerificados;
+
+    // Contador de postulantes en estado APTO (pasaron E24, listos para E25 códigos anónimos) — solo EN_SELECCION
+    private Integer postulantesAptos;
+
     // Mensaje transaccional
     private String mensaje;
 

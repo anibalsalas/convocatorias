@@ -48,6 +48,10 @@ public class Postulacion {
     @Column(name = "FECHA_VERIFICACION_DL")
     private LocalDateTime fechaVerificacionDl;
 
+    /** Observación del evaluador ORH al registrar la verificación D.L. 1451 — trazabilidad SERVIR/OCI */
+    @Column(name = "OBSERVACION_DL", length = 500)
+    private String observacionDl;
+
     @Column(name = "PUNTAJE_CURRICULAR", precision = 5, scale = 2)
     private BigDecimal puntajeCurricular;
 

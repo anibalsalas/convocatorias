@@ -10,6 +10,7 @@ import { StatusBadgeComponent } from '@shared/components/status-badge/status-bad
 import { DatePeruPipe } from '@shared/pipes/date-peru.pipe';
 import { AuthService } from '@core/auth/auth.service';
 import { ConvocatoriaEditarModalComponent } from '../convocatoria-editar-modal/convocatoria-editar-modal.component';
+import { NotificacionService } from '@features/notificaciones/services/notificacion.service';
 
 @Component({
   selector: 'app-convocatoria-list',
@@ -77,7 +78,21 @@ import { ConvocatoriaEditarModalComponent } from '../convocatoria-editar-modal/c
             } @else {
               @for (conv of convocatorias(); track conv.idConvocatoria) {
                 <tr class="border-t hover:bg-gray-50 transition-colors">
-                  <td class="px-3 py-2 font-mono text-xs font-semibold text-[#1F2133]">{{ conv.numeroConvocatoria }}</td>
+                  <td class="px-3 py-2 font-mono text-xs font-semibold text-[#1F2133]">
+                    {{ conv.numeroConvocatoria }}
+                    @if (hasRole('ROLE_COMITE') && conv.estado === 'EN_ELABORACION' && tienePendiente(conv.idConvocatoria)) {
+                      <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 ml-1 align-middle"
+                            title="Tiene tareas pendientes: elaborar factores y generar acta de instalación">
+                        ● Pendiente
+                      </span>
+                    }
+                    @if ((hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) && conv.estado === 'EN_ELABORACION' && conv.notificacionActaEnviada) {
+                      <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 ml-1 align-middle"
+                            title="El Comité notificó que el acta está firmada. Esta convocatoria está lista para su publicación.">
+                        ● Listo para publicar
+                      </span>
+                    }
+                  </td>
                   <td class="px-3 py-2 text-gray-800 text-sm">
                     <div class="font-medium">{{ conv.descripcion }}</div>
                     @if (conv.objetoContratacion) {
@@ -129,17 +144,41 @@ import { ConvocatoriaEditarModalComponent } from '../convocatoria-editar-modal/c
                               aria-label="Publicar deshabilitado">🚀</span>
                           }
                         }
-                        <!-- COMITÉ: Factores, Acta (siempre visibles) -->
+                        <!-- COMITÉ: Factores y Acta — solo si ORH registró el comité -->
                         @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
-                            class="btn-ghost text-xs" title="Factores" aria-label="Ir a factores">⚖️</a>
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'acta']"
-                            class="btn-ghost text-xs" title="Acta" aria-label="Ir a acta">📋</a>
+                          @if (hasRole('ROLE_ADMIN') || comiteRegistrado(conv.idConvocatoria)) {
+                            <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
+                              class="btn-ghost text-xs" title="Factores" aria-label="Ir a factores">⚖️</a>
+                            <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'acta']"
+                              class="btn-ghost text-xs" title="Acta" aria-label="Ir a acta">📋</a>
+                          } @else {
+                            <span class="btn-ghost text-xs opacity-40 cursor-not-allowed"
+                              title="Requiere que ORH registre el comité" aria-label="Factores deshabilitado">⚖️</span>
+                            <span class="btn-ghost text-xs opacity-40 cursor-not-allowed"
+                              title="Requiere que ORH registre el comité" aria-label="Acta deshabilitada">📋</span>
+                          }
                         }
                       }
                       @if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
-                        <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'bases']"
-                          class="btn-ghost text-xs" title="Ver bases PDF">📄</a>
+                        <!-- Solo lectura: mismos iconos que EN_ELABORACION pero sin Publicar -->
+                        @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'cronograma']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Cronograma (solo lectura)">📅</a>
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'comite']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Comité (solo lectura)">👥</a>
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'bases']"
+                            class="btn-ghost text-xs" title="Ver bases PDF">📄</a>
+                        }
+                        @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Factores (solo lectura)">⚖️</a>
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'acta']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Acta (solo lectura)">📋</a>
+                        }
                       }
                       @if (conv.estado === 'DESIERTA' || conv.estado === 'CANCELADA') {
                         <span class="text-xs text-gray-400">Sin acciones</span>
@@ -158,6 +197,7 @@ import { ConvocatoriaEditarModalComponent } from '../convocatoria-editar-modal/c
 })
 export class ConvocatoriaListComponent implements OnInit {
   private readonly convocatoriaService = inject(ConvocatoriaService);
+  private readonly notificacionService = inject(NotificacionService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly auth = inject(AuthService);
   readonly convocatorias = signal<ConvocatoriaResponse[]>([]);
@@ -166,6 +206,8 @@ export class ConvocatoriaListComponent implements OnInit {
   readonly totalPages = signal(0);
   readonly totalElements = signal(0);
   readonly modalIdConvocatoria = signal<number | null>(null);
+  readonly idsPendienteComite = signal<Set<number>>(new Set());
+  readonly idsConComiteRegistrado = signal<Set<number>>(new Set());
 
   filtroEstado = '';
 
@@ -176,12 +218,42 @@ export class ConvocatoriaListComponent implements OnInit {
     if (actualizado) this.loadPage();
   }
 
-
   hasRole(role: string): boolean {
     return this.auth.hasAnyRole([role]);
   }
-  
-  ngOnInit(): void { this.loadPage(); }
+
+  tienePendiente(idConvocatoria: number): boolean {
+    return this.idsPendienteComite().has(idConvocatoria);
+  }
+
+  comiteRegistrado(idConvocatoria: number): boolean {
+    return this.idsConComiteRegistrado().has(idConvocatoria);
+  }
+
+  ngOnInit(): void {
+    this.loadPage();
+    if (this.hasRole('ROLE_COMITE')) {
+      this.loadPendientesComite();
+    }
+  }
+
+  private loadPendientesComite(): void {
+    this.notificacionService
+      .listar({ page: 0, size: 100, sort: 'fechaCreacion,desc' })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          const notifs = response.data.content.filter(n => n.idConvocatoria != null);
+          this.idsConComiteRegistrado.set(
+            new Set<number>(notifs.map(n => n.idConvocatoria as number))
+          );
+          this.idsPendienteComite.set(
+            new Set<number>(notifs.filter(n => n.estado === 'ENVIADA').map(n => n.idConvocatoria as number))
+          );
+        },
+        error: () => { /* silencioso */ },
+      });
+  }
 
   onFilterChange(): void { this.page.set(0); this.loadPage(); }
 

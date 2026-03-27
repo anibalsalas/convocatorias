@@ -121,6 +121,10 @@ export class ConvocatoriaService {
     return this.api.put<ActaResponse>(`${this.path}/${id}/acta-instalacion/cargar`, fd);
   }
 
+  notificarActaOrh(id: number): Observable<ApiResponse<ConvocatoriaResponse>> {
+    return this.api.post<ConvocatoriaResponse>(`${this.path}/${id}/notificar-acta-orh`, {});
+  }
+
   aprobar(id: number, req: AprobarConvocatoriaRequest): Observable<ApiResponse<ConvocatoriaResponse>> {
     return this.api.put<ConvocatoriaResponse>(`${this.path}/${id}/aprobar`, req);
   }

@@ -12,4 +12,7 @@ public class EvaluacionCurricularRepositoryAdapter implements IEvaluacionCurricu
     @Override public EvaluacionCurricular save(EvaluacionCurricular e){return jpa.save(e);}
     @Override public List<EvaluacionCurricular> saveAll(List<EvaluacionCurricular> l){return jpa.saveAll(l);}
     @Override public List<EvaluacionCurricular> findByPostulacionId(Long id){return jpa.findByPostulacionIdPostulacion(id);}
+    @Override public void deleteByPostulacionId(Long idPost){
+        jpa.deleteByPostulacionIdPostulacion(idPost);
+    }
 }

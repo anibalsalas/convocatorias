@@ -5,6 +5,7 @@ import jakarta.transaction.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import pe.gob.acffaa.sisconv.application.dto.request.UsuarioRequest;
+import pe.gob.acffaa.sisconv.application.dto.request.UsuarioUpdateRequest;
 import pe.gob.acffaa.sisconv.application.dto.response.UsuarioResponse;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
 import pe.gob.acffaa.sisconv.domain.exception.DomainException;
@@ -38,6 +39,10 @@ public class UsuarioService {
 
     public List<UsuarioResponse> listarActivos() {
         return usuarioRepo.findAllActive().stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    public List<UsuarioResponse> listarTodos() {
+        return usuarioRepo.findAll().stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     public UsuarioResponse obtenerPorId(Long id) {
@@ -79,6 +84,47 @@ public class UsuarioService {
         auditPort.registrar("TBL_USUARIO", usuario.getIdUsuario(), "CREAR",
                 null, "ACTIVO", httpReq, "Roles: " + req.getRolesCodigosRol());
 
+        return toResponse(usuario);
+    }
+
+    @Transactional
+    public UsuarioResponse actualizar(Long id, UsuarioUpdateRequest req, HttpServletRequest httpReq) {
+        Usuario usuario = usuarioRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+
+        usuario.setNombres(req.getNombres());
+        usuario.setApellidos(req.getApellidos());
+        usuario.setEmail(req.getEmail());
+        usuario.setIdArea(req.getIdArea());
+
+        // Desactivar roles actuales y reasignar
+        if (usuario.getRoles() != null) {
+            usuario.getRoles().forEach(ur -> ur.setEstado("INACTIVO"));
+        }
+        if (req.getRolesCodigosRol() != null) {
+            for (String codigoRol : req.getRolesCodigosRol()) {
+                Rol rol = rolRepo.findByCodigoRol(codigoRol)
+                        .orElseThrow(() -> new DomainException("Rol no encontrado: " + codigoRol));
+                UsuarioRol ur = UsuarioRol.builder().usuario(usuario).rol(rol).build();
+                usuario.getRoles().add(ur);
+            }
+        }
+
+        usuario = usuarioRepo.save(usuario);
+        auditPort.registrar("TBL_USUARIO", id, "ACTUALIZAR",
+                null, usuario.getEstado(), httpReq, "Roles: " + req.getRolesCodigosRol());
+        return toResponse(usuario);
+    }
+
+    @Transactional
+    public UsuarioResponse activar(Long id, HttpServletRequest httpReq) {
+        Usuario usuario = usuarioRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        String estadoAnterior = usuario.getEstado();
+        usuario.setEstado("ACTIVO");
+        usuarioRepo.save(usuario);
+        auditPort.registrar("TBL_USUARIO", id, "ACTIVAR",
+                estadoAnterior, "ACTIVO", httpReq, null);
         return toResponse(usuario);
     }
 

@@ -3,10 +3,12 @@ package pe.gob.acffaa.sisconv.presentation.controller;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.mapper.ContratoMapper;
 import pe.gob.acffaa.sisconv.domain.model.Notificacion;
@@ -66,5 +68,29 @@ public class NotificacionController {
 
         Page<NotificacionResponse> response = page.map(mapper::toNotificacionResponse);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    /**
+     * E44-LEIDA — PATCH /notificaciones/{id}/marcar-leida
+     * Marca la notificación como LEIDA (descartada por el usuario).
+     * Solo el destinatario puede marcarla.
+     */
+    @PatchMapping("/{id}/marcar-leida")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<NotificacionResponse>> marcarLeida(@PathVariable Long id) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        Usuario user = usuarioRepo.findByUsername(username).orElse(null);
+
+        pe.gob.acffaa.sisconv.domain.model.Notificacion notif = notifRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Notificación no encontrada"));
+
+        if (user == null || !user.getIdUsuario().equals(
+                notif.getUsuarioDestino() != null ? notif.getUsuarioDestino().getIdUsuario() : null)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+        }
+
+        notif.setEstado("LEIDA");
+        notifRepo.save(notif);
+        return ResponseEntity.ok(ApiResponse.ok(mapper.toNotificacionResponse(notif)));
     }
 }

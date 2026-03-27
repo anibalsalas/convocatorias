@@ -2,10 +2,15 @@ package pe.gob.acffaa.sisconv.presentation.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +19,8 @@ import pe.gob.acffaa.sisconv.application.dto.request.*;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.service.PostulacionService;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -24,6 +31,9 @@ import java.util.List;
 public class PostulacionController {
 
     private final PostulacionService service;
+
+    @Value("${app.storage.base-path:${user.dir}/sisconv-uploads}")
+    private String storagePath;
 
     public PostulacionController(PostulacionService service) {
         this.service = service;
@@ -51,18 +61,43 @@ public class PostulacionController {
 
 
     @GetMapping("/postulaciones/{id}")
-    @PreAuthorize("hasRole('POSTULANTE')")
+    @PreAuthorize("hasAnyRole('POSTULANTE','ADMIN','ORH','COMITE')")
     public ResponseEntity<ApiResponse<PostulacionResponse>> obtenerMiPostulacion(
             @PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(service.obtenerMiPostulacion(id)));
     }
 
-    /** Portal postulante — expediente por postulación */
+    /** Expediente por postulación — POSTULANTE ve el propio, COMITÉ/ORH/ADMIN ven cualquiera */
     @GetMapping("/postulaciones/{id}/expediente")
-    @PreAuthorize("hasRole('POSTULANTE')")
+    @PreAuthorize("hasAnyRole('POSTULANTE','COMITE','ORH','ADMIN')")
     public ResponseEntity<ApiResponse<List<ExpedienteResponse>>> listarExpediente(
             @PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(service.listarExpediente(id)));
+    }
+
+    /** B3 — Descarga streaming de un documento del expediente para revisión del COMITÉ/ORH */
+    @GetMapping("/postulaciones/{idPost}/expediente/{idExp}/descargar")
+    @PreAuthorize("hasAnyRole('COMITE','ORH','ADMIN')")
+    public ResponseEntity<Resource> descargarExpediente(
+            @PathVariable Long idPost,
+            @PathVariable Long idExp) {
+        ExpedienteResponse meta = service.obtenerMetaExpediente(idPost, idExp);
+        try {
+            Path rutaReal = Paths.get(storagePath).resolve(meta.getRutaArchivo()).normalize();
+            Resource resource = new UrlResource(rutaReal.toUri());
+            if (!resource.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+            String contentType = meta.getNombreArchivo().toLowerCase().endsWith(".pdf")
+                    ? "application/pdf" : "application/octet-stream";
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=\"" + meta.getNombreArchivo() + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     /** E18 — POST /postulaciones/{id}/expediente. CU-13. Multipart */
@@ -92,6 +127,17 @@ public class PostulacionController {
             @PathVariable Long id,
             HttpServletRequest http) {
         PostulacionResponse resp = service.finalizarExpediente(id, http);
+        return ResponseEntity.ok(ApiResponse.ok(resp, resp.getMensaje()));
+    }
+
+    /** Rollback Administrativo — POST /postulaciones/{id}/rollback-admin. Solo ADMIN/ORH. Sustento obligatorio. */
+    @PostMapping("/postulaciones/{id}/rollback-admin")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
+    public ResponseEntity<ApiResponse<PostulacionResponse>> rollbackAdmin(
+            @PathVariable Long id,
+            @Valid @RequestBody RollbackAdminRequest request,
+            HttpServletRequest http) {
+        PostulacionResponse resp = service.rollbackAdmin(id, request, http);
         return ResponseEntity.ok(ApiResponse.ok(resp, resp.getMensaje()));
     }
 

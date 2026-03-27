@@ -24,7 +24,9 @@ import pe.gob.acffaa.sisconv.domain.repository.IConvocatoriaRepository;
 import pe.gob.acffaa.sisconv.domain.repository.ICronogramaRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IFactorEvaluacionRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IReglaMotorRepository;
+import pe.gob.acffaa.sisconv.domain.repository.IPostulacionRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
+import pe.gob.acffaa.sisconv.domain.repository.ICuadroMeritosRepository;
 import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaMiembroComiteRepository;
 
 import java.time.LocalDate;
@@ -46,9 +48,11 @@ class ConvocatoriaServiceTest {
     @Mock private IFactorEvaluacionRepository factorRepo;
     @Mock private IActaRepository actaRepo;
     @Mock private IReglaMotorRepository reglaRepo;
+    @Mock private IPostulacionRepository postRepo;
     @Mock private IAuditPort auditPort;
     @Mock private NotificacionService notificacionService;
     @Mock private JpaMiembroComiteRepository miembroJpaRepo;
+    @Mock private ICuadroMeritosRepository meritoRepo;
     @Mock private HttpServletRequest httpReq;
 
     private ConvocatoriaService service;
@@ -64,10 +68,12 @@ class ConvocatoriaServiceTest {
                 factorRepo,
                 actaRepo,
                 reglaRepo,
+                postRepo,
                 mapper,
                 auditPort,
                 notificacionService,
-                miembroJpaRepo
+                miembroJpaRepo,
+                meritoRepo
         );
 
         lenient().when(httpReq.getRemoteAddr()).thenReturn("127.0.0.1");

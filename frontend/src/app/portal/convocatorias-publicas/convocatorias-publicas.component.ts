@@ -5,6 +5,8 @@ import {
   signal,
   computed,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DestroyRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { toObservable } from '@angular/core/rxjs-interop';
@@ -21,6 +23,10 @@ interface ConvPublica {
   descripcion: string;
   objetoContratacion: string;
   estado: string;
+  /** Label derivado del backend: "NUEVO" si publicada hace ≤30 días, si no el estado real. */
+  estadoPortal?: string;
+  /** Denominación del puesto — viene de PerfilPuesto.denominacionPuesto vía ConvocatoriaPublicaResponse. */
+  nombrePuesto?: string;
   anio: number;
   unidadOrganica: string;
   fuenteFinanciamiento: string;
@@ -31,6 +37,14 @@ interface ConvPublica {
   fechaResultado: string;
   linkPortalAcffaa: string;
   linkTalentoPeru: string;
+  /** true si E24 fue ejecutado y los resultados curriculares están disponibles para descarga */
+  tieneResultadosCurriculares?: boolean;
+  /** true si el COMITÉ publicó los resultados de evaluación técnica E26 */
+  tieneResultadosTecnicos?: boolean;
+  /** true si ORH presionó "Publicar Resultados" en E27 */
+  tieneResultadosEntrevista?: boolean;
+  /** true si la convocatoria está FINALIZADA (E31 ejecutado) */
+  tieneResultadoFinal?: boolean;
 }
 
 interface PageResult {
@@ -48,6 +62,10 @@ interface PageResult {
 })
 export class ConvocatoriasPublicasComponent {
   private api = inject(ApiService);
+  private destroyRef = inject(DestroyRef);
+
+  /** IDs cuya descarga está en curso — evita doble click. */
+  readonly descargando = signal<Set<number>>(new Set());
 
   readonly query = signal({
     page: 0,
@@ -114,5 +132,117 @@ export class ConvocatoriasPublicasComponent {
 
   reload(): void {
     this.query.update((q) => ({ ...q }));
+  }
+
+  /** Descarga el PDF de resultados curriculares desde el endpoint público sin autenticación. */
+  descargarResultadosCurricular(id: number, numeroConvocatoria: string): void {
+    if (this.descargando().has(id)) return;
+    this.descargando.update((s) => new Set(s).add(id));
+    this.api.getBlob(`/convocatorias/publicas/${id}/resultados-curricular-pdf`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULT-CURRICULAR-${numeroConvocatoria}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+        error: () => {
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+      });
+  }
+
+  /** Descarga el PDF de resultado final desde el endpoint público sin autenticación. */
+  descargarResultadoFinal(id: number, numeroConvocatoria: string): void {
+    if (this.descargando().has(id)) return;
+    this.descargando.update((s) => new Set(s).add(id));
+    this.api.getBlob(`/convocatorias/publicas/${id}/resultados-pdf`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULTADO-FINAL-${numeroConvocatoria}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+        error: () => {
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+      });
+  }
+
+  /** Descarga el PDF de resultados de entrevista desde el endpoint público sin autenticación. */
+  descargarResultadosEntrevista(id: number, numeroConvocatoria: string): void {
+    if (this.descargando().has(id)) return;
+    this.descargando.update((s) => new Set(s).add(id));
+    this.api.getBlob(`/convocatorias/publicas/${id}/resultados-entrevista-pdf`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULT-ENTREVISTA-${numeroConvocatoria}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+        error: () => {
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+      });
+  }
+
+  /** Descarga el PDF de resultados técnicos desde el endpoint público sin autenticación. */
+  descargarResultadosTecnica(id: number, numeroConvocatoria: string): void {
+    if (this.descargando().has(id)) return;
+    this.descargando.update((s) => new Set(s).add(id));
+    this.api.getBlob(`/convocatorias/publicas/${id}/resultados-tecnica-pdf`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULT-TECNICA-${numeroConvocatoria}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+        error: () => {
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+      });
+  }
+
+  /** Descarga el PDF de bases desde el endpoint público sin autenticación. */
+  descargarBases(id: number, numeroConvocatoria: string): void {
+    if (this.descargando().has(id)) return;
+
+    this.descargando.update((s) => new Set(s).add(id));
+
+    this.api.getBlob(`/convocatorias/publicas/${id}/bases-pdf`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `BASES-${numeroConvocatoria}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+        error: () => {
+          this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
+        },
+      });
   }
 }
