@@ -69,7 +69,7 @@ interface AvisoNotificacion {
       <!-- Avisos COMITÉ: postulantes APTO listos para Evaluación Curricular E24 -->
       @if (esComite()) {
         @for (c of convocatorias(); track c.idConvocatoria) {
-          @if (c.estado === 'EN_SELECCION' && c.postulantesVerificados && c.postulantesVerificados > 0) {
+          @if (c.estado === 'EN_SELECCION' && c.postulantesVerificados && c.postulantesVerificados > 0 && !c.resultadosCurricularPublicados) {
             <div class="flex items-start gap-2 bg-blue-50 border border-blue-300 rounded-md px-3 py-2 text-xs text-blue-800">
               <span class="mt-0.5">🔔</span>
               <span>

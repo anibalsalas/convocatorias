@@ -11,7 +11,17 @@ import { NgClass } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router, ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
+
+function mayorDeEdadValidator(control: AbstractControl): ValidationErrors | null {
+  const value = control.value as string;
+  if (!value) return null;
+  const nacimiento = new Date(value);
+  if (isNaN(nacimiento.getTime())) return null;
+  const hoy = new Date();
+  const cumple18 = new Date(nacimiento.getFullYear() + 18, nacimiento.getMonth(), nacimiento.getDate());
+  return cumple18 <= hoy ? null : { menorDeEdad: true };
+}
 import { PostulantePerfilService } from '@core/services/postulante-perfil.service';
 import { ToastService } from '@core/services/toast.service';
 import { UbigeoService } from '@core/services/ubigeo.service';
@@ -173,7 +183,10 @@ function isValidSection(value: string | null): value is MiPerfilSectionKey {
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label class="label-field text-[11px]">Fecha de nacimiento (*)</label>
-                      <input [formControl]="form.controls.fechaNacimiento" type="date" class="input-field text-[11px]" />
+                      <input [formControl]="form.controls.fechaNacimiento" type="date" [max]="fechaMaxPermitida" class="input-field text-[11px]" />
+                      @if (form.controls.fechaNacimiento.errors?.['menorDeEdad'] && form.controls.fechaNacimiento.touched) {
+                        <p class="mt-1 text-[10px] text-red-600">Debe ser mayor de 18 años.</p>
+                      }
                     </div>
                     <div>
                       <label class="label-field text-[11px]">Estado civil (*)</label>
@@ -238,14 +251,17 @@ function isValidSection(value: string | null): value is MiPerfilSectionKey {
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label class="label-field text-[11px]">Nro. RUC (*)</label>
-                      <input [formControl]="form.controls.ruc" class="input-field text-[11px]" maxlength="11" inputmode="numeric" />
+                      <input [formControl]="form.controls.ruc" class="input-field text-[11px]" maxlength="11" inputmode="numeric" (input)="filterOnlyDigits($event, form.controls.ruc)" />
                       @if (form.controls.ruc.touched && form.controls.ruc.errors) {
                         <span class="error-text text-[10px]">Ingrese 11 dígitos</span>
                       }
                     </div>
                     <div>
                       <label class="label-field text-[11px]">Nro. Brevete</label>
-                      <input [formControl]="form.controls.nroBrevete" class="input-field text-[11px] uppercase" maxlength="20" />
+                      <input [formControl]="form.controls.nroBrevete" class="input-field text-[11px]" maxlength="20" inputmode="numeric" (input)="filterOnlyDigits($event, form.controls.nroBrevete)" />
+                      @if (form.controls.nroBrevete.touched && form.controls.nroBrevete.errors?.['pattern']) {
+                        <p class="mt-1 text-[10px] text-red-600">Solo se permiten dígitos.</p>
+                      }
                     </div>
                     <div>
                       <label class="label-field text-[11px]">Categoría (*)</label>
@@ -259,14 +275,20 @@ function isValidSection(value: string | null): value is MiPerfilSectionKey {
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label class="label-field text-[11px]">Teléfono celular (*)</label>
-                      <input [formControl]="form.controls.telefono" class="input-field text-[11px]" maxlength="20" />
+                      <input [formControl]="form.controls.telefono" class="input-field text-[11px]" maxlength="20" inputmode="numeric" (input)="filterOnlyDigits($event, form.controls.telefono)" />
                       @if (form.controls.telefono.touched && form.controls.telefono.errors) {
-                        <span class="error-text text-[10px]">Ingrese teléfono celular</span>
+                        <p class="mt-1 text-[10px] text-red-600">
+                          @if (form.controls.telefono.errors['required']) { Ingrese teléfono celular. }
+                          @else if (form.controls.telefono.errors['pattern']) { Solo se permiten dígitos. }
+                        </p>
                       }
                     </div>
                     <div>
                       <label class="label-field text-[11px]">Teléfono fijo</label>
-                      <input [formControl]="form.controls.telefonoFijo" class="input-field text-[11px]" maxlength="20" />
+                      <input [formControl]="form.controls.telefonoFijo" class="input-field text-[11px]" maxlength="20" inputmode="numeric" (input)="filterOnlyDigits($event, form.controls.telefonoFijo)" />
+                      @if (form.controls.telefonoFijo.touched && form.controls.telefonoFijo.errors?.['pattern']) {
+                        <p class="mt-1 text-[10px] text-red-600">Solo se permiten dígitos.</p>
+                      }
                     </div>
                     <div>
                       <label class="label-field text-[11px]">Correo electrónico (*)</label>
@@ -468,6 +490,23 @@ export class MiPerfilComponent implements OnInit {
     return this.form.controls.tieneColegiatura.value === true;
   }
 
+  filterOnlyDigits(event: Event, control: AbstractControl): void {
+    const input = event.target as HTMLInputElement;
+    const clean = input.value.replace(/\D/g, '');
+    if (input.value !== clean) {
+      input.value = clean;
+      control.setValue(clean, { emitEvent: true });
+    }
+  }
+
+  get fechaMaxPermitida(): string {
+    const hoy = new Date();
+    const anio = hoy.getFullYear() - 18;
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoy.getDate()).padStart(2, '0');
+    return `${anio}-${mes}-${dia}`;
+  }
+
   get ubigeoCompleto(): boolean {
     const dep = this.form.controls.departamentoCodigo.value;
     const prov = this.form.controls.provinciaCodigo.value;
@@ -479,18 +518,18 @@ export class MiPerfilComponent implements OnInit {
     nombres: ['', [Validators.required, Validators.maxLength(150)]],
     apellidoPaterno: ['', [Validators.required, Validators.maxLength(100)]],
     apellidoMaterno: ['', [Validators.required, Validators.maxLength(100)]],
-    fechaNacimiento: ['', [Validators.required]],
+    fechaNacimiento: ['', [Validators.required, mayorDeEdadValidator]],
     estadoCivil: ['', [Validators.required, Validators.maxLength(20)]],
     genero: ['', [Validators.required, Validators.maxLength(1)]],
-    telefono: ['', [Validators.required, Validators.maxLength(20)]],
-    telefonoFijo: ['', [Validators.maxLength(20)]],
+    telefono: ['', [Validators.required, Validators.maxLength(20), Validators.pattern(/^\d+$/)]],
+    telefonoFijo: ['', [Validators.maxLength(20), Validators.pattern(/^\d+$/)]],
     email: ['', [Validators.required, Validators.email, Validators.maxLength(200)]],
     direccion: ['', [Validators.required, Validators.maxLength(500)]],
     departamentoCodigo: ['', [Validators.required]],
     provinciaCodigo: ['', [Validators.required]],
     distritoCodigo: ['', [Validators.required]],
     ruc: ['', [Validators.required, Validators.pattern(/^\d{11}$/)]],
-    nroBrevete: ['', [Validators.maxLength(20)]],
+    nroBrevete: ['', [Validators.maxLength(20), Validators.pattern(/^\d+$/)]],
     categoriaBrevete: ['NO APLICA', [Validators.required, Validators.maxLength(30)]],
     tieneColegiatura: [false],
     tieneHabilitacionProf: [false],

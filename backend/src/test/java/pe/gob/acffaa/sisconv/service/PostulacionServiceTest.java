@@ -18,6 +18,7 @@ import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.exception.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
+import pe.gob.acffaa.sisconv.domain.repository.IEvaluacionCurricularRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,7 @@ class PostulacionServiceTest {
     @Mock private ITachaRepository tachaRepo;
     @Mock private IUsuarioRepository usuarioRepo;
     @Mock private IAuditPort audit;
+    @Mock private IEvaluacionCurricularRepository evalCurrRepo;
     @Mock private HttpServletRequest http;
     @Mock private NotificacionService notificacionService;
 
@@ -57,7 +59,8 @@ class PostulacionServiceTest {
                 usuarioRepo,
                 audit,
                 mapper,
-                notificacionService
+                notificacionService,
+                evalCurrRepo
         );
 
         lenient().when(http.getRemoteAddr()).thenReturn("127.0.0.1");

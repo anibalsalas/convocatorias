@@ -34,4 +34,9 @@ public class ExpedienteVirtualRepositoryAdapter implements IExpedienteVirtualRep
     public long countByPostulacionId(Long idPostulacion) {
         return jpa.countByPostulacionIdPostulacion(idPostulacion);
     }
+
+    @Override
+    public void deleteById(Long id) {
+        jpa.deleteById(id);
+    }
 }

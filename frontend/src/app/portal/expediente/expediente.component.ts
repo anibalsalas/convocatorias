@@ -65,6 +65,7 @@ export class ExpedienteComponent implements OnInit {
   readonly uploading = signal(false);
   readonly finalizing = signal(false);
   readonly showFinalizeModal = signal(false);
+  readonly deleting = signal<number | null>(null);
 
   readonly postulacion = signal<PostulacionItem | null>(null);
   readonly expedienteItems = signal<ExpedienteItem[]>([]);
@@ -80,6 +81,16 @@ export class ExpedienteComponent implements OnInit {
   readonly selectedFileHash = signal<string>('');
 
   readonly documentTypeOptions = DOCUMENT_TYPE_OPTIONS;
+
+  /** Set de tipos ya cargados en el expediente — para bloquear duplicados */
+  readonly tiposYaUsados = computed(() =>
+    new Set(this.expedienteItems().map(i => i.tipoDocumento))
+  );
+
+  /** Opciones del select filtradas: excluye tipos ya presentes en el expediente */
+  readonly documentTypeOptionsDisponibles = computed(() =>
+    DOCUMENT_TYPE_OPTIONS.filter(o => !this.tiposYaUsados().has(o.value))
+  );
 
   readonly totalSupportItems = computed(() => {
     const summary = this.supportSummary();
@@ -251,6 +262,12 @@ export class ExpedienteComponent implements OnInit {
           this.clearSelectedFile();
           this.loadExpediente();
           this.loadPostulacion();
+          // Resetear select al primer tipo disponible (excluye el recién subido)
+          const uploadedTipo = this.selectedTipoDocumento();
+          const siguiente = DOCUMENT_TYPE_OPTIONS.find(
+            o => o.value !== uploadedTipo && !this.tiposYaUsados().has(o.value)
+          );
+          if (siguiente) this.selectedTipoDocumento.set(siguiente.value);
         },
         error: () => {
           this.toast.error('No se pudo cargar el archivo al expediente.');
@@ -378,6 +395,29 @@ export class ExpedienteComponent implements OnInit {
     return item.verificado ? 'VERIFICADO' : 'PENDIENTE';
   }
 
+  eliminarDocumento(item: ExpedienteItem): void {
+    const idPost = this.postId();
+    if (!idPost) return;
+
+    this.deleting.set(item.idExpediente);
+    this.postulacionService
+      .eliminarExpediente(idPost, item.idExpediente)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.deleting.set(null)),
+      )
+      .subscribe({
+        next: () => {
+          this.toast.success('Documento eliminado del expediente.');
+          this.loadExpediente();
+          this.loadPostulacion();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.toast.error(err.error?.message || 'No se pudo eliminar el documento.');
+        },
+      });
+  }
+
   private async prepareSelectedFile(file: File | null): Promise<void> {
     if (!file) {
       this.clearSelectedFile();
@@ -392,6 +432,12 @@ export class ExpedienteComponent implements OnInit {
 
     if (!this.isValidFile(file)) {
       this.toast.warning('Solo se permiten archivos PDF, PNG, JPG o JPEG.');
+      this.clearSelectedFile();
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      this.toast.error('El archivo no debe superar 10 MB.');
       this.clearSelectedFile();
       return;
     }

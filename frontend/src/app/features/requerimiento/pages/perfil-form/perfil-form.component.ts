@@ -118,7 +118,7 @@ export class PerfilFormComponent implements OnInit {
   readonly experienciaTipoOptions: string[] = ['GENERAL', 'ESPECÍFICA'];
   readonly unidadTiempoOptions: string[] = ['MESES', 'AÑOS'];
   readonly nivelMinimoOptions: string[] = [
-    'Auxiliar o asistente',
+    'Auxiliar / Asistente /Tecnico',
     'Analista',
     'Especialista',
     'Coordinador / Supervisor',
@@ -356,6 +356,15 @@ export class PerfilFormComponent implements OnInit {
     this.applyConocimientoFormRules();
   }
 
+  filtrarHoras(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const soloDigitos = input.value.replace(/[^0-9]/g, '').slice(0, 3);
+    const num = soloDigitos === '' ? null : Number(soloDigitos);
+    input.value = num !== null ? String(num) : '';
+    this.conocimientoForm.controls.horas.setValue(num, { emitEvent: false });
+    this.conocimientoForm.controls.horas.updateValueAndValidity();
+  }
+
   editarConocimiento(index: number): void {
     const c = this.conocimientosGuardados()[index];
     this.conocimientoForm.patchValue({
@@ -575,7 +584,7 @@ export class PerfilFormComponent implements OnInit {
     if (domainApplies || type === 'TÉCNICO') {
       hoursControl.clearValidators();
     } else {
-      hoursControl.setValidators([Validators.required, Validators.min(1)]);
+      hoursControl.setValidators([Validators.required, Validators.min(0), Validators.max(999)]);
     }
     hoursControl.updateValueAndValidity({ emitEvent: false });
     levelControl.updateValueAndValidity({ emitEvent: false });

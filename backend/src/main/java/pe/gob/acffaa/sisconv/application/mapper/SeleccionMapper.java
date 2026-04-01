@@ -3,6 +3,8 @@ package pe.gob.acffaa.sisconv.application.mapper;
 import org.springframework.stereotype.Component;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class SeleccionMapper {
@@ -47,6 +49,7 @@ public class SeleccionMapper {
                 .nombrePuesto(nombrePuesto)
                 .postulante(toPostulanteResponse(post.getPostulante()))
                 .estado(post.getEstado())
+                .admisionRf07(post.getAdmisionRf07())
                 .codigoAnonimo(post.getCodigoAnonimo())
                 .verificacionRnssc(post.getVerificacionRnssc())
                 .verificacionRegiprec(post.getVerificacionRegiprec())
@@ -63,6 +66,22 @@ public class SeleccionMapper {
                 .fechaConfirmacionExpediente(post.getFechaConfirmacionExpediente())
                 .mensaje(mensaje)
                 .build();
+    }
+
+    /** Sobrecarga que enriquece el response con el desglose de scores por subcriterio curricular */
+    public PostulacionResponse toPostulacionResponse(Postulacion post, List<EvaluacionCurricular> evals, String mensaje) {
+        PostulacionResponse r = toPostulacionResponse(post, mensaje);
+        if (r != null && evals != null && !evals.isEmpty()) {
+            r.setEvaluacionesCurriculares(
+                evals.stream()
+                    .map(e -> PostulacionResponse.EvalCurricularItem.builder()
+                            .idFactor(e.getFactor().getIdFactor())
+                            .puntajeObtenido(e.getPuntajeObtenido())
+                            .build())
+                    .collect(Collectors.toList())
+            );
+        }
+        return r;
     }
 
     public TachaResponse toTachaResponse(Tacha t, String mensaje) {

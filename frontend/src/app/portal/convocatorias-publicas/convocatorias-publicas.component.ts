@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DestroyRef } from '@angular/core';
+import { Dialog } from '@angular/cdk/dialog';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { toObservable } from '@angular/core/rxjs-interop';
@@ -16,6 +17,8 @@ import { switchMap, catchError, concat, of, map, timeout } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import { StatusBadgeComponent } from '@shared/components/status-badge/status-badge.component';
 import { Page } from '@shared/models/pagination.model';
+
+import { ComunicadosPublicosDialogComponent } from './comunicados-publicos-dialog.component';
 
 interface ConvPublica {
   idConvocatoria: number;
@@ -45,6 +48,8 @@ interface ConvPublica {
   tieneResultadosEntrevista?: boolean;
   /** true si la convocatoria está FINALIZADA (E31 ejecutado) */
   tieneResultadoFinal?: boolean;
+  /** true si ORH publicó al menos un comunicado oficial para esta convocatoria */
+  tieneComunicados?: boolean;
 }
 
 interface PageResult {
@@ -63,6 +68,7 @@ interface PageResult {
 export class ConvocatoriasPublicasComponent {
   private api = inject(ApiService);
   private destroyRef = inject(DestroyRef);
+  private dialog = inject(Dialog);
 
   /** IDs cuya descarga está en curso — evita doble click. */
   readonly descargando = signal<Set<number>>(new Set());
@@ -220,6 +226,20 @@ export class ConvocatoriasPublicasComponent {
           this.descargando.update((s) => { const n = new Set(s); n.delete(id); return n; });
         },
       });
+  }
+
+  /** Abre el diálogo CDK con comunicados oficiales (overlay global, foco y Escape). */
+  verComunicados(id: number, numeroConvocatoria: string): void {
+    this.dialog.open(ComunicadosPublicosDialogComponent, {
+      data: { idConvocatoria: id, numeroConvocatoria },
+      width: 'min(36rem, 94vw)',
+      maxWidth: '94vw',
+      maxHeight: '90vh',
+      autoFocus: 'first-tabbable',
+      ariaLabel: `Comunicados oficiales de la convocatoría ${numeroConvocatoria}`,
+      panelClass: 'comunicados-dialog-panel',
+      backdropClass: 'comunicados-dialog-backdrop',
+    });
   }
 
   /** Descarga el PDF de bases desde el endpoint público sin autenticación. */

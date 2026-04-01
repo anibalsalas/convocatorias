@@ -8,6 +8,11 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
+      // El login maneja sus propios errores inline — no mostrar Toast duplicado
+      if (req.url.includes('/auth/login')) {
+        return throwError(() => error);
+      }
+
       const apiMessage =
         (typeof error.error?.error === 'string' && error.error.error.trim()
           ? error.error.error

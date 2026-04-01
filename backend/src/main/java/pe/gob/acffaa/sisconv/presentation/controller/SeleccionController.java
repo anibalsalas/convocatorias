@@ -7,6 +7,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import pe.gob.acffaa.sisconv.application.dto.request.*;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
+import pe.gob.acffaa.sisconv.application.service.ComunicadoService;
 import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.application.service.SeleccionService;
 import java.util.List;
@@ -16,9 +17,29 @@ import java.util.List;
 public class SeleccionController {
     private final SeleccionService service;
     private final NotificacionService notificacionService;
-    public SeleccionController(SeleccionService s, NotificacionService ns) {
+    private final ComunicadoService comunicadoService;
+
+    public SeleccionController(SeleccionService s, NotificacionService ns, ComunicadoService cs) {
         this.service = s;
         this.notificacionService = ns;
+        this.comunicadoService = cs;
+    }
+
+    // ── E-COM: Comunicados oficiales DS 083-2019-PCM Art. 10 ─────────────────
+
+    @PostMapping("/{id}/comunicados")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
+    public ResponseEntity<ApiResponse<ComunicadoResponse>> publicarComunicado(
+            @PathVariable Long id, @Valid @RequestBody ComunicadoRequest req) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                comunicadoService.publicar(id, req), "Comunicado publicado"));
+    }
+
+    @GetMapping("/{id}/comunicados")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH','COMITE')")
+    public ResponseEntity<ApiResponse<List<ComunicadoResponse>>> listarComunicados(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(comunicadoService.listar(id)));
     }
 
     @PostMapping("/{id}/eval-curricular")

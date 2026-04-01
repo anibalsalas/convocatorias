@@ -89,4 +89,14 @@ public class ConvocatoriaRepositoryAdapter implements IConvocatoriaRepository {
     public boolean existsByIdRequerimiento(Long idRequerimiento) {
         return jpa.existsByRequerimientoIdRequerimiento(idRequerimiento);
     }
+
+    @Override
+    public long countPendientesComite(String username) {
+        return jpa.countPendientesComite(username);
+    }
+
+    @Override
+    public long countPendientesPublicar() {
+        return jpa.countPendientesPublicar();
+    }
 }

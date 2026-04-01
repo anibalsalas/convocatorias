@@ -148,15 +148,19 @@
         } @else {
           <div class="field-block">
             <label class="field-label">Tipo de documento</label>
-            <select
-              class="field-input"
-              [ngModel]="selectedTipoDocumento()"
-              (ngModelChange)="selectedTipoDocumento.set($event)"
-            >
-              @for (option of documentTypeOptions; track option.value) {
-                <option [value]="option.value">{{ option.label }}</option>
-              }
-            </select>
+            @if (documentTypeOptionsDisponibles().length === 0) {
+              <p class="support-text">Ya cargó todos los tipos de documento disponibles.</p>
+            } @else {
+              <select
+                class="field-input"
+                [ngModel]="selectedTipoDocumento()"
+                (ngModelChange)="selectedTipoDocumento.set($event)"
+              >
+                @for (option of documentTypeOptionsDisponibles(); track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            }
           </div>
 
           <div
@@ -255,6 +259,9 @@
                 <th>Estado</th>
                 <th>Verificación</th>
                 <th>Fecha carga</th>
+                @if (!expedienteFinalizado()) {
+                  <th>Acciones</th>
+                }
               </tr>
             </thead>
 
@@ -267,6 +274,23 @@
                   <td>{{ item.estado }}</td>
                   <td>{{ verificationLabel(item) }}</td>
                   <td>{{ formatDate(item.fechaCarga) }}</td>
+                  @if (!expedienteFinalizado()) {
+                    <td>
+                      @if (!item.verificado) {
+                        <button
+                          type="button"
+                          class="btn-outline-action"
+                          [disabled]="deleting() === item.idExpediente"
+                          (click)="eliminarDocumento(item)"
+                          title="Eliminar documento"
+                        >
+                          {{ deleting() === item.idExpediente ? '...' : 'Eliminar' }}
+                        </button>
+                      } @else {
+                        <span style="font-size: 0.75rem; color: #6b7280;">Verificado</span>
+                      }
+                    </td>
+                  }
                 </tr>
               }
             </tbody>

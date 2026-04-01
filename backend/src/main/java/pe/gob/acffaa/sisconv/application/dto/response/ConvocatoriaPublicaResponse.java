@@ -64,4 +64,10 @@ public class ConvocatoriaPublicaResponse {
      * Campo derivado — refleja ESTADO = 'FINALIZADA' de TBL_CONVOCATORIA.
      */
     private boolean tieneResultadoFinal;
+
+    /**
+     * true si ORH publicó al menos un comunicado oficial para esta convocatoria.
+     * DS 083-2019-PCM Art. 10 — aclaraciones, fe de erratas, ampliaciones de plazo.
+     */
+    private boolean tieneComunicados;
 }
