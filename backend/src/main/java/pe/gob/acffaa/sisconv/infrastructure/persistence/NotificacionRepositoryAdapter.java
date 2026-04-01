@@ -18,4 +18,5 @@ public class NotificacionRepositoryAdapter implements INotificacionRepository {
     @Override public Page<Notificacion> findByUsuarioId(Long iu, Pageable p) { return jpa.findByUsuarioDestinoIdUsuario(iu, p); }
     @Override public Page<Notificacion> findByUsuarioIdAndEstado(Long iu, String e, Pageable p) { return jpa.findByUsuarioDestinoIdUsuarioAndEstado(iu, e, p); }
     @Override public List<Notificacion> findByConvocatoriaIdAndEstado(Long idConvocatoria, String estado) { return jpa.findByConvocatoria_IdConvocatoriaAndEstado(idConvocatoria, estado); }
+    @Override public List<Notificacion> findEnviadasByConvocatoriaYRol(Long idConvocatoria, String codigoRol) { return jpa.findEnviadasByConvocatoriaYRol(idConvocatoria, codigoRol); }
 }

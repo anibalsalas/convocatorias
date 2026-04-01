@@ -87,12 +87,12 @@ public class ResultadosCurricularPdfGenerator {
         sec.setSpacingAfter(6);
         doc.add(sec);
 
-        PdfPTable tbl = new PdfPTable(4);
+        PdfPTable tbl = new PdfPTable(5);
         tbl.setWidthPercentage(100);
-        tbl.setWidths(new float[]{0.6f, 4.5f, 2f, 1.8f});
+        tbl.setWidths(new float[]{0.5f, 3.5f, 1.8f, 1.5f, 3.5f});
         tbl.setHeaderRows(1);
 
-        String[] hdrs = {"N°", "Apellidos y Nombres", "Puntaje Curricular", "Resultado"};
+        String[] hdrs = {"N°", "Apellidos y Nombres", "Puntaje Curricular", "Resultado", "Observaciones"};
         for (String h : hdrs) {
             PdfPCell cell = new PdfPCell(new Phrase(h, TABLE_HEADER));
             cell.setBackgroundColor(HEADER_BG);
@@ -110,8 +110,9 @@ public class ResultadosCurricularPdfGenerator {
             String nombre = pt.getApellidoPaterno() + " " + pt.getApellidoMaterno() + ", " + pt.getNombres();
             String puntaje = Optional.ofNullable(p.getPuntajeCurricular())
                     .map(BigDecimal::toPlainString).orElse("—");
-            String resultado = apto ? "APTO" : "NO_APTO";
-            addRow(tbl, bg, String.valueOf(row + 1), nombre, puntaje, resultado);
+            String resultado = apto ? "APTO" : "NO APTO";
+            String observacion = apto ? "—" : observacionNoApto(p);
+            addRow(tbl, bg, String.valueOf(row + 1), nombre, puntaje, resultado, observacion);
             row++;
         }
         doc.add(tbl);
@@ -155,6 +156,22 @@ public class ResultadosCurricularPdfGenerator {
     private static boolean esAptoPorPuntaje(Postulacion p, BigDecimal umbral) {
         BigDecimal puntaje = p.getPuntajeCurricular();
         return puntaje != null && puntaje.compareTo(umbral) >= 0;
+    }
+
+    /**
+     * Observación para NO APTO — derivada de flags DL1451 + RF07 persistidos en TBL_POSTULACION.
+     * Misma lógica que la función frontend observacionParaNoApto().
+     * No requiere columna nueva en BD — lectura pura de campos existentes.
+     */
+    private static String observacionNoApto(Postulacion p) {
+        boolean conSanciones = "CON_SANCIONES".equals(p.getVerificacionRnssc())
+                            || "CON_SANCIONES".equals(p.getVerificacionRegiprec());
+        boolean noAdmitido   = "NO_ADMITIDO".equals(p.getAdmisionRf07());
+        if (conSanciones && noAdmitido)
+            return "No pasó el Filtro DL 1451 y No cumple con los Requisitos Mínimos exigidos por el perfil";
+        if (!conSanciones && noAdmitido)
+            return "No cumplió con los Requisitos Mínimos exigidos por el perfil";
+        return "No pasó con el Filtro de D.L. 1451 - Verificación Obligatoria de Inhabilitaciones";
     }
 
     private String safe(String val) { return val != null ? val : "—"; }

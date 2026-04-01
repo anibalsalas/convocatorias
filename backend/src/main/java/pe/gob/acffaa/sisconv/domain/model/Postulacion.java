@@ -39,6 +39,11 @@ public class Postulacion {
     @Column(name = "CODIGO_ANONIMO", length = 20)
     private String codigoAnonimo;
 
+    /** Admisión RF-07 — decisión ORH sobre el Filtro de Requisitos Mínimos.
+     *  NULL=pendiente | ADMITIDO=pasa a E24 | NO_ADMITIDO=bloqueado */
+    @Column(name = "ADMISION_RF07", length = 20)
+    private String admisionRf07;
+
     @Column(name = "VERIFICACION_RNSSC", length = 30)
     private String verificacionRnssc;
 

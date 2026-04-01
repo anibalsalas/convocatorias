@@ -121,6 +121,18 @@ public class PostulacionController {
     }
 
 
+    /** E18-DEL — DELETE /postulaciones/{idPost}/expediente/{idExp}.
+     *  Solo el postulante dueño, expediente no finalizado, documento no verificado. */
+    @DeleteMapping("/postulaciones/{idPost}/expediente/{idExp}")
+    @PreAuthorize("hasAnyRole('ADMIN','POSTULANTE')")
+    public ResponseEntity<ApiResponse<Void>> eliminarExpediente(
+            @PathVariable Long idPost,
+            @PathVariable Long idExp,
+            HttpServletRequest http) {
+        service.eliminarExpediente(idPost, idExp, http);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Documento eliminado del expediente"));
+    }
+
     @PostMapping("/postulaciones/{id}/finalizar-expediente")
     @PreAuthorize("hasRole('POSTULANTE')")
     public ResponseEntity<ApiResponse<PostulacionResponse>> finalizarExpediente(
@@ -159,6 +171,17 @@ public class PostulacionController {
             @PathVariable Long id,
             HttpServletRequest http) {
         PostulacionResponse resp = service.filtroRequisitos(id, http);
+        return ResponseEntity.ok(ApiResponse.ok(resp, resp.getMensaje()));
+    }
+
+    /** E20-Individual — POST /postulaciones/{id}/aplicar-filtro. CU-15 individual */
+    @PostMapping("/postulaciones/{id}/aplicar-filtro")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
+    public ResponseEntity<ApiResponse<PostulacionResponse>> aplicarFiltroIndividual(
+            @PathVariable Long id,
+            @Valid @RequestBody AplicarFiltroRequest request,
+            HttpServletRequest http) {
+        PostulacionResponse resp = service.aplicarFiltroIndividual(id, request, http);
         return ResponseEntity.ok(ApiResponse.ok(resp, resp.getMensaje()));
     }
 

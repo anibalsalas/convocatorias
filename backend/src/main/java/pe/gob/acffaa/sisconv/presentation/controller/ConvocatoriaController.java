@@ -58,11 +58,14 @@ public class ConvocatoriaController {
 
     private final ConvocatoriaService convService;
     private final IUsuarioRepository usuarioRepo;
+    private final pe.gob.acffaa.sisconv.application.service.ComunicadoService comunicadoService;
 
     public ConvocatoriaController(ConvocatoriaService convService,
-                                   IUsuarioRepository usuarioRepo) {
+                                   IUsuarioRepository usuarioRepo,
+                                   pe.gob.acffaa.sisconv.application.service.ComunicadoService comunicadoService) {
         this.convService = convService;
         this.usuarioRepo = usuarioRepo;
+        this.comunicadoService = comunicadoService;
     }
 
     @GetMapping("/next-number")
@@ -522,6 +525,14 @@ public class ConvocatoriaController {
         return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
     }
 
+    @GetMapping("/publicas/{id}/comunicados")
+    @Operation(summary = "Lista pública de comunicados de una convocatoria",
+            description = "Sin autenticación. DS 083-2019-PCM Art. 10.")
+    public ResponseEntity<ApiResponse<java.util.List<pe.gob.acffaa.sisconv.application.dto.response.ComunicadoResponse>>> listarComunicadosPublico(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(comunicadoService.listarPublico(id)));
+    }
+
     @GetMapping("/publicas")
     @Operation(summary = "Listado público de convocatorias",
             description = "ETAPA6 B5: Tabla tipo Defensoría — convocatorias PUBLICADAS/EN_SELECCION/FINALIZADAS. Sin autenticación.")
@@ -530,6 +541,32 @@ public class ConvocatoriaController {
             @PageableDefault(size = 20, sort = "fechaPublicacion") Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(convService.listarPublicas(anio, pageable)));
     }
+    // ══════════════════════════════════════════════════════════════
+    // Dashboard — count pendientes COMITE
+    // ══════════════════════════════════════════════════════════════
+
+    @GetMapping("/count-pendientes-comite")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMITE')")
+    @Operation(summary = "Contar convocatorias pendientes para el COMITE",
+            description = "Cuenta convocatorias EN_ELABORACION con notificación ENVIADA al usuario actual (para badge dashboard).")
+    public ResponseEntity<ApiResponse<Long>> contarPendientesComite(Authentication auth) {
+        long count = convService.contarPendientesComite(auth.getName());
+        return ResponseEntity.ok(ApiResponse.ok(count));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Dashboard — count pendientes ORH publicar
+    // ══════════════════════════════════════════════════════════════
+
+    @GetMapping("/count-pendientes-publicar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Contar convocatorias listas para publicar (ORH)",
+            description = "Cuenta convocatorias EN_ELABORACION con acta notificada (para badge dashboard ORH).")
+    public ResponseEntity<ApiResponse<Long>> contarPendientesPublicar() {
+        long count = convService.contarPendientesPublicar();
+        return ResponseEntity.ok(ApiResponse.ok(count));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // Utilidades
     // ══════════════════════════════════════════════════════════════

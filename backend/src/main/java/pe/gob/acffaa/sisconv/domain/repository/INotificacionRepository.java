@@ -17,4 +17,6 @@ public interface INotificacionRepository {
     Page<Notificacion> findByUsuarioIdAndEstado(Long idUsuario, String estado, Pageable pageable);
     /** E31 — lectura de notificaciones encoladas (PENDIENTE) para envío asíncrono. */
     List<Notificacion> findByConvocatoriaIdAndEstado(Long idConvocatoria, String estado);
+    /** E14-NOTIF — notificaciones ENVIADA de un rol para una convocatoria (para marcar LEIDA al completar). */
+    List<Notificacion> findEnviadasByConvocatoriaYRol(Long idConvocatoria, String codigoRol);
 }

@@ -351,6 +351,25 @@ public class NotificacionService {
      * envía el correo y actualiza el estado a ENVIADO o FALLIDO.
      * Se llama DESPUÉS de que la TX de Phase 1 haya sido confirmada (llamada desde el controller).
      */
+    /**
+     * E14-NOTIF — Marca como LEIDA todas las notificaciones ENVIADA de un rol para una
+     * convocatoria dada. Se llama al completar el trabajo del COMITE (notificarActaOrh),
+     * para que los badges de lista y dashboard desaparezcan automáticamente.
+     */
+    @Transactional
+    public void marcarLeidasPorConvocatoriaYRol(Long idConvocatoria, String codigoRol) {
+        List<Notificacion> notifs = notificacionRepo.findEnviadasByConvocatoriaYRol(idConvocatoria, codigoRol);
+        if (notifs.isEmpty()) return;
+        LocalDateTime ahora = LocalDateTime.now();
+        for (Notificacion n : notifs) {
+            n.setEstado("LEIDA");
+            n.setLeida(true);
+            n.setFechaLectura(ahora);
+            notificacionRepo.save(n);
+        }
+        log.info("[E14-NOTIF] {} notificacion(es) marcadas LEIDA para conv={} rol={}", notifs.size(), idConvocatoria, codigoRol);
+    }
+
     @Async("emailExecutor")
     public void procesarEnvioAsincrono(Long idConvocatoria) {
         List<Notificacion> pendientes = notificacionRepo.findByConvocatoriaIdAndEstado(idConvocatoria, "PENDIENTE");

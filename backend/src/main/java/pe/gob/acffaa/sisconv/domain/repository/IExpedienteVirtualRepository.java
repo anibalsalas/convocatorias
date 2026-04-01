@@ -10,4 +10,5 @@ public interface IExpedienteVirtualRepository {
     Optional<ExpedienteVirtual> findById(Long id);
     List<ExpedienteVirtual> findByPostulacionId(Long idPostulacion);
     long countByPostulacionId(Long idPostulacion);
+    void deleteById(Long id);
 }

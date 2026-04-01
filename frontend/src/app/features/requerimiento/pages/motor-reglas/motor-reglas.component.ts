@@ -53,15 +53,21 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label class="label-field">Peso Eval. Curricular (%) *</label>
-                <input formControlName="pesoEvalCurricular" type="number" class="input-field" min="1" max="99" step="1" />
+                <input formControlName="pesoEvalCurricular" type="text" inputmode="numeric" maxlength="2"
+                  class="input-field" placeholder="1–99"
+                  (input)="filtrarEntero($event, form.controls.pesoEvalCurricular, 1, 99)" />
               </div>
               <div>
                 <label class="label-field">Peso Eval. Técnica (%) *</label>
-                <input formControlName="pesoEvalTecnica" type="number" class="input-field" min="1" max="99" step="1" />
+                <input formControlName="pesoEvalTecnica" type="text" inputmode="numeric" maxlength="2"
+                  class="input-field" placeholder="1–99"
+                  (input)="filtrarEntero($event, form.controls.pesoEvalTecnica, 1, 99)" />
               </div>
               <div>
                 <label class="label-field">Peso Entrevista (%) *</label>
-                <input formControlName="pesoEntrevista" type="number" class="input-field" min="1" max="99" step="1" />
+                <input formControlName="pesoEntrevista" type="text" inputmode="numeric" maxlength="2"
+                  class="input-field" placeholder="1–99"
+                  (input)="filtrarEntero($event, form.controls.pesoEntrevista, 1, 99)" />
               </div>
             </div>
           </div>
@@ -72,15 +78,21 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label class="label-field">Umbral Curricular *</label>
-                <input formControlName="umbralCurricular" type="number" class="input-field" min="0" step="0.01" />
+                <input formControlName="umbralCurricular" type="text" inputmode="decimal" maxlength="6"
+                  class="input-field" placeholder="0–100"
+                  (input)="filtrarDecimal($event, form.controls.umbralCurricular, 100)" />
               </div>
               <div>
                 <label class="label-field">Umbral Técnica *</label>
-                <input formControlName="umbralTecnica" type="number" class="input-field" min="0" step="0.01" />
+                <input formControlName="umbralTecnica" type="text" inputmode="decimal" maxlength="6"
+                  class="input-field" placeholder="0–100"
+                  (input)="filtrarDecimal($event, form.controls.umbralTecnica, 100)" />
               </div>
               <div>
                 <label class="label-field">Umbral Entrevista *</label>
-                <input formControlName="umbralEntrevista" type="number" class="input-field" min="0" step="0.01" />
+                <input formControlName="umbralEntrevista" type="text" inputmode="decimal" maxlength="6"
+                  class="input-field" placeholder="0–100"
+                  (input)="filtrarDecimal($event, form.controls.umbralEntrevista, 100)" />
               </div>
             </div>
           </div>
@@ -88,7 +100,7 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
           <!-- Criterios curriculares -->
           <div class="card space-y-4">
             <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-gray-800">Criterios de Evaluación Curricular</h3>
+              <h3 class="font-semibold text-gray-800">SubCriterios de Evaluación Curricular</h3>
               <button type="button" (click)="addCriterio()" class="text-sm text-[#1F2133] hover:underline font-medium">+ Agregar criterio</button>
             </div>
 
@@ -103,11 +115,15 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
                   <input [formControl]="getCriterioControl(i, 'criterio')" class="input-field mb-1" placeholder="Ej: Formación académica" />
                 </div>
                 <div class="w-28">
-                  <input [formControl]="getCriterioControl(i, 'puntajeMaximo')" type="number" class="input-field" placeholder="Puntaje" min="0.01" step="0.01" />
+                  <input [formControl]="getCriterioControl(i, 'puntajeMaximo')" type="text" inputmode="decimal"
+                    maxlength="6" class="input-field" placeholder="0–100"
+                    (input)="filtrarDecimal($event, getCriterioControl(i, 'puntajeMaximo'), 100)" />
                   <span class="text-xs text-gray-400">Ptj. máximo</span>
                 </div>
                 <div class="w-24">
-                  <input [formControl]="getCriterioControl(i, 'peso')" type="number" class="input-field" placeholder="Peso" min="0.01" step="0.01" />
+                  <input [formControl]="getCriterioControl(i, 'peso')" type="text" inputmode="decimal"
+                    maxlength="6" class="input-field" placeholder="0–100"
+                    (input)="filtrarDecimal($event, getCriterioControl(i, 'peso'), 100)" />
                   <span class="text-xs text-gray-400">Peso %</span>
                 </div>
                 <button type="button" (click)="removeCriterio(i)" class="btn-ghost text-red-500 text-xs mt-1">✕</button>
@@ -139,12 +155,12 @@ export class MotorReglasComponent implements OnInit {
   saving = signal(false);
 
   form = this.fb.group({
-    pesoEvalCurricular: [30, [Validators.required, Validators.min(1)]],
-    pesoEvalTecnica: [35, [Validators.required, Validators.min(1)]],
-    pesoEntrevista: [35, [Validators.required, Validators.min(1)]],
-    umbralCurricular: [50, [Validators.required, Validators.min(0)]],
-    umbralTecnica: [50, [Validators.required, Validators.min(0)]],
-    umbralEntrevista: [50, [Validators.required, Validators.min(0)]],
+    pesoEvalCurricular: [30, [Validators.required, Validators.min(1), Validators.max(99)]],
+    pesoEvalTecnica: [35, [Validators.required, Validators.min(1), Validators.max(99)]],
+    pesoEntrevista: [35, [Validators.required, Validators.min(1), Validators.max(99)]],
+    umbralCurricular: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
+    umbralTecnica: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
+    umbralEntrevista: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
     criteriosCurriculares: this.fb.array([]),
   });
 
@@ -169,11 +185,29 @@ export class MotorReglasComponent implements OnInit {
     this.form.get('pesoEntrevista')?.valueChanges.subscribe(v => this.pesoEnt.set(v ?? 0));
   }
 
+  filtrarEntero(event: Event, ctrl: FormControl, min: number, max: number): void {
+    const input = event.target as HTMLInputElement;
+    const soloDigitos = input.value.replace(/[^0-9]/g, '').slice(0, 2);
+    const num = soloDigitos === '' ? null : Math.min(Math.max(Number(soloDigitos), min), max);
+    input.value = num !== null ? String(num) : '';
+    ctrl.setValue(num, { emitEvent: true });
+    ctrl.updateValueAndValidity();
+  }
+
+  filtrarDecimal(event: Event, ctrl: FormControl, max: number): void {
+    const input = event.target as HTMLInputElement;
+    const limpio = input.value.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1').slice(0, 6);
+    const num = limpio === '' || limpio === '.' ? null : Math.min(parseFloat(limpio), max);
+    input.value = limpio;
+    ctrl.setValue(num !== null ? num : null, { emitEvent: true });
+    ctrl.updateValueAndValidity();
+  }
+
   addCriterio(): void {
     this.criteriosArray.push(this.fb.group({
       criterio: ['', Validators.required],
-      puntajeMaximo: [0, [Validators.required, Validators.min(0.01)]],
-      peso: [0, [Validators.required, Validators.min(0.01)]],
+      puntajeMaximo: [null, [Validators.required, Validators.min(0.01), Validators.max(100)]],
+      peso: [null, [Validators.required, Validators.min(0.01), Validators.max(100)]],
     }));
   }
 

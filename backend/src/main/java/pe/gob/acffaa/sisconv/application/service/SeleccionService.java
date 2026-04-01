@@ -278,16 +278,20 @@ public class SeleccionService {
                     .puntajeObtenido(ei.getPuntaje()).observacion(ei.getObservacion())
                     .evaluador(evaluador).build());
 
+            String ant = post.getEstado();
             post.setPuntajeTecnica(ei.getPuntaje());
             boolean ok = ei.getPuntaje().compareTo(umbralTecnica) >= 0;
-            // Si NO aprueba tecnica → NO_APTO. Si aprueba → permanece APTO
+            // Si NO aprueba tecnica → NO_APTO. Si aprueba → permanece en su estado actual.
+            // Re-edición: si ya es NO_APTO y sigue reprobando, skip validarTransicion (mismo estado).
             if (!ok) {
-                validarTransicion(post, "NO_APTO");
+                if (!"NO_APTO".equals(ant)) {
+                    validarTransicion(post, "NO_APTO");
+                }
                 post.setEstado("NO_APTO");
             }
             post.setUsuarioModificacion(user());
             postRepo.save(post);
-            audit.registrar("POSTULACION", post.getIdPostulacion(), "EVAL_TECNICA", "APTO", post.getEstado(), http, null);
+            audit.registrar("POSTULACION", post.getIdPostulacion(), "EVAL_TECNICA", ant, post.getEstado(), http, null);
             resultados.add(EvalTecnicaResponse.ResultadoTecItem.builder()
                     .codigoAnonimo(ei.getCodigoAnonimo()).puntaje(ei.getPuntaje())
                     .estado(post.getEstado()).build());
@@ -518,9 +522,15 @@ public class SeleccionService {
     public byte[] publicarResultadosCurricular(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
-        List<Postulacion> aptos  = postRepo.findByConvocatoriaIdAndEstado(idConv, "APTO");
-        List<Postulacion> noAptos = postRepo.findByConvocatoriaIdAndEstado(idConv, "NO_APTO");
-        if (aptos.isEmpty() && noAptos.isEmpty())
+        // Incluye: APTO/NO_APTO/GANADOR/ACCESITARIO/NO_SELECCIONADO (puntaje registrado)
+        // + VERIFICADO con CON_SANCIONES o NO_ADMITIDO (de facto NO_APTO por DL1451/RF07)
+        List<Postulacion> todos = postRepo.findByConvocatoriaId(idConv).stream()
+                .filter(p -> p.getPuntajeCurricular() != null
+                        || "CON_SANCIONES".equals(p.getVerificacionRnssc())
+                        || "CON_SANCIONES".equals(p.getVerificacionRegiprec())
+                        || "NO_ADMITIDO".equals(p.getAdmisionRf07()))
+                .collect(Collectors.toList());
+        if (todos.isEmpty())
             throw new DomainException("No hay resultados de evaluación curricular para publicar");
 
         conv.setResultadosCurricularesPublicados(true);
@@ -545,9 +555,6 @@ public class SeleccionService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             umbralPub = maxPadrePub.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
         }
-        List<Postulacion> todos = new java.util.ArrayList<>();
-        todos.addAll(aptos);
-        todos.addAll(noAptos);
         final BigDecimal umbralPubFinal = umbralPub;
         todos.sort(Comparator
                 .comparing((Postulacion p) -> p.getPuntajeCurricular() != null
@@ -579,14 +586,20 @@ public class SeleccionService {
             umbral = maxPadre.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
         }
         // Todos los postulantes con puntaje curricular registrado
+        // + VERIFICADO con CON_SANCIONES o NO_ADMITIDO (de facto NO_APTO, puntaje=0)
         List<Postulacion> todos = postRepo.findByConvocatoriaId(idConv).stream()
-                .filter(p -> p.getPuntajeCurricular() != null)
+                .filter(p -> p.getPuntajeCurricular() != null
+                        || "CON_SANCIONES".equals(p.getVerificacionRnssc())
+                        || "CON_SANCIONES".equals(p.getVerificacionRegiprec())
+                        || "NO_ADMITIDO".equals(p.getAdmisionRf07()))
                 .collect(Collectors.toList());
         if (todos.isEmpty()) throw new DomainException("No hay resultados de evaluación curricular para esta convocatoria");
         final BigDecimal umbralFinal = umbral;
         todos.sort(Comparator
-                .comparing((Postulacion p) -> p.getPuntajeCurricular().compareTo(umbralFinal) >= 0 ? 0 : 1)
-                .thenComparing(p -> p.getPuntajeCurricular(), Comparator.reverseOrder()));
+                .comparing((Postulacion p) -> Optional.ofNullable(p.getPuntajeCurricular())
+                        .map(pc -> pc.compareTo(umbralFinal) >= 0 ? 0 : 1).orElse(1))
+                .thenComparing(p -> Optional.ofNullable(p.getPuntajeCurricular())
+                        .orElse(BigDecimal.ZERO), Comparator.reverseOrder()));
         return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
     }
 

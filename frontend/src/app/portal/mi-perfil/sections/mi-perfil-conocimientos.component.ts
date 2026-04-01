@@ -252,13 +252,13 @@ import {
                   <div>
                     <label class="label-field text-[11px]">
                       Adjuntar Documento (*)
-                      <span class="text-[9px] text-red-500">(Archivos permitidos: .pdf, máx. 3 MB)</span>
+                      <span class="text-[9px] text-red-500">(Archivos permitidos: .pdf, máx. 10 MB)</span>
                     </label>
                     <input
                       #fileInput
                       type="file"
                       accept="application/pdf,.pdf"
-                      aria-label="Adjuntar documento PDF de sustento (máximo 3 MB)"
+                      aria-label="Adjuntar documento PDF de sustento (máximo 10 MB)"
                       class="block w-full text-[11px] text-gray-700 file:mr-3 file:rounded file:border file:border-gray-300 file:bg-white file:px-2 file:py-1 file:text-[11px]"
                       (change)="onFileSelected($event)"
                     />
@@ -515,7 +515,7 @@ import {
       this.mode.set('list');
     }
   
-    private readonly maxPdfBytes = 3 * 1024 * 1024;
+    private readonly maxPdfBytes = 10 * 1024 * 1024;
 
     onFileSelected(event: Event): void {
       const input = event.target as HTMLInputElement;
@@ -543,8 +543,8 @@ import {
       if (file.size > this.maxPdfBytes) {
         this.selectedFile = null;
         this.currentFileName.set('Ningún archivo seleccionado');
-        this.fileError.set('El archivo no debe superar 3 MB.');
-        this.toast.error('El archivo no debe superar 3 MB.');
+        this.fileError.set('El archivo no debe superar 10 MB.');
+        this.toast.error('El archivo no debe superar 10 MB.');
         input.value = '';
         return;
       }

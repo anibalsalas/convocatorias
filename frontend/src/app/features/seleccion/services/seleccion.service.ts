@@ -24,6 +24,8 @@ import {
   ResolverTachaRequest,
   ExpedienteItem,
   NotificarCodigosResponse,
+  ComunicadoResponse,
+  ComunicadoRequest,
 } from '../models/seleccion.model';
 
 @Injectable({ providedIn: 'root' })
@@ -40,6 +42,101 @@ export class SeleccionService {
     return this.api
       .getPage<PostulacionSeleccion>(`/convocatorias/${idConv}/postulantes`, { page, size })
       .pipe(map((r) => r.data));
+  }
+
+  // ── Dashboard — convocatorias PUBLICADAS con postulantes pendientes E19 ──────
+
+  listarPendientesE19(): Observable<ConvocatoriaSeleccionItem[]> {
+    return this.api
+      .getPage<ConvocatoriaSeleccionItem>(
+        '/convocatorias',
+        { page: 0, size: 100, sort: 'fechaPublicacion,desc' },
+        { estado: 'PUBLICADA' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? []).filter(
+            (c) => c.postulantesRegistrados && c.postulantesRegistrados > 0,
+          ),
+        ),
+      );
+  }
+
+  // ── Dashboard ORH — avisos CODIGOS_LISTOS (postulantes listos para Evaluación Técnica E26) ─────────
+
+  listarAvisosCodigosListos(): Observable<{ idNotificacion: number; asunto: string; idConvocatoria: number | null; numeroConvocatoria: string | null }[]> {
+    return this.api
+      .getPage<{ idNotificacion: number; tipoNotificacion: string; asunto: string; idConvocatoria?: number | null; numeroConvocatoria?: string | null }>(
+        '/notificaciones',
+        { page: 0, size: 50, sort: 'fechaCreacion,desc' },
+        { estado: 'ENVIADA' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? [])
+            .filter((n) => n.tipoNotificacion === 'CODIGOS_LISTOS')
+            .map((n) => ({
+              idNotificacion: n.idNotificacion,
+              asunto: n.asunto,
+              idConvocatoria: n.idConvocatoria ?? null,
+              numeroConvocatoria: n.numeroConvocatoria ?? null,
+            })),
+        ),
+      );
+  }
+
+  // ── Dashboard ORH — convocatorias donde el COMITÉ notificó que la Entrevista está lista ──────────────
+
+  listarPendientesEntrevistaOrh(): Observable<ConvocatoriaSeleccionItem[]> {
+    return this.api
+      .getPage<ConvocatoriaSeleccionItem>(
+        '/convocatorias',
+        { page: 0, size: 100, sort: 'fechaPublicacion,desc' },
+        { estado: 'EN_SELECCION' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? []).filter(
+            (c) => c.notificacionEntrevistaEnviada && c.estado !== 'FINALIZADA',
+          ),
+        ),
+      );
+  }
+
+  // ── Dashboard ORH — convocatorias EN_SELECCION con postulantes APTO pendientes de Código Anónimo E25 ──
+
+  listarPendientesE25Orh(): Observable<ConvocatoriaSeleccionItem[]> {
+    return this.api
+      .getPage<ConvocatoriaSeleccionItem>(
+        '/convocatorias',
+        { page: 0, size: 100, sort: 'fechaPublicacion,desc' },
+        { estado: 'EN_SELECCION' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? []).filter(
+            (c) => c.postulantesAptos && c.postulantesAptos > 0 && !c.notificacionCodigosEnviada,
+          ),
+        ),
+      );
+  }
+
+  // ── Dashboard COMITÉ — convocatorias EN_SELECCION con postulantes VERIFICADO+ADMITIDO listos para E24 ──
+
+  listarPendientesE24Comite(): Observable<ConvocatoriaSeleccionItem[]> {
+    return this.api
+      .getPage<ConvocatoriaSeleccionItem>(
+        '/convocatorias',
+        { page: 0, size: 100, sort: 'fechaPublicacion,desc' },
+        { estado: 'EN_SELECCION' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? []).filter(
+            (c) => c.postulantesVerificados && c.postulantesVerificados > 0 && !c.resultadosCurricularPublicados,
+          ),
+        ),
+      );
   }
 
   // ── Convocatoria — obtener estado + pesos RF-14 ───────────────────────────
@@ -67,13 +164,25 @@ export class SeleccionService {
       .pipe(map((r) => r.data));
   }
 
-  // ── E20 — Filtro Requisitos Mínimos RF-07 ─────────────────────────────────
+  // ── E20 — Filtro Requisitos Mínimos RF-07 (masivo — conservado para compatibilidad) ──
   // Backend retorna PostulacionResponse: { idConvocatoria, estado, mensaje }
   // NO retorna FiltroRequisitosResponse — el servicio Java usa PostulacionResponse.builder()
 
   filtroRequisitos(idConv: number): Observable<PostulacionSeleccion> {
     return this.api
       .post<PostulacionSeleccion>(`/convocatorias/${idConv}/filtro-requisitos`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  // ── E20-Individual — Filtro RF-07 por postulante ──────────────────────────
+  // decision: 'ADMITIR' (→ VERIFICADO) | 'NO_ADMITIR' (→ NO_APTO)
+
+  aplicarFiltroIndividual(
+    idPost: number,
+    decision: 'ADMITIR' | 'NO_ADMITIR',
+  ): Observable<PostulacionSeleccion> {
+    return this.api
+      .post<PostulacionSeleccion>(`/postulaciones/${idPost}/aplicar-filtro`, { decision })
       .pipe(map((r) => r.data));
   }
 
@@ -248,6 +357,20 @@ export class SeleccionService {
     return this.api
       .get<ComiteDetalle>(`/convocatorias/${idConv}/comite`)
       .pipe(map((r) => r.data));
+  }
+
+  // ── Comunicados DS 083-2019-PCM Art. 10 ─────────────────────────────────────
+
+  publicarComunicado(idConv: number, req: ComunicadoRequest): Observable<ComunicadoResponse> {
+    return this.api
+      .post<ComunicadoResponse>(`/convocatorias/${idConv}/comunicados`, req)
+      .pipe(map((r) => r.data));
+  }
+
+  listarComunicados(idConv: number): Observable<ComunicadoResponse[]> {
+    return this.api
+      .get<ComunicadoResponse[]>(`/convocatorias/${idConv}/comunicados`)
+      .pipe(map((r) => r.data ?? []));
   }
 
 }

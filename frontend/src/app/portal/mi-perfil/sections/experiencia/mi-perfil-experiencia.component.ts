@@ -157,7 +157,16 @@ import {
         input.value = '';
         return;
       }
-  
+
+      if (file.size > 10 * 1024 * 1024) {
+        this.selectedFile = null;
+        this.currentFileName.set('Ningún archivo seleccionado');
+        this.fileError.set('El archivo no debe superar 10 MB.');
+        this.toast.error('El archivo no debe superar 10 MB.');
+        input.value = '';
+        return;
+      }
+
       this.selectedFile = file;
       this.currentFileName.set(file.name);
       this.fileError.set('');
