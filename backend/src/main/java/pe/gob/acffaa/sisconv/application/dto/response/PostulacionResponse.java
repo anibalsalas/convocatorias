@@ -3,6 +3,7 @@ package pe.gob.acffaa.sisconv.application.dto.response;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -19,6 +20,7 @@ public class PostulacionResponse {
 
     private PostulanteResponse postulante;
     private String estado;
+    private String admisionRf07;
     private String codigoAnonimo;
     private String verificacionRnssc;
     private String verificacionRegiprec;
@@ -39,4 +41,13 @@ public class PostulacionResponse {
     private String estadoPostulacionVisible;
 
     private String mensaje;
+
+    /** Desglose de scores por subcriterio — solo presente para APTO/NO_APTO (E24 ya ejecutado) */
+    private List<EvalCurricularItem> evaluacionesCurriculares;
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class EvalCurricularItem {
+        private Long idFactor;
+        private BigDecimal puntajeObtenido;
+    }
 }

@@ -17,6 +17,7 @@ import { AuthService } from '@core/auth/auth.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import {
   PostulacionSeleccion,
+  ConvocatoriaSeleccionItem,
   FactorDetalle,
   EvalCurricularResponse,
   ExpedienteItem,
@@ -43,10 +44,35 @@ interface EntradaEval {
   cargandoDocs: boolean;
   /** Estado real de la postulación — usado para detectar modo resultados */
   estado: string;
+  /** true cuando el postulante es VERIFICADO (NO APTO) — inputs bloqueados, observación visible */
+  esNoApto: boolean;
+  /** Texto readonly derivado de DL1451 + RF07 — no se persiste en BD, es lectura pura */
+  observacionNoApto: string;
 }
 
 const PAGE_SIZE = 10;
 const UMBRAL_PAGINADO = 15;
+
+/**
+ * Observación automática para VERIFICADO (NO APTO) en E24.
+ * Derivada en tiempo real de flags ya persistidos en TBL_POSTULACION.
+ * No genera ningún almacenamiento nuevo — lectura pura de datos existentes.
+ *
+ * Reglas (SOLID — Single Responsibility, función pura sin side effects):
+ *  CON_SANCIONES + NO_ADMITIDO → ambos filtros fallaron
+ *  SIN_SANCIONES + NO_ADMITIDO → solo RF-07 falló
+ *  CON_SANCIONES + RF07=NULL  → solo DL1451 falló (auto-transición E19)
+ */
+function observacionParaNoApto(p: PostulacionSeleccion): string {
+  const conSanciones = p.verificacionRnssc === 'CON_SANCIONES'
+                    || p.verificacionRegiprec === 'CON_SANCIONES';
+  const noAdmitido   = p.admisionRf07 === 'NO_ADMITIDO';
+  if (conSanciones && noAdmitido)
+    return 'No pasó el Filtro DL 1451 y No cumple con los Requisitos Mínimos exigidos por el perfil';
+  if (!conSanciones && noAdmitido)
+    return 'No cumplió con los Requisitos Mínimos exigidos por el perfil';
+  return 'No pasó con el Filtro de D.L. 1451 - Verificación Obligatoria de Inhabilitaciones';
+}
 
 @Component({
   selector: 'app-eval-curricular',
@@ -135,7 +161,7 @@ const UMBRAL_PAGINADO = 15;
         </div>
 
       } @else {
-        <!-- Panel resultado post-envío -->
+        <!-- Panel resultado post-envío (sesión actual) -->
         @if (resultado()) {
           <div class="card border border-green-300 bg-green-50 p-4 space-y-2">
             <p class="font-semibold text-green-700 text-sm">
@@ -160,6 +186,44 @@ const UMBRAL_PAGINADO = 15;
                   class="btn-primary text-sm disabled:opacity-50"
                 >
                   {{ publicando() ? '⟳ Generando PDF...' : '📄 Publicar Resultados E24' }}
+                </button>
+              }
+              @if (esOrhOAdmin()) {
+                <a [routerLink]="['/sistema/seleccion', idConv, 'codigos-anonimos']"
+                   class="btn-secondary text-sm inline-block">
+                  Continuar → E25 Códigos Anónimos
+                </a>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Panel acciones en modoResultados (re-entrada sin resultado en sesión) -->
+        @if (modoResultados() && !resultado()) {
+          <div class="card border border-blue-200 bg-blue-50 p-4 space-y-2">
+            <p class="font-semibold text-blue-700 text-sm">
+              Resultados de evaluación curricular E24 — Vista de solo lectura
+            </p>
+            <div class="flex flex-wrap gap-2 mt-2 items-center">
+              @if (esComiteOAdmin()) {
+                @if (convInfo()?.resultadosCurricularPublicados) {
+                  <span class="text-xs text-green-700 font-semibold bg-green-100 border border-green-300 px-3 py-1.5 rounded">
+                    ✅ Resultados E24 ya publicados
+                  </span>
+                  <button
+                    (click)="descargarResultados()"
+                    [disabled]="descargandoPdf()"
+                    class="btn-secondary text-sm disabled:opacity-50"
+                  >
+                    {{ descargandoPdf() ? '⟳ Descargando...' : '↓ Descargar PDF E24' }}
+                  </button>
+                }
+                <button
+                  (click)="publicarResultados()"
+                  [disabled]="publicando()"
+                  class="btn-primary text-sm disabled:opacity-50"
+                >
+                  {{ publicando() ? '⟳ Generando PDF...' : convInfo()?.resultadosCurricularPublicados ? '🔄 Re-publicar E24' : '📄 Publicar Resultados E24' }}
                 </button>
               }
               @if (esOrhOAdmin()) {
@@ -213,6 +277,8 @@ const UMBRAL_PAGINADO = 15;
                     rowspan="2">Total</th>
                 <th class="px-3 py-1 text-center font-semibold min-w-[85px] bg-[#0F3460]"
                     rowspan="2">Estado</th>
+                <th class="px-3 py-1 text-center font-semibold min-w-[220px] bg-[#0F3460]"
+                    rowspan="2">Observaciones</th>
               </tr>
               <!-- Fila 2: subcriterios con puntaje máximo -->
               <tr class="bg-[#2D3250] text-white">
@@ -261,7 +327,7 @@ const UMBRAL_PAGINADO = 15;
                         [min]="0"
                         [max]="sub.puntajeMaximo"
                         step="0.5"
-                        [disabled]="modoLectura()"
+                        [disabled]="modoLectura() || e.esNoApto"
                         class="w-20 text-center border rounded px-1 py-0.5 text-xs
                                focus:ring-1 focus:ring-blue-500 focus:outline-none
                                disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-70"
@@ -282,7 +348,10 @@ const UMBRAL_PAGINADO = 15;
 
                   <!-- Estado en tiempo real -->
                   <td class="px-3 py-2 text-center">
-                    @if (e.totalCache === 0) {
+                    @if (e.esNoApto) {
+                      <span class="text-xs font-semibold text-red-700
+                                   bg-red-100 px-2 py-0.5 rounded-full">NO APTO</span>
+                    } @else if (e.totalCache === 0) {
                       <span class="text-gray-300 text-xs">—</span>
                     } @else if (umbralEfectivo() > 0 && e.totalCache >= umbralEfectivo()) {
                       <span class="text-xs font-semibold text-green-700
@@ -290,6 +359,20 @@ const UMBRAL_PAGINADO = 15;
                     } @else if (umbralEfectivo() > 0) {
                       <span class="text-xs font-semibold text-red-700
                                    bg-red-100 px-2 py-0.5 rounded-full">NO APTO</span>
+                    }
+                  </td>
+
+                  <!-- Observación automática — solo para VERIFICADO (NO APTO), readonly, derivada de DL1451 + RF07 -->
+                  <td class="px-2 py-1 align-top">
+                    @if (e.esNoApto) {
+                      <textarea
+                        readonly
+                        rows="2"
+                        [value]="e.observacionNoApto"
+                        [title]="e.observacionNoApto"
+                        class="w-full text-xs bg-red-50 border border-red-200 text-red-700
+                               rounded px-2 py-1 resize-none cursor-not-allowed leading-snug"
+                      ></textarea>
                     }
                   </td>
                 </tr>
@@ -432,11 +515,19 @@ export class EvalCurricularComponent {
   readonly loading       = signal(true);
   readonly enviando      = signal(false);
   readonly publicando    = signal(false);
+  readonly descargandoPdf = signal(false);
   readonly entradas      = signal<EntradaEval[]>([]);
   readonly factoresPadre = signal<FactorDetalle[]>([]);
   readonly resultado     = signal<EvalCurricularResponse | null>(null);
   readonly currentPage   = signal(0);
   readonly descargando   = signal<number | null>(null);
+  /** Info de convocatoria — cargada junto a postulantes para verificar resultadosCurricularPublicados */
+  readonly convInfo      = signal<ConvocatoriaSeleccionItem | null>(null);
+
+  /** Entradas elegibles para evaluación — excluye VERIFICADO (NO APTO) bloqueados */
+  readonly entradasElegibles = computed(() =>
+    this.entradas().filter(e => !e.esNoApto),
+  );
 
   // ── Computed — umbral y máximo ──────────────────────────────────────────────
   readonly umbralEfectivo = computed(() => {
@@ -472,35 +563,36 @@ export class EvalCurricularComponent {
     const subTotal = this.factoresPadre().reduce(
       (acc, p) => acc + ((p.subcriterios ?? []).length || 1), 0,
     );
-    return subTotal + 3; // +1 postulante sticky, +1 total, +1 estado
+    return subTotal + 4; // +1 postulante sticky, +1 total, +1 estado, +1 observaciones
   });
 
   // ── Computed — progreso ─────────────────────────────────────────────────────
+  // Computed de progreso — operan solo sobre entradas elegibles (excluyen NO APTO bloqueados)
   readonly evaluadosCount = computed(() =>
-    this.entradas().filter((e) => e.totalCache > 0).length,
+    this.entradasElegibles().filter((e) => e.totalCache > 0).length,
   );
 
   readonly progresoPct = computed(() => {
-    const total = this.entradas().length;
+    const total = this.entradasElegibles().length;
     return total > 0 ? Math.round((this.evaluadosCount() / total) * 100) : 0;
   });
 
   readonly aptosPreview = computed(() =>
     this.umbralEfectivo() > 0
-      ? this.entradas().filter((e) => e.totalCache >= this.umbralEfectivo()).length
+      ? this.entradasElegibles().filter((e) => e.totalCache >= this.umbralEfectivo()).length
       : 0,
   );
 
   readonly noAptosPreview = computed(() =>
     this.umbralEfectivo() > 0
-      ? this.entradas().filter(
+      ? this.entradasElegibles().filter(
           (e) => e.totalCache > 0 && e.totalCache < this.umbralEfectivo(),
         ).length
       : 0,
   );
 
   readonly hayPuntajeInvalido = computed(() =>
-    this.entradas().some((e) =>
+    this.entradasElegibles().some((e) =>
       e.subcriterios.some((s) => s.puntaje > s.puntajeMaximo),
     ),
   );
@@ -521,8 +613,8 @@ export class EvalCurricularComponent {
   readonly puedeEnviar = computed(() =>
     !this.enviando() &&
     !this.hayPuntajeInvalido() &&
-    this.entradas().length > 0 &&
-    this.evaluadosCount() === this.entradas().length,
+    this.entradasElegibles().length > 0 &&
+    this.evaluadosCount() === this.entradasElegibles().length,
   );
 
   constructor() {
@@ -589,10 +681,12 @@ export class EvalCurricularComponent {
     forkJoin({
       postulantes: this.svc.listarPostulantes(this.idConv, 0, 200),
       factores: this.svc.listarFactores(this.idConv),
+      convocatoria: this.svc.obtenerConvocatoria(this.idConv),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ postulantes, factores }) => {
+        next: ({ postulantes, factores, convocatoria }) => {
+          this.convInfo.set(convocatoria);
           // Solo factores CURRICULAR padre (subcriterios vienen anidados)
           const padres = factores.filter(
             (f) => f.etapaEvaluacion === 'CURRICULAR' && !f.idFactorPadre,
@@ -617,30 +711,50 @@ export class EvalCurricularComponent {
            * En modo normal solo se cargan VERIFICADO (lógica original intacta).
            */
           const enModoResultados = this.modoResultados();
+          // En modoResultados: incluye TODOS los estados post-E24 (también GANADOR/ACCESITARIO/
+          // NO_SELECCIONADO/DESCALIFICADO) para que los resultados sean perennes sin importar
+          // qué etapas posteriores (E26-E31) se hayan ejecutado.
+          const ESTADOS_POST_E24 = ['VERIFICADO', 'APTO', 'NO_APTO', 'GANADOR', 'ACCESITARIO', 'NO_SELECCIONADO', 'DESCALIFICADO'];
           const paraEvaluar = postulantes.content.filter(
             (p: PostulacionSeleccion) =>
               enModoResultados
-                ? ['VERIFICADO', 'APTO', 'NO_APTO'].includes(p.estado)
+                ? ESTADOS_POST_E24.includes(p.estado)
                 : p.estado === 'VERIFICADO',
           );
 
           this.entradas.set(
-            paraEvaluar.map((p: PostulacionSeleccion) => ({
-              idPostulacion: p.idPostulacion,
-              nombre: p.postulante.nombreCompleto,
-              /**
-               * Para APTO/NO_APTO: pre-poblar con puntajeCurricular registrado.
-               * Para VERIFICADO: 0 (aún sin evaluar).
-               */
-              totalCache: (p.estado === 'APTO' || p.estado === 'NO_APTO')
-                ? (p.puntajeCurricular ?? 0)
-                : 0,
-              estado: p.estado,
-              expandido: false,
-              documentos: [],
-              cargandoDocs: false,
-              subcriterios: subcritFlat.map((s) => ({ ...s })),
-            })),
+            paraEvaluar.map((p: PostulacionSeleccion) => {
+              // Derivar esNoApto desde flags DL1451 + RF07 ya persistidos en BD
+              const conSanciones = p.verificacionRnssc === 'CON_SANCIONES'
+                                || p.verificacionRegiprec === 'CON_SANCIONES';
+              const esNoApto = p.estado === 'VERIFICADO'
+                            && (conSanciones || p.admisionRf07 === 'NO_ADMITIDO');
+              return {
+                idPostulacion: p.idPostulacion,
+                nombre: p.postulante.nombreCompleto,
+                /**
+                 * Para APTO/NO_APTO: pre-poblar con puntajeCurricular registrado.
+                 * Para VERIFICADO elegible: 0 (aún sin evaluar).
+                 * Para VERIFICADO NO APTO: 0 (inputs bloqueados, no se evalúan).
+                 */
+                // Usar puntajeCurricular para todos los estados que ya pasaron por E24
+                // (APTO, NO_APTO, y estados post-E31). Se preserva el valor original
+                // registrado en TBL_POSTULACION — nunca es sobreescrito por etapas posteriores.
+                totalCache: p.puntajeCurricular != null ? p.puntajeCurricular : 0,
+                estado: p.estado,
+                expandido: false,
+                documentos: [],
+                cargandoDocs: false,
+                subcriterios: subcritFlat.map((s) => {
+                  const evalBD = p.evaluacionesCurriculares?.find(
+                    (e) => e.idFactor === s.idFactor,
+                  );
+                  return { ...s, puntaje: evalBD ? Number(evalBD.puntajeObtenido) : 0 };
+                }),
+                esNoApto,
+                observacionNoApto: esNoApto ? observacionParaNoApto(p) : '',
+              };
+            }),
           );
           this.loading.set(false);
         },
@@ -651,7 +765,31 @@ export class EvalCurricularComponent {
       });
   }
 
-  /** Genera y descarga el PDF de resultados curriculares (E24-PDF) */
+  /** Re-descarga el PDF ya publicado (GET — no modifica estado) */
+  protected descargarResultados(): void {
+    if (this.descargandoPdf()) return;
+    this.descargandoPdf.set(true);
+    this.svc
+      .resultadosCurricularPdf(this.idConv)
+      .pipe(take(1))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `RESULT-CURRICULAR-CONV-${this.idConv}.pdf`;
+          link.click();
+          URL.revokeObjectURL(url);
+          this.descargandoPdf.set(false);
+        },
+        error: () => {
+          this.descargandoPdf.set(false);
+          this.toast.error('No se pudo descargar el PDF de resultados E24.');
+        },
+      });
+  }
+
+  /** Publica (primera vez) y descarga el PDF de resultados curriculares (E24-PDF) */
   protected publicarResultados(): void {
     if (this.publicando()) return;
     this.publicando.set(true);
@@ -667,6 +805,7 @@ export class EvalCurricularComponent {
           link.click();
           URL.revokeObjectURL(url);
           this.publicando.set(false);
+          this.convInfo.update(c => c ? { ...c, resultadosCurricularPublicados: true } : c);
           this.toast.success('Resultados E24 publicados. PDF descargado.');
         },
         error: () => {
@@ -682,11 +821,13 @@ export class EvalCurricularComponent {
     this.enviando.set(true);
 
     const req = {
+      // Se envían TODAS las entradas: elegibles con su puntaje + NO APTO con puntaje=0
+      // → backend transiciona VERIFICADO (NO APTO) a NO_APTO, conteos correctos en respuesta
       evaluaciones: this.entradas().map((e) => ({
         idPostulacion: e.idPostulacion,
         factores: e.subcriterios.map((s) => ({
           idFactor: s.idFactor,
-          puntaje: Number(s.puntaje),
+          puntaje: e.esNoApto ? 0 : Number(s.puntaje),
           observacion: '',
         })),
       })),

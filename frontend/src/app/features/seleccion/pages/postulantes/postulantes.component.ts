@@ -25,8 +25,6 @@ const ESTADO_ORDEN: Record<string, number> = {
 /**
  * Determina el estado de verificación D.L.1451 de un postulante
  * usando los flags del backend, NO el estado de la postulación.
- *
- * E19 graba flags; E20 cambia estado a VERIFICADO.
  */
 function estadoDl1451(p: PostulacionSeleccion): 'pendiente' | 'ok' | 'con_sanciones' {
   const rnssc = p.verificacionRnssc;
@@ -34,6 +32,24 @@ function estadoDl1451(p: PostulacionSeleccion): 'pendiente' | 'ok' | 'con_sancio
   if (!rnssc && !regiprec) return 'pendiente';
   if (rnssc === 'CON_SANCIONES' || regiprec === 'CON_SANCIONES') return 'con_sanciones';
   return 'ok';
+}
+
+/**
+ * Deriva el label visual de la columna ESTADO según DL1451 + RF07.
+ * Solo aplica a VERIFICADO — el resto retorna el estado raw.
+ *
+ * Reglas:
+ *  CON_SANCIONES                → VERIFICADO (NO APTO)  [auto-transicionado por E19]
+ *  SIN_SANCIONES + NO_ADMITIDO  → VERIFICADO (NO APTO)
+ *  SIN_SANCIONES + ADMITIDO     → VERIFICADO (APTO)
+ *  SIN_SANCIONES + RF07 null    → VERIFICADO             [RF07 pendiente]
+ */
+function etiquetaEstadoDisplay(p: PostulacionSeleccion): string {
+  if (p.estado !== 'VERIFICADO') return p.estado;
+  if (estadoDl1451(p) === 'con_sanciones')  return 'VERIFICADO (NO APTO)';
+  if (p.admisionRf07 === 'NO_ADMITIDO')     return 'VERIFICADO (NO APTO)';
+  if (p.admisionRf07 === 'ADMITIDO')        return 'VERIFICADO (APTO)';
+  return 'VERIFICADO';
 }
 
 /** Determina la etapa actual del proceso basándose en la distribución de estados */
@@ -117,14 +133,6 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                 <span class="badge-orh">ORH</span>
               </div>
               <div class="flex gap-1 flex-wrap">
-                <button
-                  (click)="filtroRequisitos()"
-                  [disabled]="accionando() || !hayRegistrados()"
-                  class="btn-secondary text-xs px-2 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="E20 — Motor RF-07 · Masivo · REGISTRADO → VERIFICADO (DL1451 SIN_SANCIONES) | NO_APTO (CON_SANCIONES)"
-                >
-                  {{ accionando() ? '⟳ Ejecutando...' : 'E20 — Filtro RF-07' }}
-                </button>
                 <a [routerLink]="['/sistema/seleccion', idConv, 'filtro']"
                    class="btn-ghost text-xs px-2 py-1">Ver detalle →</a>
               </div>
@@ -152,13 +160,14 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
               <span class="badge-comite">COMITÉ</span>
             </div>
             <div class="flex gap-1 flex-wrap">
-              <!-- E24: habilitado solo cuando hay VERIFICADO pendientes de evaluar -->
-              <a [routerLink]="e24YaEjecutado() ? null : ['/sistema/seleccion', idConv, 'eval-curricular']"
+              <!-- E24: navega siempre; con ?resultados=1 cuando ya fue ejecutado -->
+              <a [routerLink]="['/sistema/seleccion', idConv, 'eval-curricular']"
+                 [queryParams]="e24YaEjecutado() ? {resultados: '1'} : null"
                  class="btn-secondary text-xs px-2 py-1"
-                 [class.opacity-40]="e24YaEjecutado() || (!hayVerificados() && !hayResultadosCurriculares())"
-                 [class.cursor-not-allowed]="e24YaEjecutado() || (!hayVerificados() && !hayResultadosCurriculares())"
-                 [class.pointer-events-none]="e24YaEjecutado() || (!hayVerificados() && !hayResultadosCurriculares())"
-                 [title]="e24YaEjecutado() ? 'E24 ya ejecutado — use Resultados Curricular para consultar' : 'Registrar evaluación curricular'"
+                 [class.opacity-40]="!hayAdmitidosParaE24() && !hayResultadosCurriculares()"
+                 [class.cursor-not-allowed]="!hayAdmitidosParaE24() && !hayResultadosCurriculares()"
+                 [class.pointer-events-none]="!hayAdmitidosParaE24() && !hayResultadosCurriculares()"
+                 [title]="e24YaEjecutado() ? 'Ver resultados E24 — evaluación curricular ya registrada' : !hayAdmitidosParaE24() ? 'Requiere postulantes VERIFICADO y ADMITIDO en RF-07' : 'Registrar evaluación curricular'"
               >E24 Curricular</a>
               <!-- Resultados E24: visible a COMITÉ y ORH cuando los resultados curriculares fueron publicados — descarga PDF directamente -->
               @if (convInfo()?.resultadosCurricularPublicados && (esOrhOAdmin() || esComiteOAdmin())) {
@@ -255,6 +264,22 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
               </div>
             </div>
           }
+
+          <!-- ⑤ Comunicados — ORH (disponible en cualquier etapa, DS 083-2019-PCM Art.10) -->
+          @if (esOrhOAdmin()) {
+            <div class="pt-2 border-t border-gray-100 flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-semibold text-gray-500">⑤ Comunicados</span>
+                <span class="badge-orh">ORH</span>
+                <span class="text-xs text-gray-400 italic">DS 083-2019-PCM Art. 10</span>
+              </div>
+              <a [routerLink]="['/sistema/seleccion', idConv, 'comunicados']"
+                 class="text-xs px-3 py-1.5 rounded-lg font-semibold bg-indigo-50 text-indigo-700
+                        border border-indigo-200 hover:bg-indigo-100 transition-colors">
+                📢 Ver / Publicar comunicados
+              </a>
+            </div>
+          }
         </div>
       </div>
 
@@ -271,20 +296,21 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
               <th class="px-3 py-2 text-center text-xs font-semibold">P. Total</th>
               @if (esOrhOAdmin()) {
                 <th class="px-3 py-2 text-center text-xs font-semibold">D.L.1451</th>
+                <th class="px-3 py-2 text-center text-xs font-semibold">Filtro RF-07</th>
               }
             </tr>
           </thead>
           <tbody>
             @if (loading()) {
               <tr>
-                <td [attr.colspan]="esOrhOAdmin() ? 7 : 6"
+                <td [attr.colspan]="esOrhOAdmin() ? 8 : 6"
                     class="px-3 py-10 text-center text-gray-400">
                   <span class="animate-spin inline-block mr-2">⟳</span> Cargando...
                 </td>
               </tr>
             } @else if (postulantes().length === 0) {
               <tr>
-                <td [attr.colspan]="esOrhOAdmin() ? 7 : 6"
+                <td [attr.colspan]="esOrhOAdmin() ? 8 : 6"
                     class="px-3 py-10 text-center text-gray-400">
                   No hay postulantes registrados para esta convocatoria.
                 </td>
@@ -304,9 +330,9 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                     {{ p.postulante.numeroDocumento || '—' }}
                   </td>
 
-                  <!-- BUG-A FIX: [label] es necesario para mostrar texto en badge -->
+                  <!-- Label derivado: VERIFICADO (APTO) / VERIFICADO (NO APTO) según DL1451+RF07 -->
                   <td class="px-3 py-2 text-center">
-                    <app-status-badge [estado]="p.estado" [label]="p.estado" />
+                    <app-status-badge [estado]="p.estado" [label]="etiquetaEstadoDisplay(p)" />
                   </td>
 
                   <td class="px-3 py-2 text-center font-mono text-xs text-blue-700">
@@ -338,7 +364,7 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                             >Verificar</a>
                           }
                           @case ('ok') {
-                            <span class="text-xs text-green-600 font-semibold">✓ OK</span>
+                            <span class="text-xs text-green-600 font-semibold">SIN SANCIONES</span>
                             <a
                               [routerLink]="['/sistema/seleccion', idConv, 'dl1451', p.idPostulacion]"
                               class="text-xs text-gray-400 hover:text-blue-600 underline"
@@ -362,6 +388,53 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                           >↩ Reset</button>
                         }
                       </div>
+                    </td>
+
+                    <!-- Columna Filtro RF-07 — individual por postulante -->
+                    <td class="px-3 py-2 text-center">
+                      @if (p.admisionRf07 === 'ADMITIDO') {
+                        <!-- Ya admitido -->
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">
+                          ✓ Admitido
+                        </span>
+                      } @else if (p.admisionRf07 === 'NO_ADMITIDO') {
+                        <!-- Ya rechazado -->
+                        <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">
+                          ✗ No admitido
+                        </span>
+                      } @else if (p.estado === 'REGISTRADO' && estadoDl1451(p) === 'ok') {
+                        <!-- REGISTRADO + DL1451 OK: mostrar botones RF-07 -->
+                        <div class="flex items-center justify-center gap-1 flex-wrap">
+                          <button
+                            (click)="aplicarFiltro(p, 'ADMITIR')"
+                            [disabled]="aplicandoFiltro() === p.idPostulacion"
+                            class="text-xs bg-blue-100 text-blue-800
+                                   hover:bg-blue-200 px-2 py-0.5 rounded
+                                   font-medium transition-colors
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Admitir — REGISTRADO → VERIFICADO + habilita E24"
+                          >
+                            {{ aplicandoFiltro() === p.idPostulacion ? '⟳' : '✓ Admitir' }}
+                          </button>
+                          <button
+                            (click)="aplicarFiltro(p, 'NO_ADMITIR')"
+                            [disabled]="aplicandoFiltro() === p.idPostulacion"
+                            class="text-xs bg-red-100 text-red-700
+                                   hover:bg-red-200 px-2 py-0.5 rounded
+                                   font-medium transition-colors
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="No admitir — REGISTRADO → VERIFICADO, bloqueado de E24"
+                          >
+                            {{ aplicandoFiltro() === p.idPostulacion ? '⟳' : '✗ No Admitir' }}
+                          </button>
+                        </div>
+                      } @else {
+                        <!-- DL1451 pendiente o estado no permite acción -->
+                        <span class="text-xs text-gray-300 cursor-not-allowed"
+                              title="Primero complete la verificación D.L. 1451 (E19)">
+                          🔒
+                        </span>
+                      }
                     </td>
                   }
                 </tr>
@@ -452,6 +525,7 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
 })
 export class PostulantesComponent {
   protected readonly estadoDl1451 = estadoDl1451;
+  protected readonly etiquetaEstadoDisplay = etiquetaEstadoDisplay;
 
   protected readonly etapasFlow = [
     { key: 'REGISTRO',   icon: '📝', label: 'Registro' },
@@ -472,6 +546,8 @@ export class PostulantesComponent {
   protected readonly loading = signal(true);
   protected readonly accionando = signal(false);
   protected readonly descargandoCurricular = signal(false);
+  /** idPostulacion del postulante que está siendo procesado en RF-07 individual (null = ninguno) */
+  protected readonly aplicandoFiltro = signal<number | null>(null);
 
   // ── Rollback administrativo ───────────────────────────────────────────────
   protected readonly rollbackTarget = signal<PostulacionSeleccion | null>(null);
@@ -501,18 +577,25 @@ export class PostulantesComponent {
     this.postulantes().some((p) => p.estado === 'VERIFICADO'),
   );
 
+  /** Gate E24: solo pasan postulantes VERIFICADO + admisionRf07=ADMITIDO */
+  protected readonly hayAdmitidosParaE24 = computed(() =>
+    this.postulantes().some(
+      (p) => p.estado === 'VERIFICADO' && p.admisionRf07 === 'ADMITIDO',
+    ),
+  );
+
   /** E24 ya ejecutado: existen postulantes APTO o NO_APTO */
   protected readonly hayResultadosCurriculares = computed(() =>
     this.postulantes().some((p) => p.estado === 'APTO' || p.estado === 'NO_APTO'),
   );
 
   /**
-   * E24 completado sin VERIFICADO pendientes:
-   * hay resultados curriculares Y no quedan postulantes VERIFICADO por evaluar.
-   * En este estado el botón E24 se deshabilita y aparece "Resultados Curricular".
+   * E24 completado: hay resultados curriculares Y no quedan VERIFICADO+ADMITIDO pendientes.
+   * Usa hayAdmitidosParaE24 (no hayVerificados) para no bloquear cuando aún existen
+   * VERIFICADO(NO_APTO) que no requieren evaluación adicional.
    */
   protected readonly e24YaEjecutado = computed(() =>
-    this.hayResultadosCurriculares() && !this.hayVerificados(),
+    this.hayResultadosCurriculares() && !this.hayAdmitidosParaE24(),
   );
 
   /** E26 habilitado: todos los APTO tienen código anónimo asignado */
@@ -621,6 +704,25 @@ export class PostulantesComponent {
         error: () => {
           this.accionando.set(false);
           this.toast.error('Error al ejecutar el filtro.');
+        },
+      });
+  }
+
+  protected aplicarFiltro(p: PostulacionSeleccion, decision: 'ADMITIR' | 'NO_ADMITIR'): void {
+    if (this.aplicandoFiltro() !== null) return;
+    this.aplicandoFiltro.set(p.idPostulacion);
+    this.svc
+      .aplicarFiltroIndividual(p.idPostulacion, decision)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.aplicandoFiltro.set(null);
+          this.toast.success(res.mensaje ?? 'Filtro RF-07 aplicado.');
+          this.cargar(this.currentPage());
+        },
+        error: () => {
+          this.aplicandoFiltro.set(null);
+          this.toast.error('Error al aplicar el filtro RF-07.');
         },
       });
   }

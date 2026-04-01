@@ -24,4 +24,6 @@ public interface IConvocatoriaRepository {
     long countByAnio(int anio);
     long nextNumeroConvocatoriaSequenceValue();
     boolean existsByIdRequerimiento(Long idRequerimiento);
+    long countPendientesComite(String username);
+    long countPendientesPublicar();
 }

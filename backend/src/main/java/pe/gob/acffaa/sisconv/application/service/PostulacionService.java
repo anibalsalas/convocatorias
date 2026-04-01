@@ -47,19 +47,22 @@ public class PostulacionService {
     private final IAuditPort audit;
     private final SeleccionMapper mapper;
     private final NotificacionService notificacionService;
+    private final IEvaluacionCurricularRepository evalCurrRepo;
 
     public PostulacionService(IPostulacionRepository postRepo, IPostulanteRepository postulanteRepo,
             IConvocatoriaRepository convRepo, IDeclaracionJuradaRepository ddjjRepo,
             IExpedienteVirtualRepository expRepo, ITachaRepository tachaRepo,
             IUsuarioRepository usuarioRepo,
             IAuditPort audit, SeleccionMapper mapper,
-            NotificacionService notificacionService) {
+            NotificacionService notificacionService,
+            IEvaluacionCurricularRepository evalCurrRepo) {
         this.postRepo = postRepo; this.postulanteRepo = postulanteRepo;
         this.convRepo = convRepo; this.ddjjRepo = ddjjRepo;
         this.expRepo = expRepo; this.tachaRepo = tachaRepo;
         this.usuarioRepo = usuarioRepo;
         this.audit = audit; this.mapper = mapper;
         this.notificacionService = notificacionService;
+        this.evalCurrRepo = evalCurrRepo;
     }
 
     private String user() { return SecurityContextHolder.getContext().getAuthentication().getName(); }
@@ -262,20 +265,28 @@ public class PostulacionService {
                 post.setVerificacionRegiprec(req.getVerificacionRegiprec());
                 post.setFechaVerificacionDl(LocalDateTime.now());
                 post.setObservacionDl(req.getObservacion());
-                // Estado NO cambia — permanece REGISTRADO hasta que ORH ejecute E20 Filtro RF-07
                 post.setUsuarioModificacion(user());
-                postRepo.save(post);
 
                 boolean conSanciones = "CON_SANCIONES".equals(req.getVerificacionRnssc())
                                     || "CON_SANCIONES".equals(req.getVerificacionRegiprec());
+
+                // Auto-transición: CON_SANCIONES → VERIFICADO inmediato (admisionRf07=NULL → display "VERIFICADO (NO APTO)")
+                if (conSanciones && "REGISTRADO".equals(post.getEstado())) {
+                    validarTransicion(post, "VERIFICADO");
+                    post.setEstado("VERIFICADO");
+                }
+
+                postRepo.save(post);
+
+                String estadoFinal = post.getEstado();
                 String sustento = "RNSSC=" + req.getVerificacionRnssc()
                         + ",REGIPREC=" + req.getVerificacionRegiprec()
                         + (req.getObservacion() != null && !req.getObservacion().isBlank()
                            ? ",OBS=" + req.getObservacion() : "");
-                audit.registrar("POSTULACION", post.getIdPostulacion(), "VERIFICAR_DL1451", ant, ant, http, sustento);
+                audit.registrar("POSTULACION", post.getIdPostulacion(), "VERIFICAR_DL1451", ant, estadoFinal, http, sustento);
                 return mapper.toPostulacionResponse(post,
-                        conSanciones ? "D.L. 1451: sanciones registradas. Ejecute E20 Filtro RF-07 para aplicar NO_APTO."
-                                     : "D.L. 1451 OK — sin sanciones. Ejecute E20 Filtro RF-07 para pasar a VERIFICADO.");
+                        conSanciones ? "D.L. 1451: sanciones registradas. Estado → VERIFICADO (NO APTO). Bloqueado de E24."
+                                     : "D.L. 1451 OK — sin sanciones. Ejecute RF-07 para admitir o no admitir al postulante.");
             }
 
             /** E20 — POST /convocatorias/{id}/filtro-requisitos. CU-15, Motor RF-07
@@ -333,6 +344,54 @@ public class PostulacionService {
                         .mensaje("Filtro completado. Verificados: " + verificados + ", No aptos (DL1451): " + noAptos).build();
             }
 
+            /** E20-Individual — POST /postulaciones/{id}/aplicar-filtro. CU-15 individual.
+             *  Prerequisito: estado=REGISTRADO con DL1451 completado (flags grabados por E19).
+             *  Ambas decisiones transicionan REGISTRADO → VERIFICADO (como hacía el E20 masivo).
+             *  ADMITIR:     admisionRf07=ADMITIDO    → habilita Gate E24
+             *  NO_ADMITIR:  admisionRf07=NO_ADMITIDO → bloqueado de E24
+             *  Gate E24: estado=VERIFICADO AND admisionRf07=ADMITIDO */
+            @Transactional
+            public PostulacionResponse aplicarFiltroIndividual(Long idPost, AplicarFiltroRequest req, HttpServletRequest http) {
+                Postulacion post = postRepo.findById(idPost)
+                        .orElseThrow(() -> new ResourceNotFoundException("Postulacion", idPost));
+
+                if (!"REGISTRADO".equals(post.getEstado())) {
+                    throw new DomainException(
+                        "Solo se puede aplicar RF-07 a postulantes en estado REGISTRADO. Estado actual: " + post.getEstado());
+                }
+
+                if (post.getVerificacionRnssc() == null || post.getVerificacionRegiprec() == null) {
+                    throw new DomainException("Debe completar la verificación D.L. 1451 (E19) antes de aplicar el filtro RF-07.");
+                }
+
+                if ("ADMITIR".equals(req.getDecision())) {
+                    boolean conSanciones = "CON_SANCIONES".equals(post.getVerificacionRnssc())
+                                       || "CON_SANCIONES".equals(post.getVerificacionRegiprec());
+                    if (conSanciones) {
+                        throw new DomainException("No se puede admitir: el postulante tiene sanciones registradas en D.L. 1451.");
+                    }
+                    post.setAdmisionRf07("ADMITIDO");
+                } else {
+                    post.setAdmisionRf07("NO_ADMITIDO");
+                }
+
+                // Ambas decisiones transicionan REGISTRADO → VERIFICADO
+                String estadoAnterior = post.getEstado();
+                validarTransicion(post, "VERIFICADO");
+                post.setEstado("VERIFICADO");
+                post.setUsuarioModificacion(user());
+                postRepo.save(post);
+
+                audit.registrar("POSTULACION", post.getIdPostulacion(), "FILTRO_RF07_INDIVIDUAL",
+                        estadoAnterior, "VERIFICADO", http,
+                        "ADMISION_RF07=" + post.getAdmisionRf07());
+
+                return mapper.toPostulacionResponse(post,
+                        "ADMITIDO".equals(post.getAdmisionRf07())
+                                ? "Postulante admitido (RF-07) — estado → VERIFICADO, habilitado para Evaluación Curricular."
+                                : "Postulante no admitido (RF-07) — estado → VERIFICADO, bloqueado de Evaluación Curricular.");
+            }
+
             /** E21 — POST /convocatorias/{id}/tachas. CU-16. */
             @Transactional
             public TachaResponse registrarTacha(Long idConv, TachaRequest req, HttpServletRequest http) {
@@ -388,12 +447,28 @@ public class PostulacionService {
                 return mapper.toTachaResponse(tacha, "Tacha resuelta: " + req.getEstado());
             }
 
-            /** E23 — GET /convocatorias/{id}/postulantes. Paginado. */
+            /** E23 — GET /convocatorias/{id}/postulantes. Paginado.
+             *  Para APTO/NO_APTO enriquece con desglose de scores curriculares (E24 modoResultados). */
             public Page<PostulacionResponse> listarPostulantes(Long idConv, Pageable pageable) {
                 convRepo.findById(idConv)
                         .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
                 return postRepo.findByConvocatoriaId(idConv, pageable)
-                        .map(p -> mapper.toPostulacionResponse(p, null));
+                        .map(p -> {
+                            // Enriquecer con desglose curricular para estados que pasaron E24
+                            // Incluye estados post-E31 (GANADOR/ACCESITARIO/NO_SELECCIONADO/DESCALIFICADO)
+                            // para que E24 modoResultados muestre scores aunque el proceso haya finalizado
+                            boolean pasoPorE24 = "APTO".equals(p.getEstado())
+                                    || "NO_APTO".equals(p.getEstado())
+                                    || "GANADOR".equals(p.getEstado())
+                                    || "ACCESITARIO".equals(p.getEstado())
+                                    || "NO_SELECCIONADO".equals(p.getEstado())
+                                    || "DESCALIFICADO".equals(p.getEstado());
+                            if (pasoPorE24) {
+                                return mapper.toPostulacionResponse(p,
+                                        evalCurrRepo.findByPostulacionId(p.getIdPostulacion()), null);
+                            }
+                            return mapper.toPostulacionResponse(p, null);
+                        });
             }
 
 
@@ -431,6 +506,34 @@ public class PostulacionService {
                         ).reversed())
                         .map(item -> mapper.toExpedienteResponse(item, null))
                         .toList();
+            }
+
+            /** E18-DEL — DELETE /postulaciones/{idPost}/expediente/{idExp}.
+             *  Solo el postulante dueño puede eliminar. Solo si expediente no finalizado y no verificado. */
+            @Transactional
+            public void eliminarExpediente(Long idPost, Long idExp, HttpServletRequest http) {
+                Postulacion post = postRepo.findById(idPost)
+                        .orElseThrow(() -> new ResourceNotFoundException("Postulacion", idPost));
+
+                validarAccesoPropio(post);
+
+                if (post.getFechaConfirmacionExpediente() != null) {
+                    throw new DomainException("El expediente ya fue finalizado y no admite eliminaciones");
+                }
+
+                ExpedienteVirtual exp = expRepo.findById(idExp)
+                        .orElseThrow(() -> new ResourceNotFoundException("Expediente", idExp));
+
+                if (!exp.getPostulacion().getIdPostulacion().equals(idPost)) {
+                    throw new DomainException("El documento no pertenece a esta postulación");
+                }
+
+                if (Boolean.TRUE.equals(exp.getVerificado())) {
+                    throw new DomainException("El documento ya fue verificado y no puede eliminarse");
+                }
+
+                expRepo.deleteById(idExp);
+                audit.registrar("EXPEDIENTE", idExp, "ELIMINAR", http);
             }
 
             /** B3 — Metadata de un expediente individual para streaming por COMITÉ/ORH */
@@ -509,6 +612,7 @@ public class PostulacionService {
                 post.setCodigoAnonimo(null);                   // reset E25
                 post.setFechaConfirmacionExpediente(null);     // desbloquea nueva carga de expediente
                 post.setUsuarioConfirmacionExpediente(null);
+                post.setAdmisionRf07(null);               // reset RF-07
                 post.setVerificacionRnssc(null);
                 post.setVerificacionRegiprec(null);
                 post.setFechaVerificacionDl(null);

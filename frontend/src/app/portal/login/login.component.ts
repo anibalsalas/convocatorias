@@ -221,6 +221,39 @@ export class LoginComponent {
     password: ['', [Validators.required]],
   });
 
+  private interpretarErrorLogin(raw: string, status: number): string {
+    if (!raw) return 'Credenciales incorrectas. Verifique sus datos e intente de nuevo.';
+
+    // Cuenta bloqueada por intentos fallidos
+    if (raw.includes('bloqueada') && raw.includes('minuto')) {
+      const match = raw.match(/(\d+)\s*minuto/);
+      const min = match ? match[1] : '15';
+      return `Cuenta bloqueada. Intente en ${min} minuto(s) o use "¿Olvidó su contraseña?".`;
+    }
+
+    // Cuenta bloqueada por 5 intentos (mensaje alternativo del backend)
+    if (raw.includes('bloqueada') || raw.includes('5 intentos')) {
+      return 'Cuenta bloqueada temporalmente. Use "¿Olvidó su contraseña?" para recuperar el acceso.';
+    }
+
+    // Credenciales incorrectas con intentos restantes
+    const matchIntentos = raw.match(/(\d+)\s*(?:antes del bloqueo|intentos? restantes?)/i);
+    if (matchIntentos) {
+      const restantes = parseInt(matchIntentos[1], 10);
+      if (restantes === 1) {
+        return `Credenciales incorrectas. Último intento antes del bloqueo de cuenta.`;
+      }
+      return `Credenciales incorrectas. Le quedan ${restantes} intento(s) antes del bloqueo.`;
+    }
+
+    // Credenciales incorrectas sin contador (usuario no existe en BD)
+    if (raw.includes('incorrectas') || status === 401) {
+      return 'Credenciales incorrectas. Verifique su usuario y contraseña.';
+    }
+
+    return raw;
+  }
+
   sanitizarUsername(event: Event): void {
     const input = event.target as HTMLInputElement;
     const limpio = input.value.replace(/[^A-Za-z0-9.]/g, '').toLowerCase().slice(0, 20);
@@ -247,7 +280,8 @@ export class LoginComponent {
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMsg.set(err.error?.message || 'Credenciales incorrectas');
+        const raw: string = err.error?.error || err.error?.message || '';
+        this.errorMsg.set(this.interpretarErrorLogin(raw, err.status));
       },
     });
   }

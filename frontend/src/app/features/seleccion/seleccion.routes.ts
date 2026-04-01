@@ -113,5 +113,14 @@ export const seleccionRoutes: Routes = [
         (m) => m.PublicarSeleccionComponent,
       ),
   },
+  {
+    path: ':id/comunicados',
+    canActivate: [authGuard],
+    data: { roles: ['ROLE_ADMIN', 'ROLE_ORH', 'ROLE_COMITE'] },
+    loadComponent: () =>
+      import('./pages/comunicados/comunicados.component').then(
+        (m) => m.ComunicadosComponent,
+      ),
+  },
   { path: '**', redirectTo: '', pathMatch: 'full' },
 ];

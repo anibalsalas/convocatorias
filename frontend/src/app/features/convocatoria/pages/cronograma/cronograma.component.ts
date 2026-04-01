@@ -74,7 +74,7 @@ const AREAS_RESPONSABLES: readonly string[] = [
       <app-page-header
         title="Cronograma de Convocatoria"
         [estado]="convocatoria()?.estado"
-        subtitle="E10 — Registrar las 9 etapas, fechas y áreas responsables del proceso CAS.">
+        subtitle="Registrar las 9 etapas, fechas y áreas responsables del proceso CAS.">
         <a routerLink="/sistema/convocatoria" class="btn-ghost" aria-label="Volver a listado de convocatorias">← Volver</a>
       </app-page-header>
 
@@ -337,7 +337,7 @@ const AREAS_RESPONSABLES: readonly string[] = [
               <button type="button" class="btn-primary"
                       [disabled]="!puedeContinuarComite()"
                       (click)="onContinuarComite()">
-                Guardar y continuar a Comité
+                Guardar y continuar crear Comité
               </button>
             </div>
           }

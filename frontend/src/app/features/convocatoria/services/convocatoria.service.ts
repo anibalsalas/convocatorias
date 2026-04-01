@@ -132,4 +132,12 @@ export class ConvocatoriaService {
   descargarBasesPdf(id: number): Observable<Blob> {
     return this.api.getBlob(`${this.path}/${id}/bases-pdf`);
   }
+
+  contarPendientesComite(): Observable<ApiResponse<number>> {
+    return this.api.get<number>(`${this.path}/count-pendientes-comite`);
+  }
+
+  contarPendientesPublicar(): Observable<ApiResponse<number>> {
+    return this.api.get<number>(`${this.path}/count-pendientes-publicar`);
+  }
 }

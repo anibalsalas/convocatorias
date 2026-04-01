@@ -26,6 +26,7 @@ import pe.gob.acffaa.sisconv.domain.repository.IFactorEvaluacionRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IReglaMotorRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPostulacionRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
+import pe.gob.acffaa.sisconv.domain.repository.IComunicadoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.ICuadroMeritosRepository;
 import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaMiembroComiteRepository;
 
@@ -53,6 +54,7 @@ class ConvocatoriaServiceTest {
     @Mock private NotificacionService notificacionService;
     @Mock private JpaMiembroComiteRepository miembroJpaRepo;
     @Mock private ICuadroMeritosRepository meritoRepo;
+    @Mock private IComunicadoRepository comunicadoRepo;
     @Mock private HttpServletRequest httpReq;
 
     private ConvocatoriaService service;
@@ -73,7 +75,8 @@ class ConvocatoriaServiceTest {
                 auditPort,
                 notificacionService,
                 miembroJpaRepo,
-                meritoRepo
+                meritoRepo,
+                comunicadoRepo
         );
 
         lenient().when(httpReq.getRemoteAddr()).thenReturn("127.0.0.1");

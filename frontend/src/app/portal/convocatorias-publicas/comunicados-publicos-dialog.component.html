@@ -1,0 +1,30 @@
+<div class="com-dialog">
+  <div class="com-dialog__header">
+    <h2 class="com-dialog__title">Comunicados Oficiales — {{ numero }}</h2>
+    <button
+      type="button"
+      class="com-dialog__close"
+      (click)="cerrar()"
+      aria-label="Cerrar diálogo"
+    >
+      ✕
+    </button>
+  </div>
+  <div class="com-dialog__body" tabindex="-1">
+    @if (loading()) {
+      <p class="com-dialog__info">Cargando...</p>
+    } @else if (items().length === 0) {
+      <p class="com-dialog__info">No hay comunicados disponibles.</p>
+    } @else {
+      @for (com of items(); track com.idComunicado) {
+        <div class="comunicado-item">
+          <div class="comunicado-item__fecha">
+            {{ com.fechaPublicacion | date: 'dd/MM/yyyy HH:mm' }}
+          </div>
+          <div class="comunicado-item__titulo">{{ com.titulo }}</div>
+          <div class="comunicado-item__desc">{{ com.descripcion }}</div>
+        </div>
+      }
+    }
+  </div>
+</div>

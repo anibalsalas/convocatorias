@@ -64,6 +64,8 @@ export interface PostulacionSeleccion {
   nombrePuesto?: string;
   postulante: PostulanteInfo;
   estado: string;
+  /** Decisión ORH sobre Filtro RF-07. NULL=pendiente | ADMITIDO | NO_ADMITIDO */
+  admisionRf07?: 'ADMITIDO' | 'NO_ADMITIDO' | null;
   codigoAnonimo?: string | null;
   /** Flags D.L.1451 — string exacto: "SIN_SANCIONES" | "CON_SANCIONES" | null */
   verificacionRnssc?: string | null;
@@ -71,6 +73,8 @@ export interface PostulacionSeleccion {
   /** Observación libre del evaluador ORH al registrar DL1451 — trazabilidad SERVIR */
   observacionDl?: string | null;
   puntajeCurricular?: number | null;
+  /** Desglose por subcriterio curricular — solo presente si estado=APTO|NO_APTO */
+  evaluacionesCurriculares?: { idFactor: number; puntajeObtenido: number }[];
   puntajeTecnica?: number | null;
   puntajeEntrevista?: number | null;
   puntajeBonificacion?: number | null;
@@ -335,4 +339,22 @@ export interface NotificarCodigosResponse {
  *  El backend retorna directamente el PDF como blob — esta interfaz es para errores/avisos. */
 export interface PublicarTecnicaResponse {
   mensaje?: string;
+}
+
+// ── Comunicados DS 083-2019-PCM Art. 10 ─────────────────────────────────────
+
+export interface ComunicadoResponse {
+  idComunicado: number;
+  idConvocatoria: number;
+  numeroConvocatoria?: string;
+  titulo: string;
+  descripcion: string;
+  fechaPublicacion: string;
+  usuarioCreacion?: string;
+  mensaje?: string;
+}
+
+export interface ComunicadoRequest {
+  titulo: string;
+  descripcion: string;
 }

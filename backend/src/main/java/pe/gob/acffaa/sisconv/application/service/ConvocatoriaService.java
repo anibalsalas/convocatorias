@@ -78,6 +78,7 @@ public class ConvocatoriaService {
     private final JpaMiembroComiteRepository miembroJpaRepo;
     private final BasesPdfGenerator basesPdfGenerator;
     private final ICuadroMeritosRepository meritoRepo;
+    private final IComunicadoRepository comunicadoRepo;
 
     /** URL base del portal público institucional — se usa para auto-construir el link de la convocatoria. */
     @Value("${app.notifications.mail.portal-base-url:http://localhost:4200/portal}")
@@ -95,8 +96,8 @@ public class ConvocatoriaService {
                                IAuditPort auditPort,
                                NotificacionService notificacionService,
                                JpaMiembroComiteRepository miembroJpaRepo,
-                               ICuadroMeritosRepository meritoRepo)
-                                {
+                               ICuadroMeritosRepository meritoRepo,
+                               IComunicadoRepository comunicadoRepo) {
         this.convRepo = convRepo;
         this.reqRepo = reqRepo;
         this.cronoRepo = cronoRepo;
@@ -111,6 +112,7 @@ public class ConvocatoriaService {
         this.miembroJpaRepo = miembroJpaRepo;
         this.basesPdfGenerator = new BasesPdfGenerator();
         this.meritoRepo = meritoRepo;
+        this.comunicadoRepo = comunicadoRepo;
     }
 
         private static final List<String> ETAPAS_CRONOGRAMA_ORDENADAS = List.of(
@@ -355,6 +357,8 @@ public class ConvocatoriaService {
                         Boolean.TRUE.equals(conv.getEntrevistaPublicada()))
                 .tieneResultadoFinal(
                         conv.getEstado() == EstadoConvocatoria.FINALIZADA)
+                .tieneComunicados(
+                        comunicadoRepo.existsByConvocatoriaId(conv.getIdConvocatoria()))
                 .build());
     }
 
@@ -1233,6 +1237,10 @@ public class ConvocatoriaService {
         notificacionService.notificarRolConTipo("ORH", conv, "ACTA_LISTA_PUBLICAR",
                 asunto, contenido, username);
 
+        // Marcar LEIDA las notificaciones del COMITE para esta convocatoria
+        // → elimina badge "Pendiente" en lista y dashboard
+        notificacionService.marcarLeidasPorConvocatoriaYRol(idConvocatoria, "COMITE");
+
         auditPort.registrar("CONVOCATORIA", idConvocatoria,
                 "NOTIFICAR_ACTA_ORH", httpReq);
 
@@ -1429,15 +1437,20 @@ public class ConvocatoriaService {
         }
         List<pe.gob.acffaa.sisconv.domain.model.Postulacion> todos =
                 postRepo.findByConvocatoriaId(idConvocatoria).stream()
-                        .filter(p -> p.getPuntajeCurricular() != null)
+                        .filter(p -> p.getPuntajeCurricular() != null
+                                || "CON_SANCIONES".equals(p.getVerificacionRnssc())
+                                || "CON_SANCIONES".equals(p.getVerificacionRegiprec())
+                                || "NO_ADMITIDO".equals(p.getAdmisionRf07()))
                         .collect(java.util.stream.Collectors.toList());
         if (todos.isEmpty())
             throw new DomainException("No hay resultados de evaluación curricular publicados para esta convocatoria");
         final java.math.BigDecimal umbralFinal = umbral;
         todos.sort(java.util.Comparator
                 .comparing((pe.gob.acffaa.sisconv.domain.model.Postulacion p) ->
-                        p.getPuntajeCurricular().compareTo(umbralFinal) >= 0 ? 0 : 1)
-                .thenComparing(p -> p.getPuntajeCurricular(), java.util.Comparator.reverseOrder()));
+                        java.util.Optional.ofNullable(p.getPuntajeCurricular())
+                                .map(pc -> pc.compareTo(umbralFinal) >= 0 ? 0 : 1).orElse(1))
+                .thenComparing(p -> java.util.Optional.ofNullable(p.getPuntajeCurricular())
+                        .orElse(java.math.BigDecimal.ZERO), java.util.Comparator.reverseOrder()));
         return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
     }
 
@@ -1664,5 +1677,13 @@ public class ConvocatoriaService {
     
     private String etiquetaEtapa(String etapa) {
         return ETIQUETAS_ETAPA.getOrDefault(etapa, etapa);
+    }
+
+    public long contarPendientesComite(String username) {
+        return convRepo.countPendientesComite(username);
+    }
+
+    public long contarPendientesPublicar() {
+        return convRepo.countPendientesPublicar();
     }
 }

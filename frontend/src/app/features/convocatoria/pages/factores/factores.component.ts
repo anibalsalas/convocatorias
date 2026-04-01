@@ -2,7 +2,7 @@ import { NgForOf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { startWith } from 'rxjs';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ToastService } from '@core/services/toast.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
@@ -109,11 +109,13 @@ const ETIQUETAS_FASE: Record<string, string> = {
             </div>
             <div>
               <label class="label-field">Puntaje mínimo</label>
-              <input formControlName="puntajeMinimo" type="number" class="input-field" min="0" step="0.01" />
+              <input formControlName="puntajeMinimo" type="text" inputmode="decimal" maxlength="6" class="input-field" placeholder="0–100"
+                (input)="filtrarDecimal($event, factorForm.controls.puntajeMinimo, 100)" />
             </div>
             <div>
               <label class="label-field">Puntaje máximo *</label>
-              <input formControlName="puntajeMaximo" type="number" class="input-field" min="0.01" step="0.01" />
+              <input formControlName="puntajeMaximo" type="text" inputmode="decimal" maxlength="6" class="input-field" placeholder="0–100"
+                (input)="filtrarDecimal($event, factorForm.controls.puntajeMaximo, 100)" />
               @if (factorForm.controls.puntajeMaximo.touched && factorForm.controls.puntajeMaximo.errors?.['required']) {
                 <p class="text-xs text-red-500 mt-1">El puntaje máximo es obligatorio.</p>
               } @else if (factorForm.controls.puntajeMaximo.touched && factorForm.controls.puntajeMaximo.errors?.['min']) {
@@ -122,7 +124,8 @@ const ETIQUETAS_FASE: Record<string, string> = {
             </div>
             <div>
               <label class="label-field">Peso (%) *</label>
-              <input formControlName="pesoCriterio" type="number" class="input-field" min="0.01" max="100" step="0.01" />
+              <input formControlName="pesoCriterio" type="text" inputmode="decimal" maxlength="6" class="input-field" placeholder="0–100"
+                (input)="filtrarDecimal($event, factorForm.controls.pesoCriterio, 100)" />
               @if (factorForm.controls.pesoCriterio.touched && factorForm.controls.pesoCriterio.errors?.['required']) {
                 <p class="text-xs text-red-500 mt-1">El peso es obligatorio.</p>
               } @else if (factorForm.controls.pesoCriterio.touched && factorForm.controls.pesoCriterio.errors?.['min']) {
@@ -276,7 +279,7 @@ export class FactoresComponent {
   readonly factorForm = this.fb.group({
     etapaEvaluacion: this.fb.nonNullable.control('CURRICULAR', Validators.required),
     criterio: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(180)]),
-    puntajeMaximo: this.fb.nonNullable.control(100, [Validators.required, Validators.min(0.01)]),
+    puntajeMaximo: this.fb.nonNullable.control(100, [Validators.required, Validators.min(0.01), Validators.max(100)]),
     puntajeMinimo: this.fb.control<number | null>(0),
     pesoCriterio: this.fb.nonNullable.control(100, [Validators.required, Validators.min(0.01), Validators.max(100)]),
     orden: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
@@ -538,6 +541,15 @@ export class FactoresComponent {
           },
         });
     }
+  }
+
+  filtrarDecimal(event: Event, ctrl: FormControl, max: number): void {
+    const input = event.target as HTMLInputElement;
+    const limpio = input.value.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1').slice(0, 6);
+    const num = limpio === '' || limpio === '.' ? null : Math.min(parseFloat(limpio), max);
+    input.value = limpio;
+    ctrl.setValue(num !== null ? num : null, { emitEvent: true });
+    ctrl.updateValueAndValidity();
   }
 
   onConfirmarEliminar(f: FactorDetalleResponse): void {

@@ -36,3 +36,17 @@
   .label-field   { @apply block text-xs font-medium text-gray-700 mb-0.5; }
   .error-text    { @apply text-red-500 text-xs mt-1; }
 }
+
+// CDK Dialog — convocatorias públicas (comunicados oficiales)
+.comunicados-dialog-panel {
+  padding: 0 !important;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow:
+    0 25px 50px -12px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(0 0 0 / 0.06);
+}
+
+.comunicados-dialog-backdrop {
+  background: rgb(15 23 42 / 0.55);
+}

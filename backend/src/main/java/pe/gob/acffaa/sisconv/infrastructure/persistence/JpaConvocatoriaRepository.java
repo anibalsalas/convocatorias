@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.model.Convocatoria;
+import pe.gob.acffaa.sisconv.domain.model.Notificacion;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -42,4 +43,17 @@ public interface JpaConvocatoriaRepository extends JpaRepository<Convocatoria, L
     long nextNumeroConvocatoriaSequenceValue();
 
     boolean existsByRequerimientoIdRequerimiento(Long idRequerimiento);
+
+    @Query("SELECT COUNT(DISTINCT c.idConvocatoria) FROM Convocatoria c " +
+           "JOIN Notificacion n ON n.convocatoria = c " +
+           "WHERE c.estado = pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_ELABORACION " +
+           "AND n.usuarioDestino.username = :username " +
+           "AND n.estado = 'ENVIADA' " +
+           "AND n.deletedAt IS NULL")
+    long countPendientesComite(@Param("username") String username);
+
+    @Query("SELECT COUNT(c) FROM Convocatoria c " +
+           "WHERE c.estado = pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_ELABORACION " +
+           "AND c.notificacionActaEnviada = true")
+    long countPendientesPublicar();
 }

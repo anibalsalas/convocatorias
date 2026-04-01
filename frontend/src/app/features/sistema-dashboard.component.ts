@@ -1,6 +1,11 @@
-import { Component, ChangeDetectionStrategy, inject, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, computed, signal, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
+import { PerfilPuestoService } from './requerimiento/services/perfil-puesto.service';
+import { RequerimientoService } from './requerimiento/services/requerimiento.service';
+import { ConvocatoriaService } from './convocatoria/services/convocatoria.service';
+import { SeleccionService } from './seleccion/services/seleccion.service';
+import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
 
 @Component({
   selector: 'app-sistema-dashboard',
@@ -39,10 +44,10 @@ import { AuthService } from '@core/auth/auth.service';
     <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 px-0.5">
       Acceso rápido
     </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
 
       @if (canRequerimiento()) {
-        <a routerLink="/sistema/requerimiento"
+        <a [routerLink]="requerimientoLink()"
            class="card group flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 hover:border-[#D4A843]/50 transition-all duration-200 cursor-pointer">
           <div class="w-10 h-10 bg-[#1F2133]/8 rounded-lg flex items-center justify-center">
             <svg class="w-5 h-5 text-[#1F2133]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,6 +55,48 @@ import { AuthService } from '@core/auth/auth.service';
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
             </svg>
           </div>
+
+          <!-- Badges de alertas — apilados verticalmente, ancho completo -->
+          @if (isOrh() && perfilesPendientes() > 0) {
+            <a routerLink="/sistema/requerimiento/perfiles"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ perfilesPendientes() }} perfil{{ perfilesPendientes() !== 1 ? 'es' : '' }} por validar y aprobar</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
+          @if (isOrh() && reqPendientesReglas() > 0) {
+            <a routerLink="/sistema/requerimiento/requerimientos"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-indigo-50 border-l-2 border-indigo-400 text-indigo-800 hover:bg-indigo-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ reqPendientesReglas() }} req{{ reqPendientesReglas() !== 1 ? 's' : '' }}. por configurar motor de reglas</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
+          @if (isOrh() && reqConfSinConv() > 0) {
+            <a routerLink="/sistema/requerimiento/requerimientos"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-blue-50 border-l-2 border-blue-400 text-blue-800 hover:bg-blue-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ reqConfSinConv() }} req{{ reqConfSinConv() !== 1 ? 's' : '' }}. por crear Convocatoria CAS</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
+          @if (isAreaSolicitante() && perfilesPendientesReq() > 0) {
+            <a routerLink="/sistema/requerimiento/perfiles"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ perfilesPendientesReq() }} perfil{{ perfilesPendientesReq() !== 1 ? 'es' : '' }} aprobado{{ perfilesPendientesReq() !== 1 ? 's' : '' }} por requerimiento</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
+          @if (isOpp() && reqPendientesPresp() > 0) {
+            <a routerLink="/sistema/requerimiento/requerimientos"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ reqPendientesPresp() }} req{{ reqPendientesPresp() !== 1 ? 's' : '' }}. por verificación presupuestal</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
           <div>
             <h3 class="font-semibold text-sm text-gray-800">Requerimientos</h3>
             <p class="text-xs text-gray-500 mt-0.5">Perfiles y requerimientos CAS</p>
@@ -69,6 +116,22 @@ import { AuthService } from '@core/auth/auth.service';
                 d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
             </svg>
           </div>
+          @if (isOrh() && convPendientesPublicar() > 0) {
+            <a routerLink="/sistema/convocatoria"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-green-50 border-l-2 border-green-500 text-green-800 hover:bg-green-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ convPendientesPublicar() }} convocatoria{{ convPendientesPublicar() !== 1 ? 's' : '' }} lista{{ convPendientesPublicar() !== 1 ? 's' : '' }} para publicar</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
+          @if (isComite() && convPendientesComite() > 0) {
+            <a routerLink="/sistema/convocatoria"
+               (click)="$event.stopPropagation()"
+               class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+              <span class="text-[10px] font-semibold leading-snug">{{ convPendientesComite() }} convocatoria{{ convPendientesComite() !== 1 ? 's' : '' }} con tareas pendientes</span>
+              <span class="text-[10px] ml-1 opacity-60">→</span>
+            </a>
+          }
           <div>
             <h3 class="font-semibold text-sm text-gray-800">Convocatorias</h3>
             <p class="text-xs text-gray-500 mt-0.5">Gestión de convocatorias CAS</p>
@@ -88,6 +151,58 @@ import { AuthService } from '@core/auth/auth.service';
                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
           </div>
+          @if (isOrh()) {
+            @for (c of pendientesE19(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — {{ c.postulantesRegistrados }} postulante{{ c.postulantesRegistrados !== 1 ? 's' : '' }} por verificar (E19)
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+            @for (c of pendientesE25(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-green-50 border-l-2 border-green-500 text-green-800 hover:bg-green-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — {{ c.postulantesAptos }} APTO{{ c.postulantesAptos !== 1 ? 's' : '' }} sin Código Anónimo (E25)
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+            @for (c of pendientesEntrevista(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-purple-50 border-l-2 border-purple-400 text-purple-800 hover:bg-purple-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — Entrevista lista. Proceda con Bonificaciones → Publicar Resultados
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+          }
+          @if (isComite()) {
+            @for (c of pendientesE24(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — {{ c.postulantesVerificados }} postulante{{ c.postulantesVerificados !== 1 ? 's' : '' }} listo{{ c.postulantesVerificados !== 1 ? 's' : '' }} para E24
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+            @for (a of avisosCodigosListos(); track a.idNotificacion) {
+              <a [routerLink]="a.idConvocatoria ? ['/sistema/seleccion', a.idConvocatoria, 'postulantes'] : ['/sistema/seleccion']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-blue-50 border-l-2 border-blue-400 text-blue-800 hover:bg-blue-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">🔔 {{ a.asunto }}</span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+          }
           <div>
             <h3 class="font-semibold text-sm text-gray-800">Selección</h3>
             <p class="text-xs text-gray-500 mt-0.5">Evaluación y selección de postulantes</p>
@@ -120,8 +235,25 @@ import { AuthService } from '@core/auth/auth.service';
     </div>
   `,
 })
-export class SistemaDashboardComponent {
+export class SistemaDashboardComponent implements OnInit {
   readonly auth = inject(AuthService);
+  private readonly perfilSvc    = inject(PerfilPuestoService);
+  private readonly reqSvc       = inject(RequerimientoService);
+  private readonly convSvc      = inject(ConvocatoriaService);
+  private readonly seleccionSvc = inject(SeleccionService);
+
+  readonly pendientesE19         = signal<ConvocatoriaSeleccionItem[]>([]);
+  readonly pendientesE24         = signal<ConvocatoriaSeleccionItem[]>([]);
+  readonly pendientesE25         = signal<ConvocatoriaSeleccionItem[]>([]);
+  readonly pendientesEntrevista  = signal<ConvocatoriaSeleccionItem[]>([]);
+  readonly avisosCodigosListos   = signal<{ idNotificacion: number; asunto: string; idConvocatoria: number | null; numeroConvocatoria: string | null }[]>([]);
+  readonly perfilesPendientes    = signal(0);
+  readonly perfilesPendientesReq = signal(0);
+  readonly reqPendientesPresp    = signal(0);
+  readonly reqPendientesReglas   = signal(0);
+  readonly reqConfSinConv        = signal(0);
+  readonly convPendientesComite   = signal(0);
+  readonly convPendientesPublicar = signal(0);
 
   readonly greeting = computed(() => {
     const h = new Date().getHours();
@@ -135,6 +267,15 @@ export class SistemaDashboardComponent {
     return nombre.split(' ')[0];
   });
 
+  readonly isOrh             = computed(() => this.auth.hasRole('ROLE_ORH'));
+  readonly isAreaSolicitante = computed(() => this.auth.hasRole('ROLE_AREA_SOLICITANTE'));
+  readonly isOpp             = computed(() => this.auth.hasRole('ROLE_OPP'));
+  readonly isComite          = computed(() => this.auth.hasRole('ROLE_COMITE'));
+
+  readonly requerimientoLink = computed(() =>
+    this.isOpp() ? '/sistema/requerimiento/requerimientos' : '/sistema/requerimiento'
+  );
+
   readonly canRequerimiento = computed(() =>
     this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_ORH', 'ROLE_OPP', 'ROLE_AREA_SOLICITANTE']));
   readonly canConvocatoria = computed(() =>
@@ -143,4 +284,63 @@ export class SistemaDashboardComponent {
     this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_ORH', 'ROLE_COMITE']));
   readonly canContrato = computed(() =>
     this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_ORH']));
+
+  ngOnInit(): void {
+    if (this.isOrh()) {
+      this.perfilSvc.contarPendientesValidarAprobar().subscribe({
+        next: res => this.perfilesPendientes.set(res.data ?? 0),
+        error: () => this.perfilesPendientes.set(0),
+      });
+      this.reqSvc.contarConPresupuestoPendientesReglas().subscribe({
+        next: res => this.reqPendientesReglas.set(res.data ?? 0),
+        error: () => this.reqPendientesReglas.set(0),
+      });
+      this.reqSvc.contarConfiguradosSinConvocatoria().subscribe({
+        next: res => this.reqConfSinConv.set(res.data ?? 0),
+        error: () => this.reqConfSinConv.set(0),
+      });
+      this.convSvc.contarPendientesPublicar().subscribe({
+        next: res => this.convPendientesPublicar.set(res.data ?? 0),
+        error: () => this.convPendientesPublicar.set(0),
+      });
+      this.seleccionSvc.listarPendientesE19().subscribe({
+        next: lista => this.pendientesE19.set(lista),
+        error: ()   => this.pendientesE19.set([]),
+      });
+      this.seleccionSvc.listarPendientesE25Orh().subscribe({
+        next: lista => this.pendientesE25.set(lista),
+        error: ()   => this.pendientesE25.set([]),
+      });
+      this.seleccionSvc.listarPendientesEntrevistaOrh().subscribe({
+        next: lista => this.pendientesEntrevista.set(lista),
+        error: ()   => this.pendientesEntrevista.set([]),
+      });
+    }
+    if (this.isAreaSolicitante()) {
+      this.perfilSvc.contarPendientesRequerimiento().subscribe({
+        next: res => this.perfilesPendientesReq.set(res.data ?? 0),
+        error: () => this.perfilesPendientesReq.set(0),
+      });
+    }
+    if (this.isOpp()) {
+      this.reqSvc.contarPendientesVerificacionPresupuestal().subscribe({
+        next: res => this.reqPendientesPresp.set(res.data ?? 0),
+        error: () => this.reqPendientesPresp.set(0),
+      });
+    }
+    if (this.isComite()) {
+      this.convSvc.contarPendientesComite().subscribe({
+        next: res => this.convPendientesComite.set(res.data ?? 0),
+        error: () => this.convPendientesComite.set(0),
+      });
+      this.seleccionSvc.listarPendientesE24Comite().subscribe({
+        next: lista => this.pendientesE24.set(lista),
+        error: ()   => this.pendientesE24.set([]),
+      });
+      this.seleccionSvc.listarAvisosCodigosListos().subscribe({
+        next: lista => this.avisosCodigosListos.set(lista),
+        error: ()   => this.avisosCodigosListos.set([]),
+      });
+    }
+  }
 }

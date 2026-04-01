@@ -233,7 +233,9 @@
               </div>
               <div>
                 <label class="label-field">Nro. Horas</label>
-                <input formControlName="horas" type="number" min="1" class="input-field" />
+                <input formControlName="horas" type="text" inputmode="numeric" maxlength="3"
+                  class="input-field" placeholder="0"
+                  (input)="filtrarHoras($event)" />
               </div>
             </div>
             <div class="flex gap-2 pt-2">

@@ -54,6 +54,13 @@ export class PostulacionService {
     );
   }
   
+  eliminarExpediente(
+    idPostulacion: number,
+    idExpediente: number,
+  ): Observable<ApiResponse<void>> {
+    return this.api.delete<void>(`${this.path}/${idPostulacion}/expediente/${idExpediente}`);
+  }
+
   cargarExpediente(
     idPostulacion: number,
     tipoDocumento: string,
