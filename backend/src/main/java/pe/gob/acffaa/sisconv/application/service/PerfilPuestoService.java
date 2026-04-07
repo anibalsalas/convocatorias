@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import pe.gob.acffaa.sisconv.application.dto.request.AprobarPerfilRequest;
 import pe.gob.acffaa.sisconv.application.dto.request.PerfilPuestoRequest;
 import pe.gob.acffaa.sisconv.application.dto.request.ValidarPerfilRequest;
+import pe.gob.acffaa.sisconv.application.dto.response.DenominacionPuestoResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.NivelPuestoResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.PerfilPuestoContextResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.PerfilPuestoResponse;
@@ -29,6 +30,7 @@ import pe.gob.acffaa.sisconv.domain.exception.DomainException;
 import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.IAreaOrganizacionalRepository;
+import pe.gob.acffaa.sisconv.domain.repository.IDenominacionPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.INivelPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPerfilPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IUsuarioRepository;
@@ -50,6 +52,7 @@ public class PerfilPuestoService {
 
     private final IPerfilPuestoRepository perfilRepo;
     private final INivelPuestoRepository nivelPuestoRepo;
+    private final IDenominacionPuestoRepository denominacionPuestoRepo;
     private final PerfilPuestoMapper mapper;
     private final IAuditPort auditPort;
     private final JpaRequerimientoRepository requerimientoRepo;
@@ -63,6 +66,7 @@ public class PerfilPuestoService {
     public PerfilPuestoService(
             IPerfilPuestoRepository perfilRepo,
             INivelPuestoRepository nivelPuestoRepo,
+            IDenominacionPuestoRepository denominacionPuestoRepo,
             PerfilPuestoMapper mapper,
             IAuditPort auditPort,
             JpaRequerimientoRepository requerimientoRepo,
@@ -72,12 +76,25 @@ public class PerfilPuestoService {
     ) {
         this.perfilRepo = perfilRepo;
         this.nivelPuestoRepo = nivelPuestoRepo;
+        this.denominacionPuestoRepo = denominacionPuestoRepo;
         this.mapper = mapper;
         this.auditPort = auditPort;
         this.requerimientoRepo = requerimientoRepo;
         this.notificacionService = notificacionService;
         this.usuarioRepository = usuarioRepository;
         this.areaRepository = areaRepository;
+    }
+
+    /** Lista catálogo de denominaciones de puesto para selects (TBL_DENOMINACION_PUESTO). */
+    public List<DenominacionPuestoResponse> listarDenominacionesPuesto() {
+        return denominacionPuestoRepo.findAllOrderByOrden().stream()
+                .map(d -> DenominacionPuestoResponse.builder()
+                        .idDenominacionPuesto(d.getIdDenominacionPuesto())
+                        .codigo(d.getCodigo())
+                        .descripcion(d.getDescripcion())
+                        .orden(d.getOrden())
+                        .build())
+                .toList();
     }
 
     /** Lista catálogo de niveles de puesto para selects (TBL_NIVEL_PUESTO). */
@@ -92,10 +109,19 @@ public class PerfilPuestoService {
                 .toList();
     }
 
-    public Page<PerfilPuestoResponse> listar(String estado, Pageable pageable) {
-        Page<PerfilPuesto> page = (estado != null && !estado.isBlank())
-                ? perfilRepo.findByEstado(estado, pageable)
-                : perfilRepo.findAll(pageable);
+    public Page<PerfilPuestoResponse> listar(String estado, Long idAreaFiltro, Pageable pageable) {
+        Page<PerfilPuesto> page;
+        if (idAreaFiltro != null) {
+            // AREA_SOLICITANTE: filtrar por su área
+            page = (estado != null && !estado.isBlank())
+                    ? perfilRepo.findByEstadoAndIdAreaSolicitante(estado, idAreaFiltro, pageable)
+                    : perfilRepo.findByIdAreaSolicitante(idAreaFiltro, pageable);
+        } else {
+            // ORH/ADMIN/OPP: sin filtro de área
+            page = (estado != null && !estado.isBlank())
+                    ? perfilRepo.findByEstado(estado, pageable)
+                    : perfilRepo.findAll(pageable);
+        }
         return page.map(perfil -> enriquecerConRequerimiento(mapper.toResponse(perfil)));
     }
 
@@ -110,7 +136,10 @@ public class PerfilPuestoService {
         return new PerfilPuestoContextResponse(context.idAreaSolicitante(), context.unidadOrganica(), username);
     }
 
-    public long contarPendientesRequerimiento() {
+    public long contarPendientesRequerimiento(Long idAreaFiltro) {
+        if (idAreaFiltro != null) {
+            return perfilRepo.countAprobadosSinRequerimientoVigenteByArea(idAreaFiltro);
+        }
         return perfilRepo.countAprobadosSinRequerimientoVigente();
     }
 
@@ -213,6 +242,11 @@ public class PerfilPuestoService {
             throw new DomainException("Solo se puede validar un perfil en estado PENDIENTE. Estado actual: " + perfil.getEstado());
         }
 
+        if (!Boolean.TRUE.equals(req.getCumpleMpp())
+                && (req.getObservaciones() == null || req.getObservaciones().isBlank())) {
+            throw new DomainException("Las observaciones son obligatorias cuando el perfil no cumple con el MPP.");
+        }
+
         String estadoAnterior = perfil.getEstado();
         String estadoNuevo = Boolean.TRUE.equals(req.getCumpleMpp()) ? "VALIDADO" : "RECHAZADO";
 
@@ -311,9 +345,6 @@ public class PerfilPuestoService {
                     {"Denominación del puesto", defaultText(perfil.getDenominacionPuesto())},
                     {"Nivel del puesto", formatNivelPuesto(perfil.getIdNivelPuesto())},
                     {"Unidad orgánica", defaultText(perfil.getUnidadOrganica())},
-                    {"Dependencia jerárquica lineal", defaultText(perfil.getDependenciaJerarquicaLineal())},
-                    {"Dependencia funcional", defaultText(perfil.getDependenciaFuncional())},
-                    {"Puestos a su cargo", defaultValue(perfil.getPuestosCargo())},
                     {"Cantidad de puestos", defaultValue(perfil.getCantidadPuestos())},
                     {"Misión del puesto", defaultText(perfil.getMisionPuesto())}
             }, labelFont, textFont));
@@ -352,9 +383,6 @@ public class PerfilPuestoService {
         perfil.setIdAreaSolicitante(req.getIdAreaSolicitante());
         perfil.setIdNivelPuesto(req.getIdNivelPuesto());
         perfil.setIdNivelFormacion(req.getIdNivelFormacion() != null ? req.getIdNivelFormacion() : perfil.getIdNivelFormacion());
-        perfil.setDependenciaJerarquicaLineal(req.getDependenciaJerarquicaLineal());
-        perfil.setDependenciaFuncional(req.getDependenciaFuncional());
-        perfil.setPuestosCargo(req.getPuestosCargo());
         if (req.getExperienciaGeneral() != null) {
             perfil.setExperienciaGeneral(req.getExperienciaGeneral());
         }
@@ -445,7 +473,7 @@ public class PerfilPuestoService {
                 .tipoExperiencia(item.getTipoExperiencia())
                 .cantidad(item.getCantidad())
                 .unidadTiempo(item.getUnidadTiempo())
-                .nivelMinimoPuesto(item.getNivelMinimoPuesto())
+                .nivelMinimoPuesto(item.getNivelMinimoPuesto() != null ? item.getNivelMinimoPuesto() : "")
                 .detalle(item.getDetalle())
                 .orden(item.getOrden() != null ? item.getOrden() : perfil.getExperiencias().size() + 1)
                 .build()));
@@ -488,11 +516,11 @@ public class PerfilPuestoService {
             perfil.getCondicion().setJornadaSemanal(req.getCondicion().getJornadaSemanal());
             perfil.getCondicion().setOtrasCondiciones(normalizeToNullValue(req.getCondicion().getOtrasCondiciones()));
             // V16: horario, modalidad y tipo de inicio para Bases PDF (E16)
-            perfil.getCondicion().setHorarioInicio(req.getCondicion().getHorarioInicio());
-            perfil.getCondicion().setHorarioFin(req.getCondicion().getHorarioFin());
+            perfil.getCondicion().setHorarioInicio(normalizeToNullValue(req.getCondicion().getHorarioInicio()));
+            perfil.getCondicion().setHorarioFin(normalizeToNullValue(req.getCondicion().getHorarioFin()));
             perfil.getCondicion().setDiasLaborales(normalizeToNullValue(req.getCondicion().getDiasLaborales()));
-            perfil.getCondicion().setModalidadServicio(req.getCondicion().getModalidadServicio());
-            perfil.getCondicion().setTipoInicioContrato(req.getCondicion().getTipoInicioContrato());
+            perfil.getCondicion().setModalidadServicio(normalizeToNullValue(req.getCondicion().getModalidadServicio()));
+            perfil.getCondicion().setTipoInicioContrato(normalizeToNullValue(req.getCondicion().getTipoInicioContrato()));
             return;
         }
         perfil.setCondicion(CondicionPuesto.builder()
@@ -502,11 +530,11 @@ public class PerfilPuestoService {
                 .jornadaSemanal(req.getCondicion().getJornadaSemanal() != null ? req.getCondicion().getJornadaSemanal() : 48)
                 .otrasCondiciones(normalizeToNullValue(req.getCondicion().getOtrasCondiciones()))
                 // V16: horario, modalidad y tipo de inicio para Bases PDF (E16)
-                .horarioInicio(req.getCondicion().getHorarioInicio())
-                .horarioFin(req.getCondicion().getHorarioFin())
+                .horarioInicio(normalizeToNullValue(req.getCondicion().getHorarioInicio()))
+                .horarioFin(normalizeToNullValue(req.getCondicion().getHorarioFin()))
                 .diasLaborales(normalizeToNullValue(req.getCondicion().getDiasLaborales()))
-                .modalidadServicio(req.getCondicion().getModalidadServicio())
-                .tipoInicioContrato(req.getCondicion().getTipoInicioContrato())
+                .modalidadServicio(normalizeToNullValue(req.getCondicion().getModalidadServicio()))
+                .tipoInicioContrato(normalizeToNullValue(req.getCondicion().getTipoInicioContrato()))
                 .perfilPuesto(perfil)
                 .build());
     }
@@ -663,8 +691,6 @@ public class PerfilPuestoService {
         request.setNombrePuesto(normalizeToNullValue(request.getNombrePuesto()));
         request.setDenominacionPuesto(normalizeToNullValue(request.getDenominacionPuesto()));
         request.setUnidadOrganica(normalizeToNullValue(request.getUnidadOrganica()));
-        request.setDependenciaJerarquicaLineal(normalizeToNullValue(request.getDependenciaJerarquicaLineal()));
-        request.setDependenciaFuncional(normalizeToNullValue(request.getDependenciaFuncional()));
         request.setExperienciaGeneral(normalizeToNullValue(request.getExperienciaGeneral()));
         request.setExperienciaEspecifica(normalizeToNullValue(request.getExperienciaEspecifica()));
         request.setHabilidades(normalizeToNullValue(request.getHabilidades()));
@@ -693,6 +719,14 @@ public class PerfilPuestoService {
                 item.setNivelMinimoPuesto(normalizeToNullValue(item.getNivelMinimoPuesto()));
                 item.setDetalle(normalizeToNullValue(item.getDetalle()));
             });
+        }
+        if (request.getCondicion() != null) {
+            var c = request.getCondicion();
+            c.setHorarioInicio(normalizeToNullValue(c.getHorarioInicio()));
+            c.setHorarioFin(normalizeToNullValue(c.getHorarioFin()));
+            c.setDiasLaborales(normalizeToNullValue(c.getDiasLaborales()));
+            c.setModalidadServicio(normalizeToNullValue(c.getModalidadServicio()));
+            c.setTipoInicioContrato(normalizeToNullValue(c.getTipoInicioContrato()));
         }
     }
 

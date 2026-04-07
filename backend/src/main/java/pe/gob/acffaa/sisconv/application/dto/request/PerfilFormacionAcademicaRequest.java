@@ -13,11 +13,10 @@ import lombok.Setter;
 @AllArgsConstructor
 public class PerfilFormacionAcademicaRequest {
 
-    @NotBlank(message = "El grado académico es obligatorio")
-    @Size(max = 100, message = "El grado académico no debe exceder 100 caracteres")
+    @NotBlank(message = "La formación académica es obligatoria")
+    @Size(max = 500, message = "La formación académica no debe exceder 500 caracteres")
     private String gradoAcademico;
 
-    @NotBlank(message = "La especialidad es obligatoria")
     @Size(max = 200, message = "La especialidad no debe exceder 200 caracteres")
     private String especialidad;
 

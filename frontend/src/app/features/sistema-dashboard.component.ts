@@ -1,9 +1,12 @@
-import { Component, ChangeDetectionStrategy, inject, computed, signal, OnInit } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, ChangeDetectionStrategy, DestroyRef, inject, computed, signal, OnInit } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { filter } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
 import { PerfilPuestoService } from './requerimiento/services/perfil-puesto.service';
 import { RequerimientoService } from './requerimiento/services/requerimiento.service';
 import { ConvocatoriaService } from './convocatoria/services/convocatoria.service';
+import { AvisoBancoAreaResponse, ConvocatoriaResponse } from './convocatoria/models/convocatoria.model';
 import { SeleccionService } from './seleccion/services/seleccion.service';
 import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
 
@@ -47,6 +50,7 @@ import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
 
       @if (canRequerimiento()) {
+        <div class="flex flex-col gap-3 min-w-0">
         <a [routerLink]="requerimientoLink()"
            class="card group flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 hover:border-[#D4A843]/50 transition-all duration-200 cursor-pointer">
           <div class="w-10 h-10 bg-[#1F2133]/8 rounded-lg flex items-center justify-center">
@@ -105,6 +109,7 @@ import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
             Ir al módulo →
           </span>
         </a>
+        </div>
       }
 
       @if (canConvocatoria()) {
@@ -123,6 +128,18 @@ import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
               <span class="text-[10px] font-semibold leading-snug">{{ convPendientesPublicar() }} convocatoria{{ convPendientesPublicar() !== 1 ? 's' : '' }} lista{{ convPendientesPublicar() !== 1 ? 's' : '' }} para publicar</span>
               <span class="text-[10px] ml-1 opacity-60">→</span>
             </a>
+          }
+          @if (isOrhOrAdmin() && pendientesNotificarComiteOrh().length > 0) {
+            @for (c of pendientesNotificarComiteOrh(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/convocatoria', c.idConvocatoria, 'comite']"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-rose-50 border-l-2 border-rose-500 text-rose-900 hover:bg-rose-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — Falta «Notificar a Comité» (ORH)
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
           }
           @if (isComite() && convPendientesComite() > 0) {
             <a routerLink="/sistema/convocatoria"
@@ -152,12 +169,34 @@ import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
             </svg>
           </div>
           @if (isOrh()) {
+            @for (c of bancoCargadoPendienteOrh(); track c.idConvocatoria) {
+              <div (click)="$event.stopPropagation(); $event.preventDefault()"
+                   class="flex items-start gap-2 w-full px-2.5 py-2 rounded-md bg-teal-50 border-l-2 border-teal-500 text-teal-900 cursor-default select-text">
+                <svg class="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+                </svg>
+                <span class="text-[10px] font-medium leading-snug">
+                  {{ c.numeroConvocatoria }} — El banco de preguntas fue cargado por el área solicitante. Estará disponible para configurar el Examen Virtual cuando la convocatoria pase a estado <strong>EN_SELECCION</strong>.
+                </span>
+              </div>
+            }
             @for (c of pendientesE19(); track c.idConvocatoria) {
               <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
                  (click)="$event.stopPropagation()"
                  class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-amber-50 border-l-2 border-amber-400 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer">
                 <span class="text-[10px] font-semibold leading-snug">
                   {{ c.numeroConvocatoria }} — {{ c.postulantesRegistrados }} postulante{{ c.postulantesRegistrados !== 1 ? 's' : '' }} por verificar (E19)
+                </span>
+                <span class="text-[10px] ml-1 opacity-60">→</span>
+              </a>
+            }
+            @for (c of pendientesPublicarE24(); track c.idConvocatoria) {
+              <a [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'eval-curricular']"
+                 [queryParams]="{ resultados: 1 }"
+                 (click)="$event.stopPropagation()"
+                 class="flex items-center justify-between w-full px-2.5 py-1.5 rounded-md bg-orange-50 border-l-2 border-orange-500 text-orange-800 hover:bg-orange-100 transition-colors cursor-pointer">
+                <span class="text-[10px] font-semibold leading-snug">
+                  {{ c.numeroConvocatoria }} — Pendiente publicar resultado eval. curricular (E24)
                 </span>
                 <span class="text-[10px] ml-1 opacity-60">→</span>
               </a>
@@ -233,6 +272,75 @@ import { ConvocatoriaSeleccionItem } from './seleccion/models/seleccion.model';
       }
 
     </div>
+
+    @if (isAreaSolicitante() && avisosBanco().length > 0) {
+      <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-6 mb-3 px-0.5">
+        Banco de Preguntas y Respuestas
+      </h2>
+      <div class="card">
+        <table class="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr class="border-b border-gray-200 text-gray-600">
+              <th scope="col" class="py-2 pr-3 font-medium whitespace-nowrap">Convocatoria CAS</th>
+              <th scope="col" class="py-2 pr-3 font-medium">Estado</th>
+              <th scope="col" class="py-2 font-medium whitespace-nowrap text-right w-24">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of avisosBancoPagina(); track row.idConvocatoria) {
+              <tr class="border-b border-gray-100 last:border-0 align-top">
+                <td class="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">{{ row.numeroConvocatoria }}</td>
+                <td class="py-2 pr-3 text-gray-700">
+                  @if (row.bancoCompleto) {
+                    <span class="text-teal-800">Banco de preguntas y respuestas ya enviado a ORH</span>
+                  } @else {
+                    <span class="text-amber-900">Pendiente cargar banco de preguntas</span>
+                  }
+                </td>
+                <td class="py-2 text-right whitespace-nowrap">
+                  @if (row.bancoCompleto) {
+                    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-teal-100 text-teal-900" role="status">Enviado</span>
+                  } @else {
+                    <a [routerLink]="['/sistema/banco-preguntas', row.idConvocatoria]"
+                       class="text-xs font-medium text-[#1F2133] hover:text-[#D4A843] underline">
+                      Cargar
+                    </a>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        @if (avisosBanco().length > bancoPageSize) {
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-2 border-t border-gray-100">
+            <p class="text-xs text-gray-500">
+              Mostrando {{ bancoRangoInicio() }}–{{ bancoRangoFin() }} de {{ avisosBanco().length }}
+            </p>
+            <div class="flex items-center gap-2">
+              <button type="button"
+                (click)="bancoPrevPage()"
+                [disabled]="!bancoCanPrev()"
+                [attr.aria-disabled]="!bancoCanPrev()"
+                aria-label="Página anterior de avisos de banco"
+                class="px-2.5 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700
+                       disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50">
+                Anterior
+              </button>
+              <span class="text-xs text-gray-500 tabular-nums">{{ bancoPageIndex() + 1 }} / {{ bancoTotalPages() }}</span>
+              <button type="button"
+                (click)="bancoNextPage()"
+                [disabled]="!bancoCanNext()"
+                [attr.aria-disabled]="!bancoCanNext()"
+                aria-label="Página siguiente de avisos de banco de preguntas"
+                class="px-2.5 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700
+                       disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50">
+                Siguiente
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    }
   `,
 })
 export class SistemaDashboardComponent implements OnInit {
@@ -241,12 +349,19 @@ export class SistemaDashboardComponent implements OnInit {
   private readonly reqSvc       = inject(RequerimientoService);
   private readonly convSvc      = inject(ConvocatoriaService);
   private readonly seleccionSvc = inject(SeleccionService);
+  private readonly router       = inject(Router);
+  private readonly destroyRef   = inject(DestroyRef);
 
   readonly pendientesE19         = signal<ConvocatoriaSeleccionItem[]>([]);
   readonly pendientesE24         = signal<ConvocatoriaSeleccionItem[]>([]);
   readonly pendientesE25         = signal<ConvocatoriaSeleccionItem[]>([]);
+  readonly pendientesPublicarE24 = signal<ConvocatoriaSeleccionItem[]>([]);
   readonly pendientesEntrevista  = signal<ConvocatoriaSeleccionItem[]>([]);
   readonly avisosCodigosListos   = signal<{ idNotificacion: number; asunto: string; idConvocatoria: number | null; numeroConvocatoria: string | null }[]>([]);
+  readonly avisosBanco = signal<AvisoBancoAreaResponse[]>([]);
+  readonly bancoPageSize = 5;
+  readonly bancoPageIndex = signal(0);
+  readonly bancoCargadoPendienteOrh = signal<ConvocatoriaResponse[]>([]);
   readonly perfilesPendientes    = signal(0);
   readonly perfilesPendientesReq = signal(0);
   readonly reqPendientesPresp    = signal(0);
@@ -254,6 +369,8 @@ export class SistemaDashboardComponent implements OnInit {
   readonly reqConfSinConv        = signal(0);
   readonly convPendientesComite   = signal(0);
   readonly convPendientesPublicar = signal(0);
+  /** Convocatorias EN_ELABORACION con comité registrado y pendiente notificación ORH. */
+  readonly pendientesNotificarComiteOrh = signal<ConvocatoriaResponse[]>([]);
 
   readonly greeting = computed(() => {
     const h = new Date().getHours();
@@ -268,6 +385,7 @@ export class SistemaDashboardComponent implements OnInit {
   });
 
   readonly isOrh             = computed(() => this.auth.hasRole('ROLE_ORH'));
+  readonly isOrhOrAdmin = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
   readonly isAreaSolicitante = computed(() => this.auth.hasRole('ROLE_AREA_SOLICITANTE'));
   readonly isOpp             = computed(() => this.auth.hasRole('ROLE_OPP'));
   readonly isComite          = computed(() => this.auth.hasRole('ROLE_COMITE'));
@@ -285,7 +403,60 @@ export class SistemaDashboardComponent implements OnInit {
   readonly canContrato = computed(() =>
     this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_ORH']));
 
+  readonly avisosBancoPagina = computed(() => {
+    const all = this.avisosBanco();
+    const start = this.bancoPageIndex() * this.bancoPageSize;
+    return all.slice(start, start + this.bancoPageSize);
+  });
+
+  readonly bancoTotalPages = computed(() => {
+    const n = this.avisosBanco().length;
+    return Math.max(1, Math.ceil(n / this.bancoPageSize));
+  });
+
+  readonly bancoRangoInicio = computed(() => {
+    const n = this.avisosBanco().length;
+    if (n === 0) return 0;
+    return this.bancoPageIndex() * this.bancoPageSize + 1;
+  });
+
+  readonly bancoRangoFin = computed(() => {
+    const n = this.avisosBanco().length;
+    return Math.min((this.bancoPageIndex() + 1) * this.bancoPageSize, n);
+  });
+
+  readonly bancoCanPrev = computed(() => this.bancoPageIndex() > 0);
+
+  readonly bancoCanNext = computed(() => this.bancoPageIndex() < this.bancoTotalPages() - 1);
+
+  bancoPrevPage(): void {
+    if (this.bancoPageIndex() > 0) this.bancoPageIndex.update(i => i - 1);
+  }
+
+  bancoNextPage(): void {
+    if (this.bancoPageIndex() < this.bancoTotalPages() - 1) this.bancoPageIndex.update(i => i + 1);
+  }
+
+  /** Lista avisos banco (Área Solicitante); reutilizado al volver al dashboard tras cargar preguntas. */
+  private cargarAvisosBancoArea(): void {
+    this.convSvc.pendientesBanco().subscribe({
+      next: res => {
+        const list = res.data ?? [];
+        this.avisosBanco.set(list);
+        const tp = Math.max(1, Math.ceil(list.length / this.bancoPageSize));
+        if (this.bancoPageIndex() >= tp) this.bancoPageIndex.set(0);
+      },
+      error: () => this.avisosBanco.set([]),
+    });
+  }
+
   ngOnInit(): void {
+    if (this.isOrhOrAdmin()) {
+      this.convSvc.listarPendientesNotificarComiteOrh().subscribe({
+        next: res => this.pendientesNotificarComiteOrh.set(res.data ?? []),
+        error: () => this.pendientesNotificarComiteOrh.set([]),
+      });
+    }
     if (this.isOrh()) {
       this.perfilSvc.contarPendientesValidarAprobar().subscribe({
         next: res => this.perfilesPendientes.set(res.data ?? 0),
@@ -311,9 +482,17 @@ export class SistemaDashboardComponent implements OnInit {
         next: lista => this.pendientesE25.set(lista),
         error: ()   => this.pendientesE25.set([]),
       });
+      this.seleccionSvc.listarPendientesPublicarE24Orh().subscribe({
+        next: lista => this.pendientesPublicarE24.set(lista),
+        error: ()   => this.pendientesPublicarE24.set([]),
+      });
       this.seleccionSvc.listarPendientesEntrevistaOrh().subscribe({
         next: lista => this.pendientesEntrevista.set(lista),
         error: ()   => this.pendientesEntrevista.set([]),
+      });
+      this.convSvc.listarBancoCargadoPendienteConfigOrh().subscribe({
+        next: res => this.bancoCargadoPendienteOrh.set(res.data ?? []),
+        error: () => this.bancoCargadoPendienteOrh.set([]),
       });
     }
     if (this.isAreaSolicitante()) {
@@ -321,6 +500,14 @@ export class SistemaDashboardComponent implements OnInit {
         next: res => this.perfilesPendientesReq.set(res.data ?? 0),
         error: () => this.perfilesPendientesReq.set(0),
       });
+      this.cargarAvisosBancoArea();
+      this.router.events
+        .pipe(
+          filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+          filter(e => e.urlAfterRedirects.split('?')[0] === '/sistema/dashboard'),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe(() => this.cargarAvisosBancoArea());
     }
     if (this.isOpp()) {
       this.reqSvc.contarPendientesVerificacionPresupuestal().subscribe({

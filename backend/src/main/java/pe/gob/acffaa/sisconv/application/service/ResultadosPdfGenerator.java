@@ -18,8 +18,8 @@ import java.util.List;
  */
 public class ResultadosPdfGenerator {
 
-    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 14, Font.BOLD);
-    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 11, Font.BOLD);
+    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 12, Font.BOLD);
+    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 12, Font.BOLD);
     private static final Font SECTION_FONT  = new Font(Font.HELVETICA, 10, Font.BOLD);
     private static final Font BODY_FONT     = new Font(Font.HELVETICA, 9,  Font.NORMAL);
     private static final Font BODY_BOLD     = new Font(Font.HELVETICA, 9,  Font.BOLD);
@@ -58,17 +58,18 @@ public class ResultadosPdfGenerator {
     // ── Secciones ───────────────────────────────────────────────────────────────
 
     private void agregarTitulo(Document doc, Convocatoria conv) throws DocumentException {
-        Paragraph titulo = new Paragraph();
-        titulo.setAlignment(Element.ALIGN_CENTER);
-        titulo.add(new Chunk("AGENCIA DE COMPRAS DE LAS FUERZAS ARMADAS", SUBTITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("MINISTERIO DE DEFENSA", BODY_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("RESULTADOS FINALES DEL PROCESO DE SELECCIÓN CAS", TITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("PROCESO " + conv.getNumeroConvocatoria(), SUBTITLE_FONT));
-        doc.add(titulo);
+        ResultadosPdfInstitucionalHeader.addTo(doc);
+        Paragraph pProceso = new Paragraph("PROCESO " + conv.getNumeroConvocatoria() + " – ACFFAA", TITLE_FONT);
+        pProceso.setAlignment(Element.ALIGN_CENTER);
+        pProceso.setSpacingAfter(8f);
+        doc.add(pProceso);
+
+        Paragraph pResultados = new Paragraph();
+        pResultados.setAlignment(Element.ALIGN_CENTER);
+        pResultados.add(new Chunk("RESULTADOS FINALES DEL PROCESO DE SELECCIÓN CAS", TITLE_FONT));
+        pResultados.add(Chunk.NEWLINE);
+        pResultados.add(new Chunk("DE " + truncarObjeto(conv.getObjetoContratacion()).toUpperCase() + ".", SUBTITLE_FONT));
+        doc.add(pResultados);
         doc.add(espaciado());
 
         // Línea de metadatos
@@ -177,6 +178,12 @@ public class ResultadosPdfGenerator {
 
     private String safe(String val) {
         return val != null ? val : "—";
+    }
+
+    private String truncarObjeto(String obj) {
+        if (obj == null) return "—";
+        int idx = obj.toUpperCase().indexOf("PARA LA OFICINA");
+        return idx > 0 ? obj.substring(0, idx).trim() : obj;
     }
 
     private Paragraph espaciado() {

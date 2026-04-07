@@ -52,8 +52,11 @@ import { DatePeruPipe } from '@shared/pipes/date-peru.pipe';
               </div>
             </div>
             <div>
-              <label class="label-field">Observaciones</label>
+              <label class="label-field">Observaciones{{ !validarForm.controls.cumpleMpp.value ? ' *' : '' }}</label>
               <textarea [formControl]="validarForm.controls.observaciones" class="input-field" rows="3" maxlength="1000" placeholder="Observaciones de la validación..."></textarea>
+              @if (!validarForm.controls.cumpleMpp.value && validarForm.controls.observaciones.touched && validarForm.controls.observaciones.hasError('required')) {
+                <span class="text-xs text-red-600 mt-1">Las observaciones son obligatorias cuando el perfil no cumple con el MPP.</span>
+              }
             </div>
             <button (click)="onValidar()" [disabled]="saving()" class="btn-primary">
               @if (saving()) { <span class="animate-spin mr-1">⟳</span> } Registrar Validación
@@ -106,6 +109,20 @@ export class PerfilValidarComponent implements OnInit {
 
   aprobarForm = this.fb.nonNullable.group({ observaciones: [''] });
 
+  constructor() {
+    this.validarForm.controls.cumpleMpp.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(cumple => {
+        const obs = this.validarForm.controls.observaciones;
+        if (!cumple) {
+          obs.addValidators(Validators.required);
+        } else {
+          obs.removeValidators(Validators.required);
+        }
+        obs.updateValueAndValidity();
+      });
+  }
+
   ngOnInit(): void {
     const id = +this.route.snapshot.params['id'];
     this.svc.obtener(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -115,6 +132,11 @@ export class PerfilValidarComponent implements OnInit {
   }
 
   onValidar(): void {
+    this.validarForm.markAllAsTouched();
+    if (this.validarForm.invalid) {
+      this.toast.error('Debe ingresar las observaciones del rechazo.');
+      return;
+    }
     this.saving.set(true);
     const id = this.perfil()!.idPerfilPuesto;
     const req: ValidarPerfilRequest = this.validarForm.getRawValue();

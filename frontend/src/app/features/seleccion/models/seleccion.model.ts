@@ -33,6 +33,17 @@ export interface ConvocatoriaSeleccionItem {
   entrevistaPublicada?: boolean | null;
   notificacionEntrevistaEnviada?: boolean | null;
   bonificacionesCalculadas?: boolean | null;
+  // V34 — true si esta convocatoria usa examen técnico virtual
+  examenVirtualHabilitado?: boolean | null;
+  // E24 firma digital — flags para flujo ORH
+  resultadosEvalCurricularRegistrados?: boolean | null;
+  pdfFirmadoE24Subido?: boolean | null;
+  fechaPdfFirmadoE24?: string | null;
+  /** E26-V — ORH subió PDF firmado de resultados técnicos (DS 065-2011-PCM) */
+  pdfFirmadoE26Subido?: boolean | null;
+  fechaPdfFirmadoE26?: string | null;
+  // Fecha inicio etapa EVAL_CURRICULAR del cronograma — gate para botón "Ver Postulantes"
+  fechaInicioEvalCurricular?: string | null;
   // Pesos heredados de Motor RF-14 — TBL_CONVOCATORIA columnas
   pesoEvalCurricular?: number | null;
   pesoEvalTecnica?: number | null;
@@ -295,6 +306,8 @@ export interface MeritoItem {
   puntajeEntrevista?: number;
   puntajeBonificacion?: number;
   puntajeTotal?: number;
+  /** APTO | NO APTO | — (umbral factor padre ENTREVISTA vs puntaje). */
+  resultadoEntrevista?: string;
   resultado: string;
 }
 
@@ -357,4 +370,107 @@ export interface ComunicadoResponse {
 export interface ComunicadoRequest {
   titulo: string;
   descripcion: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V34 — Examen Técnico Virtual
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PreguntaItem {
+  enunciado: string;
+  opcionA: string;
+  opcionB: string;
+  opcionC: string;
+  opcionD: string;
+  respuestaCorrecta: string;
+  puntaje?: number;
+}
+
+export interface BancoPreguntaRequest {
+  preguntas: PreguntaItem[];
+}
+
+export interface BancoPreguntaEstadoResponse {
+  idConvocatoria: number;
+  totalPreguntas: number;
+  cargado: boolean;
+  usuarioCarga?: string;
+  fechaCarga?: string;
+  mensaje?: string;
+  /** Factores TECNICA raíz (E12) — misma escala que calificación virtual */
+  puntajeMinimoTecnica?: number | null;
+  puntajeMaximoTecnica?: number | null;
+  /** Cronograma etapa EVAL_TECNICA (E10), ISO date yyyy-MM-dd */
+  fechaInicioCronogramaTecnica?: string | null;
+  fechaFinCronogramaTecnica?: string | null;
+}
+
+export interface ConfigExamenRequest {
+  fechaHoraInicio: string;
+  fechaHoraFin: string;
+  cantidadPreguntas?: number;
+  duracionMinutos?: number;
+  mostrarResultado?: boolean;
+}
+
+export interface ConfigExamenResponse {
+  idConfigExamen: number;
+  idConvocatoria: number;
+  numeroConvocatoria?: string | null;
+  cantidadPreguntas: number;
+  fechaHoraInicio: string;
+  fechaHoraFin: string;
+  duracionMinutos: number;
+  mostrarResultado: boolean;
+  estado: string;
+  notificacionEnviada: boolean;
+  postulantesNotificados?: number | null;
+  totalPreguntasBanco: number;
+  mensaje?: string;
+  puntajeMinimoTecnica?: number | null;
+  puntajeMaximoTecnica?: number | null;
+  fechaInicioCronogramaTecnica?: string | null;
+  fechaFinCronogramaTecnica?: string | null;
+}
+
+export interface PreguntaExamenResponse {
+  idPregunta: number;
+  orden: number;
+  enunciado: string;
+  opcionA: string;
+  opcionB: string;
+  opcionC: string;
+  opcionD: string;
+}
+
+export interface ExamenPostulanteResponse {
+  idExamenPostulante: number;
+  estado: string;
+  horaInicio?: string;
+  horaFin?: string;
+  totalPreguntas?: number;
+  totalCorrectas?: number;
+  puntajeTotal?: number;
+  segundosRestantes: number;
+  mostrarResultado: boolean;
+  preguntas?: PreguntaExamenResponse[];
+  mensaje?: string;
+}
+
+export interface ResponderExamenRequest {
+  respuestas: { idPregunta: number; respuesta: string | null }[];
+}
+
+export interface ResultadoConsolidado {
+  idPostulacion: number;
+  nombrePostulante: string;
+  codigoAnonimo?: string;
+  estadoExamen: string;
+  /** Puntaje bruto suma ítems banco */
+  puntajeTotal?: number;
+  /** Escala E12 (técnica) */
+  puntajeTecnicaEscala?: number | null;
+  resultadoTecnica?: string;
+  totalCorrectas?: number;
+  totalPreguntas?: number;
 }

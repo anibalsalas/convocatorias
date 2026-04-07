@@ -29,15 +29,6 @@ public class PerfilPuestoRequest {
     private Long idNivelPuesto;
     private Long idNivelFormacion;
 
-    @Size(max = 250, message = "La dependencia jerárquica lineal no debe exceder 250 caracteres")
-    private String dependenciaJerarquicaLineal;
-
-    @Size(max = 250, message = "La dependencia funcional no debe exceder 250 caracteres")
-    private String dependenciaFuncional;
-
-    @Min(value = 0, message = "Los puestos a cargo no pueden ser negativos")
-    private Integer puestosCargo;
-
     @Size(max = 200, message = "Experiencia general no debe exceder 200 caracteres")
     private String experienciaGeneral;
 

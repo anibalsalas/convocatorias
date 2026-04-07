@@ -45,15 +45,6 @@ public class PerfilPuesto {
     @Column(name = "ID_NIVEL_FORMACION")
     private Long idNivelFormacion;
 
-    @Column(name = "DEPENDENCIA_JERARQUICA_LINEAL", length = 250)
-    private String dependenciaJerarquicaLineal;
-
-    @Column(name = "DEPENDENCIA_FUNCIONAL", length = 250)
-    private String dependenciaFuncional;
-
-    @Column(name = "PUESTOS_A_CARGO")
-    private Integer puestosCargo;
-
     /** Campos planos legados, mantenidos por compatibilidad. */
     @Column(name = "EXPERIENCIA_GENERAL", length = 200)
     private String experienciaGeneral;

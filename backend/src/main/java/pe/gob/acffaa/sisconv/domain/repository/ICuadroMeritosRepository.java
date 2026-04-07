@@ -8,4 +8,5 @@ public interface ICuadroMeritosRepository {
     List<CuadroMeritos> saveAll(List<CuadroMeritos> list);
     List<CuadroMeritos> findByConvocatoriaId(Long idConv);
     Optional<CuadroMeritos> findByPostulacionId(Long id);
+    boolean existsByConvocatoriaId(Long idConv);
 }

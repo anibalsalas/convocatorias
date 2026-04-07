@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import pe.gob.acffaa.sisconv.domain.model.PerfilPuesto;
 
 import java.util.Collection;
@@ -18,6 +19,8 @@ public interface JpaPerfilPuestoRepository extends JpaRepository<PerfilPuesto, L
 
     Page<PerfilPuesto> findByIdAreaSolicitante(Long idArea, Pageable pageable);
 
+    Page<PerfilPuesto> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable);
+
     @Query("SELECT pp FROM PerfilPuesto pp ORDER BY pp.fechaCreacion DESC")
     Page<PerfilPuesto> findAllOrdered(Pageable pageable);
 
@@ -29,6 +32,12 @@ public interface JpaPerfilPuestoRepository extends JpaRepository<PerfilPuesto, L
             "AND NOT EXISTS (SELECT r FROM Requerimiento r WHERE r.perfilPuesto = pp " +
             "AND r.estado IN ('ELABORADO', 'CON_PRESUPUESTO', 'CONFIGURADO'))")
     long countAprobadosSinRequerimientoVigente();
+
+    @Query("SELECT COUNT(pp) FROM PerfilPuesto pp WHERE pp.estado = 'APROBADO' " +
+            "AND pp.idAreaSolicitante = :idArea " +
+            "AND NOT EXISTS (SELECT r FROM Requerimiento r WHERE r.perfilPuesto = pp " +
+            "AND r.estado IN ('ELABORADO', 'CON_PRESUPUESTO', 'CONFIGURADO'))")
+    long countAprobadosSinRequerimientoVigenteByArea(@Param("idArea") Long idArea);
 
     /**
      * Cuenta perfiles por estados (ej. PENDIENTE, VALIDADO para ORH).

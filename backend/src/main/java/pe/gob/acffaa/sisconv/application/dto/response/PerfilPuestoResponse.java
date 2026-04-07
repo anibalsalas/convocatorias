@@ -21,9 +21,6 @@ public class PerfilPuestoResponse {
     private Long idAreaSolicitante;
     private Long idNivelPuesto;
     private Long idNivelFormacion;
-    private String dependenciaJerarquicaLineal;
-    private String dependenciaFuncional;
-    private Integer puestosCargo;
     private String experienciaGeneral;
     private String experienciaEspecifica;
     private String habilidades;
@@ -118,5 +115,11 @@ public class PerfilPuestoResponse {
         private String lugarPrestacion;
         private Integer jornadaSemanal;
         private String otrasCondiciones;
+        /** V16 — horario y modalidad (Bases PDF sección IV). */
+        private String horarioInicio;
+        private String horarioFin;
+        private String diasLaborales;
+        private String modalidadServicio;
+        private String tipoInicioContrato;
     }
 }

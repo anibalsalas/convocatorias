@@ -14,5 +14,6 @@ public class CronogramaRepositoryAdapter implements ICronogramaRepository {
     @Override public Cronograma save(Cronograma c) { return jpa.save(c); }
     @Override public List<Cronograma> saveAll(List<Cronograma> list) { return jpa.saveAll(list); }
     @Override public List<Cronograma> findByConvocatoriaId(Long id) { return jpa.findByConvocatoriaIdConvocatoriaOrderByOrden(id); }
+    @Override public List<Cronograma> findByConvocatoriaIdIn(List<Long> ids) { return ids.isEmpty() ? List.of() : jpa.findByConvocatoriaIdConvocatoriaIn(ids); }
     @Override @Transactional public void deleteByConvocatoriaId(Long id) { jpa.deleteByConvocatoriaIdConvocatoria(id); }
 }

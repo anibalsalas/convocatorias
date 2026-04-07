@@ -20,6 +20,10 @@ export interface DeclaracionJuradaItem {
     fechaPostulacion: string | null;
     totalExpedientes: number | null;
     mensaje?: string | null;
+    /** V34 — true si hay examen técnico virtual publicado y postulante es APTO */
+    examenVirtualDisponible?: boolean | null;
+    /** V34 — Estado del examen: null (no iniciado), EN_CURSO, FINALIZADO, EXPIRADO */
+    estadoExamen?: string | null;
   }
   
   export interface UltimaPostulacionResumen {

@@ -74,7 +74,9 @@ public class RequerimientoController {
             @Valid @RequestBody RequerimientoRequest request,
             Authentication auth, HttpServletRequest httpReq) {
         Long idUsuario = resolverIdUsuario(auth.getName());
-        RequerimientoResponse response = reqService.crear(request, auth.getName(), idUsuario, httpReq);
+        boolean esAdministrador = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        RequerimientoResponse response = reqService.crear(request, auth.getName(), idUsuario, httpReq, esAdministrador);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(response, "Requerimiento creado: " + response.getNumeroRequerimiento()));
     }
@@ -143,7 +145,13 @@ public class RequerimientoController {
     public ResponseEntity<ApiResponse<Page<RequerimientoResponse>>> listar(
             @RequestParam(required = false) String estado,
             @RequestParam(required = false) Long idArea,
-            @PageableDefault(size = 10, sort = "fechaSolicitud") Pageable pageable) {
+            @PageableDefault(size = 10, sort = "fechaSolicitud") Pageable pageable,
+            Authentication auth) {
+        // V35 — Si solo es AREA_SOLICITANTE, forzar filtro por su área (ignorar idArea del request)
+        Long idAreaForzado = resolverIdAreaSiSoloAreaSolicitante(auth);
+        if (idAreaForzado != null) {
+            idArea = idAreaForzado;
+        }
         return ResponseEntity.ok(ApiResponse.ok(reqService.listar(estado, idArea, pageable)));
     }
 
@@ -201,5 +209,17 @@ public class RequerimientoController {
         Usuario usuario = usuarioRepo.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", 0L));
         return usuario.getIdUsuario();
+    }
+
+    /** V35 — Resuelve idArea del usuario si solo tiene ROLE_AREA_SOLICITANTE (sin ORH/ADMIN/OPP). */
+    private Long resolverIdAreaSiSoloAreaSolicitante(Authentication auth) {
+        boolean esAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_ORH")
+                        || a.getAuthority().equals("ROLE_OPP"));
+        if (esAdmin) return null;
+        return usuarioRepo.findByUsername(auth.getName())
+                .map(Usuario::getIdArea)
+                .orElse(null);
     }
 }

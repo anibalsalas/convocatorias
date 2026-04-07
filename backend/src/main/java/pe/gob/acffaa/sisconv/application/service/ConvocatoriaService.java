@@ -2,10 +2,15 @@ package pe.gob.acffaa.sisconv.application.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import pe.gob.acffaa.sisconv.application.dto.request.*;
 import pe.gob.acffaa.sisconv.application.dto.response.ActividadCronogramaResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.*;
@@ -26,10 +31,13 @@ import com.lowagie.text.FontFactory;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.pdf.PdfWriter;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
@@ -63,6 +71,8 @@ import java.util.stream.Collectors;
 @Service
 public class ConvocatoriaService {
 
+    private static final Logger log = LoggerFactory.getLogger(ConvocatoriaService.class);
+
     private final IConvocatoriaRepository convRepo;
     private final IRequerimientoRepository reqRepo;
     private final ICronogramaRepository cronoRepo;
@@ -79,6 +89,8 @@ public class ConvocatoriaService {
     private final BasesPdfGenerator basesPdfGenerator;
     private final ICuadroMeritosRepository meritoRepo;
     private final IComunicadoRepository comunicadoRepo;
+    private final IBancoPreguntaRepository bancoRepo;
+    private final IConfigExamenRepository configExamenRepo;
 
     /** URL base del portal público institucional — se usa para auto-construir el link de la convocatoria. */
     @Value("${app.notifications.mail.portal-base-url:http://localhost:4200/portal}")
@@ -97,7 +109,9 @@ public class ConvocatoriaService {
                                NotificacionService notificacionService,
                                JpaMiembroComiteRepository miembroJpaRepo,
                                ICuadroMeritosRepository meritoRepo,
-                               IComunicadoRepository comunicadoRepo) {
+                               IComunicadoRepository comunicadoRepo,
+                               IBancoPreguntaRepository bancoRepo,
+                               IConfigExamenRepository configExamenRepo) {
         this.convRepo = convRepo;
         this.reqRepo = reqRepo;
         this.cronoRepo = cronoRepo;
@@ -113,6 +127,8 @@ public class ConvocatoriaService {
         this.basesPdfGenerator = new BasesPdfGenerator();
         this.meritoRepo = meritoRepo;
         this.comunicadoRepo = comunicadoRepo;
+        this.bancoRepo = bancoRepo;
+        this.configExamenRepo = configExamenRepo;
     }
 
         private static final List<String> ETAPAS_CRONOGRAMA_ORDENADAS = List.of(
@@ -180,7 +196,14 @@ public class ConvocatoriaService {
         Page<Convocatoria> page = (estado != null && !estado.isBlank())
                 ? convRepo.findByEstado(EstadoConvocatoria.valueOf(estado), pageable)
                 : convRepo.findAll(pageable);
-        return page.map(this::enriquecerResponse);
+        List<Long> ids = page.getContent().stream()
+                .map(Convocatoria::getIdConvocatoria)
+                .toList();
+        Map<Long, String> comiteEstados = comiteRepo.mapEstadoByConvocatoriaIds(ids);
+        // Carga en lote de cronogramas para extraer fechaInicioEvalCurricular (evita N+1)
+        Map<Long, List<Cronograma>> cronoByConv = cronoRepo.findByConvocatoriaIdIn(ids).stream()
+                .collect(Collectors.groupingBy(c -> c.getConvocatoria().getIdConvocatoria()));
+        return page.map(conv -> enriquecerResponse(conv, comiteEstados, cronoByConv.get(conv.getIdConvocatoria())));
     }
 
     public ConvocatoriaResponse obtenerPorId(Long id) {
@@ -225,8 +248,20 @@ public class ConvocatoriaService {
      * Publicar: basesGeneradas && tieneActaFirmada.
      */
     private ConvocatoriaResponse enriquecerResponse(Convocatoria conv) {
-        ConvocatoriaResponse r = mapper.toResponse(conv);
+        return enriquecerResponse(conv, null, null);
+    }
+
+    private ConvocatoriaResponse enriquecerResponse(Convocatoria conv, Map<Long, String> comiteEstadoByConvocatoriaId) {
+        return enriquecerResponse(conv, comiteEstadoByConvocatoriaId, null);
+    }
+
+    private ConvocatoriaResponse enriquecerResponse(Convocatoria conv, Map<Long, String> comiteEstadoByConvocatoriaId, List<Cronograma> cronogramas) {
+        ConvocatoriaResponse r = mapper.toResponse(conv, cronogramas);
         Long id = conv.getIdConvocatoria();
+        String comiteEstado = comiteEstadoByConvocatoriaId != null
+                ? comiteEstadoByConvocatoriaId.get(id)
+                : comiteRepo.findByConvocatoriaId(id).map(ComiteSeleccion::getEstado).orElse(null);
+        r.setComitePendienteNotificarOrh(isComitePendienteNotificarOrh(conv, comiteEstado));
         boolean cronogramaConformado = isCronogramaConformado(id);
         boolean tieneFactoresPeso100 = isTieneFactoresPeso100(id);
         boolean tieneActaFirmada = isTieneActaFirmada(id);
@@ -239,8 +274,22 @@ public class ConvocatoriaService {
         r.setResultadosTecnicosPublicados(Boolean.TRUE.equals(conv.getResultadosTecnicosPublicados()));
         r.setEntrevistaPublicada(Boolean.TRUE.equals(conv.getEntrevistaPublicada()));
         r.setNotificacionEntrevistaEnviada(Boolean.TRUE.equals(conv.getNotificacionEntrevistaEnviada()));
+        r.setCuadroMeritosCalculado(meritoRepo.existsByConvocatoriaId(id));
         r.setBonificacionesCalculadas(Boolean.TRUE.equals(conv.getBonificacionesCalculadas()));
         r.setNotificacionActaEnviada(Boolean.TRUE.equals(conv.getNotificacionActaEnviada()));
+        // E24 firma digital: flags para flujo ORH
+        boolean hayPuntajesCurriculares = postRepo.findByConvocatoriaId(id).stream()
+                .anyMatch(p -> p.getPuntajeCurricular() != null);
+        r.setResultadosEvalCurricularRegistrados(hayPuntajesCurriculares);
+        r.setPdfFirmadoE24Subido(conv.getPdfFirmadoE24() != null);
+        r.setFechaPdfFirmadoE24(conv.getFechaPdfFirmadoE24() != null
+                ? conv.getFechaPdfFirmadoE24().toString() : null);
+        r.setPdfFirmadoE26Subido(conv.getPdfFirmadoE26() != null);
+        r.setFechaPdfFirmadoE26(conv.getFechaPdfFirmadoE26() != null
+                ? conv.getFechaPdfFirmadoE26().toString() : null);
+        r.setBasesFirmadasSubidas(conv.getPdfBasesFirmado() != null && !conv.getPdfBasesFirmado().isBlank());
+        r.setFechaPdfBasesFirmado(conv.getFechaPdfBasesFirmado() != null
+                ? conv.getFechaPdfBasesFirmado().toString() : null);
         if (conv.getEstado() == EstadoConvocatoria.PUBLICADA) {
             r.setPostulantesRegistrados((int) postRepo.countByConvocatoriaIdAndEstado(conv.getIdConvocatoria(), "REGISTRADO"));
         }
@@ -249,6 +298,13 @@ public class ConvocatoriaService {
             r.setPostulantesAptos((int) postRepo.countByConvocatoriaIdAndEstado(conv.getIdConvocatoria(), "APTO"));
         }
         return r;
+    }
+
+    private static boolean isComitePendienteNotificarOrh(Convocatoria conv, String comiteEstado) {
+        if (conv.getEstado() != EstadoConvocatoria.EN_ELABORACION || comiteEstado == null) {
+            return false;
+        }
+        return !"COMITE_CONFORMADO".equals(comiteEstado);
     }
 
     private boolean isCronogramaConformado(Long idConvocatoria) {
@@ -591,21 +647,24 @@ public class ConvocatoriaService {
         comite.setMiembros(miembros);
         comite = comiteRepo.save(comite);
 
-        auditPort.registrarConvocatoria(idConvocatoria,
-                "TBL_COMITE_SELECCION", comite.getIdComite(),
-                "REGISTRAR_COMITE", null, null,
-                "Registro de comité de selección con resolución " + request.getNumeroResolucion(),
-                httpReq);
+        final Long idComiteFinal = comite.getIdComite();
+        final String numeroResolucionFinal = request.getNumeroResolucion();
+        final String usernameFinal = username;
+        final HttpServletRequest httpReqFinal = httpReq;
+        Runnable postCommit = () -> ejecutarAuditoriaYNotificacionTrasRegistrarComite(
+                idConvocatoria, idComiteFinal, numeroResolucionFinal, usernameFinal, httpReqFinal);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    postCommit.run();
+                }
+            });
+        } else {
+            postCommit.run();
+        }
 
-            notificacionService.notificarRoles(
-                     List.of("ORH", "COMITE"),
-                    conv,
-                    "Registro de comité de selección",
-                    "Se registró el comité de selección de la convocatoria " + conv.getNumeroConvocatoria()
-                            + ". Revise su participación en el proceso.",
-                    username
-            );
-            int notificaciones = miembros.size();
+        int notificaciones = miembros.size();
 
         return ComiteResponse.builder()
                 .idComite(comite.getIdComite())
@@ -614,6 +673,41 @@ public class ConvocatoriaService {
                 .notificacionesEnviadas(notificaciones)
                 .mensaje("Comité registrado y miembros notificados")
                 .build();
+    }
+
+    /**
+     * Auditoría y notificaciones fuera del commit del INSERT del comité:
+     * si fallan, el comité ya quedó persistido (evita rollback total por errores en banda transversal).
+     */
+    private void ejecutarAuditoriaYNotificacionTrasRegistrarComite(
+            Long idConvocatoria,
+            Long idComite,
+            String numeroResolucion,
+            String username,
+            HttpServletRequest httpReq) {
+        try {
+            auditPort.registrarConvocatoria(idConvocatoria,
+                    "TBL_COMITE_SELECCION", idComite,
+                    "REGISTRAR_COMITE", null, null,
+                    "Registro de comité de selección con resolución " + numeroResolucion,
+                    httpReq);
+        } catch (Exception ex) {
+            log.error("Auditoría REGISTRAR_COMITE falló (convocatoria={}, idComite={})",
+                    idConvocatoria, idComite, ex);
+        }
+        try {
+            Convocatoria conv = buscarConvocatoria(idConvocatoria);
+            notificacionService.notificarRoles(
+                    List.of("ORH", "COMITE"),
+                    conv,
+                    "Registro de comité de selección",
+                    "Se registró el comité de selección de la convocatoria " + conv.getNumeroConvocatoria()
+                            + ". Revise su participación en el proceso.",
+                    username
+            );
+        } catch (Exception ex) {
+            log.error("Notificación tras registro de comité falló (convocatoria={})", idConvocatoria, ex);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1305,6 +1399,20 @@ public class ConvocatoriaService {
             throw new DomainException("Se requieren factores de evaluación registrados antes de aprobar");
         }
 
+        if (conv.getPdfBasesFirmado() == null || conv.getPdfBasesFirmado().isBlank()) {
+            throw new DomainException("Debe cargar el PDF de bases firmado antes de publicar");
+        }
+        try {
+            Path basesPath = Path.of(conv.getPdfBasesFirmado());
+            if (!Files.exists(basesPath)) {
+                throw new DomainException("El archivo de bases firmadas no se encuentra en el servidor");
+            }
+        } catch (DomainException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DomainException("No se pudo validar el archivo de bases firmadas: " + e.getMessage());
+        }
+
         EstadoConvocatoria estadoAnterior = conv.getEstado();
         EstadoConvocatoria estadoDestino = EstadoConvocatoria.PUBLICADA;
         if (!estadoAnterior.puedeTransicionarA(estadoDestino)) {
@@ -1402,6 +1510,10 @@ public class ConvocatoriaService {
             throw new DomainException(
                     "Las bases de esta convocatoria no están disponibles para descarga pública");
         }
+        byte[] firmado = leerBasesPdfFirmadoSiExiste(conv);
+        if (firmado != null) {
+            return firmado;
+        }
         PerfilPuesto perfil = conv.getRequerimiento() != null
                 ? conv.getRequerimiento().getPerfilPuesto() : null;
         if (perfil == null) {
@@ -1410,6 +1522,91 @@ public class ConvocatoriaService {
         List<Cronograma> cronograma = cronoRepo.findByConvocatoriaId(idConvocatoria);
         List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConvocatoria);
         return basesPdfGenerator.generar(conv, perfil, cronograma, factores);
+    }
+
+    /**
+     * E16b — ORH registra el PDF de bases firmado (pre-requisito E15).
+     */
+    @Transactional
+    public ConvocatoriaResponse cargarBasesPdfFirmado(Long idConvocatoria, MultipartFile archivo,
+                                                       String username, HttpServletRequest httpReq) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        validarEstado(conv, EstadoConvocatoria.EN_ELABORACION, "cargar bases PDF firmado");
+        if (archivo == null || archivo.isEmpty()) {
+            throw new DomainException("El archivo está vacío");
+        }
+        String contentType = archivo.getContentType();
+        if (contentType == null || !contentType.equals("application/pdf")) {
+            throw new DomainException("Solo se permiten archivos PDF");
+        }
+        if (archivo.getSize() > 10L * 1024 * 1024) {
+            throw new DomainException("El archivo excede el límite de 10 MB");
+        }
+        try {
+            Path dir = Path.of("pdfs-firmados", "bases");
+            Files.createDirectories(dir);
+            String nombre = "BASES-FIRMADO-"
+                    + conv.getNumeroConvocatoria().replaceAll("[^a-zA-Z0-9\\-]", "_") + ".pdf";
+            Path destino = dir.resolve(nombre);
+            byte[] contenido = archivo.getBytes();
+            if (contenido.length < 4
+                    || contenido[0] != '%' || contenido[1] != 'P'
+                    || contenido[2] != 'D' || contenido[3] != 'F') {
+                throw new DomainException("El archivo no es un PDF válido");
+            }
+            Files.write(destino, contenido, java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            conv.setPdfBasesFirmado(destino.toString());
+            conv.setFechaPdfBasesFirmado(LocalDateTime.now());
+            conv.setUsuarioModificacion(username);
+            convRepo.save(conv);
+
+            auditPort.registrarConvocatoria(idConvocatoria,
+                    "TBL_CONVOCATORIA", idConvocatoria,
+                    "CARGAR_BASES_FIRMADO", null, nombre,
+                    "ORH registró PDF de bases firmado antes de publicar",
+                    httpReq);
+
+            ConvocatoriaResponse r = enriquecerResponse(conv);
+            r.setMensaje("Bases firmadas registradas correctamente");
+            return r;
+        } catch (IOException e) {
+            throw new DomainException("Error al guardar el archivo: " + e.getMessage());
+        }
+    }
+
+    /** Descarga del PDF de bases firmado registrado por ORH (vista previa E15). */
+    public byte[] descargarBasesPdfFirmado(Long idConvocatoria) {
+        Convocatoria conv = buscarConvocatoria(idConvocatoria);
+        if (conv.getPdfBasesFirmado() == null || conv.getPdfBasesFirmado().isBlank()) {
+            throw new DomainException("No se ha registrado un PDF de bases firmado");
+        }
+        try {
+            Path path = Path.of(conv.getPdfBasesFirmado());
+            if (!Files.exists(path)) {
+                throw new DomainException("El archivo PDF de bases firmado no se encuentra en el servidor");
+            }
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            throw new DomainException("Error al leer el archivo: " + e.getMessage());
+        }
+    }
+
+    private byte[] leerBasesPdfFirmadoSiExiste(Convocatoria conv) {
+        String ruta = conv.getPdfBasesFirmado();
+        if (ruta == null || ruta.isBlank()) {
+            return null;
+        }
+        try {
+            Path path = Path.of(ruta);
+            if (!Files.exists(path)) {
+                return null;
+            }
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            log.warn("No se pudo leer bases firmadas en {}: {}", ruta, e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -1451,7 +1648,10 @@ public class ConvocatoriaService {
                                 .map(pc -> pc.compareTo(umbralFinal) >= 0 ? 0 : 1).orElse(1))
                 .thenComparing(p -> java.util.Optional.ofNullable(p.getPuntajeCurricular())
                         .orElse(java.math.BigDecimal.ZERO), java.util.Comparator.reverseOrder()));
-        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
+        ConfigExamen cfgEx = configExamenRepo.findByConvocatoriaId(idConvocatoria).orElse(null);
+        Cronograma cronoTec = cronoRepo.findByConvocatoriaId(idConvocatoria).stream()
+                .filter(c -> "EVAL_TECNICA".equals(c.getEtapa())).findFirst().orElse(null);
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal, cfgEx, cronoTec);
     }
 
     /**
@@ -1506,6 +1706,28 @@ public class ConvocatoriaService {
     }
 
     /**
+     * Umbral E27 — factor padre ENTREVISTA (coherente con SeleccionService.resolverUmbralEntrevista).
+     */
+    private BigDecimal resolverUmbralEntrevista(Long idConvocatoria) {
+        List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConvocatoria);
+        BigDecimal umbral = factores.stream()
+                .filter(f -> "ENTREVISTA".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null
+                        && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (umbral.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadre = factores.stream()
+                    .filter(f -> "ENTREVISTA".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbral = maxPadre.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
+        return umbral;
+    }
+
+    /**
      * Descarga pública de resultados de entrevista — portal sin autenticación.
      * Solo disponible si entrevistaPublicada=true (E27 publicado por ORH).
      */
@@ -1523,7 +1745,8 @@ public class ConvocatoriaService {
                         .collect(java.util.stream.Collectors.toList());
         if (conPuntaje.isEmpty())
             throw new DomainException("No hay resultados de entrevista publicados para esta convocatoria");
-        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConvocatoria);
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje, umbralEnt);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1685,5 +1908,88 @@ public class ConvocatoriaService {
 
     public long contarPendientesPublicar() {
         return convRepo.countPendientesPublicar();
+    }
+
+    /**
+     * V34 — Convocatorias con examen virtual para AREA_SOLICITANTE (EN_ELABORACION, PUBLICADA, EN_SELECCION; área; flag habilitado).
+     * Lista completa con {@code bancoCompleto} según conteo de preguntas (>=20); el dashboard filtra/pagina en cliente.
+     */
+    public List<AvisoBancoAreaResponse> pendientesBanco(Long idArea) {
+        List<Convocatoria> convs = convRepo.findPendientesBancoByArea(idArea);
+        return convs.stream()
+                .map(c -> {
+                    long n = bancoRepo.countByConvocatoriaId(c.getIdConvocatoria());
+                    return AvisoBancoAreaResponse.builder()
+                            .idConvocatoria(c.getIdConvocatoria())
+                            .numeroConvocatoria(c.getNumeroConvocatoria())
+                            .bancoCompleto(n >= 20)
+                            .build();
+                })
+                .toList();
+    }
+
+    /**
+     * V34 Dashboard ORH: banco completo (>=20) y examen virtual sin publicar/cerrar.
+     */
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<ConvocatoriaResponse> listarBancoCargadoPendienteConfigOrh() {
+        return convRepo.findConvocatoriasBancoCargadoPendienteConfigOrh().stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
+
+    /**
+     * Solicitar banco de preguntas al Área Solicitante — disponible después de publicar E24.
+     * Notifica al usuario responsable del requerimiento vinculado a la convocatoria.
+     */
+    @Transactional
+    public Map<String, Object> solicitarBancoPreguntas(Long idConv, String username, HttpServletRequest http) {
+        Convocatoria conv = buscarConvocatoria(idConv);
+        if (!Boolean.TRUE.equals(conv.getExamenVirtualHabilitado())) {
+            throw new DomainException("Esta convocatoria no tiene examen virtual habilitado.");
+        }
+        if (!Boolean.TRUE.equals(conv.getResultadosCurricularesPublicados())) {
+            throw new DomainException("Debe publicar los resultados de evaluación curricular (E24) antes de solicitar el banco.");
+        }
+        long totalPreguntas = bancoRepo.countByConvocatoriaId(idConv);
+        if (totalPreguntas >= 20) {
+            throw new DomainException("El banco de preguntas ya tiene " + totalPreguntas + " preguntas cargadas.");
+        }
+
+        Long idUsuarioSolicitante = conv.getRequerimiento() != null
+                ? conv.getRequerimiento().getIdUsuarioSolicitante() : null;
+        if (idUsuarioSolicitante == null) {
+            throw new DomainException("No se encontró el usuario del Área Solicitante en el requerimiento.");
+        }
+
+        notificacionService.notificarUsuario(
+                idUsuarioSolicitante,
+                conv,
+                "Banco de preguntas pendiente — " + conv.getNumeroConvocatoria(),
+                "La convocatoria " + conv.getNumeroConvocatoria()
+                        + " requiere que cargue el banco de preguntas (20-30 preguntas) para el examen técnico virtual. "
+                        + "Ingrese al módulo Banco de Preguntas desde su dashboard.",
+                username
+        );
+
+        auditPort.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                "SOLICITAR_BANCO_PREGUNTAS", null, "NOTIFICADO",
+                "ORH solicitó banco de preguntas al Área Solicitante", http);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("mensaje", "Solicitud enviada al Área Solicitante.");
+        result.put("idConvocatoria", idConv);
+        return result;
+    }
+
+    /**
+     * Dashboard ORH: comité registrado pero sin «Notificar a Comité» (no COMITE_CONFORMADO).
+     */
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<ConvocatoriaResponse> listarPendientesNotificarComiteOrh() {
+        List<Convocatoria> convs = convRepo.findConvocatoriasPendienteNotificarComiteOrh();
+        List<Long> ids = convs.stream().map(Convocatoria::getIdConvocatoria).toList();
+        Map<Long, String> comiteEstados = comiteRepo.mapEstadoByConvocatoriaIds(ids);
+        return convs.stream().map(c -> enriquecerResponse(c, comiteEstados)).toList();
     }
 }

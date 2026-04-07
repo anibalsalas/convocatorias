@@ -191,19 +191,37 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                   E25 Códigos <span class="text-orange-500 text-xs">(ORH)</span>
                 </a>
               }
-              <a [routerLink]="(todosAptosConCodigo() || convInfo()?.resultadosTecnicosPublicados) ? ['/sistema/seleccion', idConv, 'eval-tecnica'] : null"
-                 class="btn-secondary text-xs px-2 py-1"
-                 [class.opacity-40]="!todosAptosConCodigo() && !convInfo()?.resultadosTecnicosPublicados"
-                 [class.cursor-not-allowed]="!todosAptosConCodigo() && !convInfo()?.resultadosTecnicosPublicados"
-                 [class.pointer-events-none]="!todosAptosConCodigo() && !convInfo()?.resultadosTecnicosPublicados"
-                 [title]="convInfo()?.resultadosTecnicosPublicados ? 'Ver resultados técnicos (solo lectura)' : !todosAptosConCodigo() ? 'Todos los APTO deben tener código anónimo (E25)' : 'Evaluación técnica anónima'"
-              >E26 Técnica</a>
+              @if (convInfo()?.examenVirtualHabilitado && esOrhOAdmin() && puedeSolicitarBanco()) {
+                <button
+                  (click)="solicitarBancoPreguntas()"
+                  [disabled]="accionando()"
+                  class="btn-secondary text-xs px-2 py-1"
+                  title="Solicitar al Área Solicitante que cargue el banco de preguntas para el examen virtual"
+                >Solicitar Banco <span class="text-orange-500 text-xs">(ORH)</span></button>
+              }
+              @if (convInfo()?.examenVirtualHabilitado && esOrhOAdmin()) {
+                <a [routerLink]="puedeAccederE26() ? ['/sistema/seleccion', idConv, 'config-examen'] : null"
+                   class="btn-secondary text-xs px-2 py-1"
+                   [class.opacity-40]="!puedeAccederE26()"
+                   [class.cursor-not-allowed]="!puedeAccederE26()"
+                   [class.pointer-events-none]="!puedeAccederE26()"
+                   [title]="convInfo()?.resultadosTecnicosPublicados ? 'Ver resultados del examen virtual' : !puedeAccederE26() ? 'Requiere E25 (códigos) o resultados de examen virtual' : 'Configurar examen técnico virtual (ORH)'"
+                >E26 Técnica Virtual <span class="text-orange-500 text-xs">(ORH)</span></a>
+              } @else {
+                <a [routerLink]="puedeAccederE26() ? ['/sistema/seleccion', idConv, 'eval-tecnica'] : null"
+                   class="btn-secondary text-xs px-2 py-1"
+                   [class.opacity-40]="!puedeAccederE26()"
+                   [class.cursor-not-allowed]="!puedeAccederE26()"
+                   [class.pointer-events-none]="!puedeAccederE26()"
+                   [title]="convInfo()?.resultadosTecnicosPublicados ? 'Ver resultados técnicos (solo lectura)' : !puedeAccederE26() ? 'Requiere E25 (códigos) o evaluación técnica registrada' : 'Evaluación técnica anónima'"
+                >E26 Técnica</a>
+              }
               <a [routerLink]="hayEvalTecnica() ? ['/sistema/seleccion', idConv, 'entrevista'] : null"
                  class="btn-secondary text-xs px-2 py-1"
                  [class.opacity-40]="!hayEvalTecnica()"
                  [class.cursor-not-allowed]="!hayEvalTecnica()"
                  [class.pointer-events-none]="!hayEvalTecnica()"
-                 [title]="!hayEvalTecnica() ? 'Requiere evaluación técnica publicada (E26)' : 'Entrevista personal'"
+                 [title]="titleE27Entrevista()"
               >E27 Entrevista</a>
             </div>
           </div>
@@ -216,35 +234,31 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                 <span class="badge-orh">ORH</span>
               </div>
               <div class="flex gap-1 flex-wrap">
-                <!-- E27 Ver/Publicar — habilitado cuando COMITÉ notificó -->
-                <a [routerLink]="hayEntrevistaNotificada() ? ['/sistema/seleccion', idConv, 'entrevista'] : null"
+                <!-- E27 Ver/Publicar — COMITÉ notificó y hay aprobados en evaluación técnica -->
+                <a [routerLink]="hayFlujoEntrevistaHabilitado() ? ['/sistema/seleccion', idConv, 'entrevista'] : null"
                    class="btn-secondary text-xs px-2 py-1"
-                   [class.opacity-40]="!hayEntrevistaNotificada()"
-                   [class.cursor-not-allowed]="!hayEntrevistaNotificada()"
-                   [class.pointer-events-none]="!hayEntrevistaNotificada()"
-                   [title]="!hayEntrevistaNotificada()
-                     ? 'El COMITÉ debe notificar los resultados de Entrevista (E27) primero'
-                     : hayEntrevistaPublicada()
-                     ? 'E27 ya publicado — ver resultados'
-                     : 'Ver y publicar resultados de Entrevista (E27)'"
+                   [class.opacity-40]="!hayFlujoEntrevistaHabilitado()"
+                   [class.cursor-not-allowed]="!hayFlujoEntrevistaHabilitado()"
+                   [class.pointer-events-none]="!hayFlujoEntrevistaHabilitado()"
+                   [title]="titleOrhE27()"
                 >
                   {{ hayEntrevistaPublicada() ? '✓ E27 Entrevista' : 'E27 Ver/Publicar' }}
                 </a>
                 <!-- E28 — habilitado cuando E27 publicado. OPCIONAL: solo si hay beneficiarios RF-15 -->
-                <a [routerLink]="hayEntrevistaPublicada() ? ['/sistema/seleccion', idConv, 'bonificaciones'] : null"
+                <a [routerLink]="hayFlujoResultadosFinalesHabilitado() ? ['/sistema/seleccion', idConv, 'bonificaciones'] : null"
                    class="btn-secondary text-xs px-2 py-1"
-                   [class.opacity-40]="!hayEntrevistaPublicada()"
-                   [class.cursor-not-allowed]="!hayEntrevistaPublicada()"
-                   [class.pointer-events-none]="!hayEntrevistaPublicada()"
-                   [title]="!hayEntrevistaPublicada() ? 'Publicar resultados de Entrevista (E27) primero' : hayBonificacionesCalculadas() ? '✓ E28 ya ejecutado' : 'Bonificaciones RF-15 (opcional)'"
+                   [class.opacity-40]="!hayFlujoResultadosFinalesHabilitado()"
+                   [class.cursor-not-allowed]="!hayFlujoResultadosFinalesHabilitado()"
+                   [class.pointer-events-none]="!hayFlujoResultadosFinalesHabilitado()"
+                   [title]="titleOrhE28()"
                 >{{ hayBonificacionesCalculadas() ? '✓ E28 Bonif.' : 'E28 Bonif.' }}</a>
                 <!-- E29/E30 — habilitado cuando E27 publicado (E28 es opcional) -->
-                <a [routerLink]="hayEntrevistaPublicada() ? ['/sistema/seleccion', idConv, 'cuadro-meritos'] : null"
+                <a [routerLink]="hayFlujoResultadosFinalesHabilitado() ? ['/sistema/seleccion', idConv, 'cuadro-meritos'] : null"
                    class="btn-secondary text-xs px-2 py-1"
-                   [class.opacity-40]="!hayEntrevistaPublicada()"
-                   [class.cursor-not-allowed]="!hayEntrevistaPublicada()"
-                   [class.pointer-events-none]="!hayEntrevistaPublicada()"
-                   [title]="!hayEntrevistaPublicada() ? 'Publicar resultados de Entrevista (E27) primero' : hayResultadoFinal() ? '✓ Cuadro calculado — ver o recalcular' : 'Calcular Cuadro de Méritos RF-16'"
+                   [class.opacity-40]="!hayFlujoResultadosFinalesHabilitado()"
+                   [class.cursor-not-allowed]="!hayFlujoResultadosFinalesHabilitado()"
+                   [class.pointer-events-none]="!hayFlujoResultadosFinalesHabilitado()"
+                   [title]="titleOrhE29()"
                 >{{ hayResultadoFinal() ? '✓ E29/E30 Méritos' : 'E29/E30 Méritos' }}</a>
                 <!-- E31 — activo solo cuando E29 ejecutado Y convocatoria no FINALIZADA -->
                 @if (esFinalizada()) {
@@ -253,12 +267,12 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                     title="Resultados ya publicados"
                   >✓ E31 Publicado</span>
                 } @else {
-                  <a [routerLink]="hayResultadoFinal() ? ['/sistema/seleccion', idConv, 'publicar'] : null"
+                  <a [routerLink]="hayFlujoE31Habilitado() ? ['/sistema/seleccion', idConv, 'publicar'] : null"
                      class="text-xs px-2 py-1 rounded font-medium"
-                     [class]="hayResultadoFinal()
+                     [class]="hayFlujoE31Habilitado()
                        ? 'bg-red-600 hover:bg-red-700 text-white'
                        : 'bg-red-600 text-white opacity-40 cursor-not-allowed pointer-events-none'"
-                     [title]="!hayResultadoFinal() ? 'Calcular Cuadro de Méritos (E29) primero' : 'Publicar resultados finales E31'"
+                     [title]="titleOrhE31()"
                   >E31 Publicar ⚡</a>
                 }
               </div>
@@ -296,7 +310,7 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
               <th class="px-3 py-2 text-center text-xs font-semibold">P. Total</th>
               @if (esOrhOAdmin()) {
                 <th class="px-3 py-2 text-center text-xs font-semibold">D.L.1451</th>
-                <th class="px-3 py-2 text-center text-xs font-semibold">Filtro RF-07</th>
+                <th class="px-3 py-2 text-center text-xs font-semibold">Filtro de Requisitos Mínimos</th>
               }
             </tr>
           </thead>
@@ -340,8 +354,8 @@ function etapaActual(contadores: { estado: string; total: number }[]): string {
                   </td>
 
                   <td class="px-3 py-2 text-center text-sm font-semibold">
-                    @if (p.puntajeTotal !== null && p.puntajeTotal !== undefined) {
-                      {{ p.puntajeTotal | number:'1.2-2' }}
+                    @if (puntajeColumnaTotal(p) !== null) {
+                      {{ puntajeColumnaTotal(p)! | number:'1.2-2' }}
                     } @else {
                       <span class="text-gray-300">—</span>
                     }
@@ -598,18 +612,54 @@ export class PostulantesComponent {
     this.hayResultadosCurriculares() && !this.hayAdmitidosParaE24(),
   );
 
+  /**
+   * Columna P. Total: si hay total ponderado usarlo; si examen virtual y solo hay técnica, mostrar técnica.
+   */
+  protected puntajeColumnaTotal(p: PostulacionSeleccion): number | null {
+    if (p.puntajeTotal != null) return p.puntajeTotal;
+    if (this.convInfo()?.examenVirtualHabilitado && p.puntajeTecnica != null) {
+      return p.puntajeTecnica;
+    }
+    return null;
+  }
+
   /** E26 habilitado: todos los APTO tienen código anónimo asignado */
   protected readonly todosAptosConCodigo = computed(() => {
     const aptos = this.postulantes().filter((p) => p.estado === 'APTO');
     return aptos.length > 0 && aptos.every((p) => !!p.codigoAnonimo);
   });
 
-  /** E27 habilitado: algún APTO ya tiene puntaje técnico registrado */
-  protected readonly hayEvalTecnica = computed(() =>
-    this.postulantes().some(
+  /**
+   * E26 accesible: cierre E25 clásico, o examen virtual ya dejó puntajeTecnica,
+   * o ORH ya notificó códigos y existen códigos asignados (persisten aunque pase a NO_APTO),
+   * o E26 ya fue publicada.
+   */
+  protected readonly puedeAccederE26 = computed(() => {
+    if (this.convInfo()?.resultadosTecnicosPublicados) return true;
+    if (this.postulantes().some((p) => p.puntajeTecnica != null)) return true;
+    if (
+      this.convInfo()?.notificacionCodigosEnviada &&
+      this.postulantes().some((p) => !!p.codigoAnonimo)
+    ) {
+      return true;
+    }
+    return this.todosAptosConCodigo();
+  });
+
+  /**
+   * Etapas posteriores a E26 (entrevista, resultados finales): solo si hay aprobados en técnica.
+   * Con E26 publicada, exige al menos un postulante APTO. Antes de publicar, APTO con puntaje.
+   */
+  protected readonly hayEvalTecnica = computed(() => {
+    if (this.convInfo()?.resultadosTecnicosPublicados === true) {
+      // Después de E29 los APTO pasan a GANADOR/ACCESITARIO/NO_SELECCIONADO;
+      // esos estados también demuestran que hubo evaluación técnica aprobada.
+      return this.hayAptos() || this.hayResultadoFinal();
+    }
+    return this.postulantes().some(
       (p) => p.estado === 'APTO' && p.puntajeTecnica != null,
-    ),
-  );
+    );
+  });
 
   /** E28/E29/E31 habilitados: COMITÉ notificó a ORH que la entrevista está lista */
   protected readonly hayEntrevistaNotificada = computed(() =>
@@ -619,6 +669,12 @@ export class PostulantesComponent {
   /** E28/E29/E31 habilitados: ORH ya publicó los resultados de entrevista (E27-PUBLICAR) */
   protected readonly hayEntrevistaPublicada = computed(() =>
     this.convInfo()?.entrevistaPublicada === true,
+  );
+
+  /** Solicitar banco habilitado: examen virtual + E24 publicados */
+  protected readonly puedeSolicitarBanco = computed(() =>
+    this.convInfo()?.examenVirtualHabilitado === true &&
+    this.convInfo()?.resultadosCurricularPublicados === true,
   );
 
   /** E28 ya ejecutado (informativo — E28 es opcional) */
@@ -632,6 +688,78 @@ export class PostulantesComponent {
       ['GANADOR', 'ACCESITARIO', 'NO_SELECCIONADO'].includes(p.estado),
     ),
   );
+
+  protected readonly hayFlujoEntrevistaHabilitado = computed(
+    () => this.hayEntrevistaNotificada() && this.hayEvalTecnica(),
+  );
+
+  protected readonly hayFlujoResultadosFinalesHabilitado = computed(
+    () => this.hayEntrevistaPublicada() && this.hayEvalTecnica(),
+  );
+
+  protected readonly hayFlujoE31Habilitado = computed(
+    () => this.hayResultadoFinal() && this.hayEvalTecnica(),
+  );
+
+  protected readonly titleE27Entrevista = computed(() => {
+    if (this.hayEvalTecnica()) return 'Entrevista personal';
+    if (
+      this.convInfo()?.resultadosTecnicosPublicados === true &&
+      !this.hayAptos() && !this.hayResultadoFinal()
+    ) {
+      return 'Sin postulantes aprobados en evaluación técnica — no procede entrevista ni resultado final';
+    }
+    return 'Requiere evaluación técnica publicada (E26) con al menos un postulante APTO';
+  });
+
+  protected readonly titleOrhE27 = computed(() => {
+    if (!this.hayEvalTecnica()) {
+      return this.convInfo()?.resultadosTecnicosPublicados === true &&
+        !this.hayAptos() && !this.hayResultadoFinal()
+        ? 'Sin aprobados en evaluación técnica — no procede entrevista ni etapas finales'
+        : 'Requiere convocados APTO tras E26 para continuar el proceso';
+    }
+    if (!this.hayEntrevistaNotificada()) {
+      return 'El COMITÉ debe notificar los resultados de Entrevista (E27) primero';
+    }
+    return this.hayEntrevistaPublicada()
+      ? 'E27 ya publicado — ver resultados'
+      : 'Ver y publicar resultados de Entrevista (E27)';
+  });
+
+  protected readonly titleOrhE28 = computed(() => {
+    if (!this.hayEvalTecnica()) {
+      return 'Sin aprobados en evaluación técnica — no proceden etapas posteriores';
+    }
+    if (!this.hayEntrevistaPublicada()) {
+      return 'Publicar resultados de Entrevista (E27) primero';
+    }
+    return this.hayBonificacionesCalculadas()
+      ? '✓ E28 ya ejecutado'
+      : 'Bonificaciones RF-15 (opcional)';
+  });
+
+  protected readonly titleOrhE29 = computed(() => {
+    if (!this.hayEvalTecnica()) {
+      return 'Sin aprobados en evaluación técnica — no proceden etapas posteriores';
+    }
+    if (!this.hayEntrevistaPublicada()) {
+      return 'Publicar resultados de Entrevista (E27) primero';
+    }
+    return this.hayResultadoFinal()
+      ? '✓ Cuadro calculado — ver o recalcular'
+      : 'Calcular Cuadro de Méritos RF-16';
+  });
+
+  protected readonly titleOrhE31 = computed(() => {
+    if (!this.hayEvalTecnica()) {
+      return 'Sin aprobados en evaluación técnica — no procede publicación de resultados finales';
+    }
+    if (!this.hayResultadoFinal()) {
+      return 'Calcular Cuadro de Méritos (E29) primero';
+    }
+    return 'Publicar resultados finales E31';
+  });
 
   /** E31 ya ejecutado — convocatoria FINALIZADA, resultados publicados */
   protected readonly esFinalizada = computed(() =>
@@ -780,6 +908,23 @@ export class PostulantesComponent {
         error: () => {
           this.descargandoCurricular.set(false);
           this.toast.error('Error al descargar el PDF de resultados curriculares.');
+        },
+      });
+  }
+
+  protected solicitarBancoPreguntas(): void {
+    this.accionando.set(true);
+    this.svc
+      .solicitarBancoPreguntas(this.idConv)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.accionando.set(false);
+          this.toast.success(res.mensaje ?? 'Solicitud de banco de preguntas enviada al Area Solicitante.');
+        },
+        error: () => {
+          this.accionando.set(false);
+          this.toast.error('Error al solicitar el banco de preguntas.');
         },
       });
   }

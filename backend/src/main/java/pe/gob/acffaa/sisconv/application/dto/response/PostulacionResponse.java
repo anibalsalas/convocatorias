@@ -42,6 +42,11 @@ public class PostulacionResponse {
 
     private String mensaje;
 
+    /** V34 — Examen técnico virtual: indica si hay examen publicado disponible para esta postulación */
+    private Boolean examenVirtualDisponible;
+    /** V34 — Estado del examen del postulante: null, EN_CURSO, FINALIZADO, EXPIRADO */
+    private String estadoExamen;
+
     /** Desglose de scores por subcriterio — solo presente para APTO/NO_APTO (E24 ya ejecutado) */
     private List<EvalCurricularItem> evaluacionesCurriculares;
 

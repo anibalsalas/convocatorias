@@ -5,6 +5,7 @@ import { ApiResponse } from '@shared/models/api-response.model';
 import { Page, PageRequest } from '@shared/models/pagination.model';
 import {
   AprobarPerfilRequest,
+  DenominacionPuestoResponse,
   NivelPuestoResponse,
   PerfilPuestoRequest,
   PerfilPuestoResponse,
@@ -46,6 +47,10 @@ export class PerfilPuestoService {
 
   listarNivelesPuesto(): Observable<ApiResponse<NivelPuestoResponse[]>> {
     return this.api.get<NivelPuestoResponse[]>(`${this.path}/niveles-puesto`);
+  }
+
+  listarDenominacionesPuesto(): Observable<ApiResponse<DenominacionPuestoResponse[]>> {
+    return this.api.get<DenominacionPuestoResponse[]>(`${this.path}/denominaciones-puesto`);
   }
 
   actualizar(id: number, req: PerfilPuestoRequest): Observable<ApiResponse<PerfilPuestoResponse>> {

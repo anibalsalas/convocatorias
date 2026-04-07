@@ -25,7 +25,10 @@ export class ApiService {
     let params = new HttpParams()
       .set('page', String(pageReq.page))
       .set('size', String(pageReq.size));
-    if (pageReq.sort) params = params.set('sort', pageReq.sort);
+    if (pageReq.sort) {
+      const sorts = Array.isArray(pageReq.sort) ? pageReq.sort : [pageReq.sort];
+      sorts.forEach(s => params = params.append('sort', s));
+    }
     if (extraParams) {
       Object.entries(extraParams).forEach(([k, v]) => {
         if (v) params = params.set(k, v);
@@ -56,5 +59,9 @@ export class ApiService {
 
   postBlob(path: string, body: unknown): Observable<Blob> {
     return this.http.post(`${this.base}${path}`, body, { responseType: 'blob' });
+  }
+
+  postFormData<T>(path: string, formData: FormData): Observable<ApiResponse<T>> {
+    return this.http.post<ApiResponse<T>>(`${this.base}${path}`, formData);
   }
 }

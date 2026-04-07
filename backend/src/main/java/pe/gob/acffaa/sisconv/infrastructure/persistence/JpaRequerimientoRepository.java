@@ -20,6 +20,8 @@ public interface JpaRequerimientoRepository extends JpaRepository<Requerimiento,
 
     Page<Requerimiento> findByIdAreaSolicitante(Long idArea, Pageable pageable);
 
+    Page<Requerimiento> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable);
+
     boolean existsByNumeroRequerimiento(String numero);
 
     /** Cuenta requerimientos del año actual para generar correlativo */

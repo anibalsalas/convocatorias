@@ -133,6 +133,22 @@ public class Convocatoria {
     @Builder.Default
     private Boolean entrevistaPublicada = false;
 
+    /** Ruta del PDF de resultados curriculares firmado digitalmente por ORH (DS 065-2011-PCM). */
+    @Column(name = "PDF_FIRMADO_E24", length = 500)
+    private String pdfFirmadoE24;
+
+    /** Fecha/hora en que ORH subió el PDF firmado de E24. */
+    @Column(name = "FECHA_PDF_FIRMADO_E24")
+    private java.time.LocalDateTime fechaPdfFirmadoE24;
+
+    /** Ruta del PDF de resultados técnicos firmado digitalmente por ORH (DS 065-2011-PCM). */
+    @Column(name = "PDF_FIRMADO_E26", length = 500)
+    private String pdfFirmadoE26;
+
+    /** Fecha/hora en que ORH subió el PDF firmado de E26. */
+    @Column(name = "FECHA_PDF_FIRMADO_E26")
+    private java.time.LocalDateTime fechaPdfFirmadoE26;
+
     /** true cuando el ROL ORH presiona "Notificar al Comité" en E25.
      *  Indica que los códigos anónimos ya fueron asignados y el COMITÉ fue avisado. */
     @Column(name = "NOTIFICACION_CODIGOS_ENVIADA", nullable = false)
@@ -151,11 +167,25 @@ public class Convocatoria {
     @Builder.Default
     private Boolean notificacionActaEnviada = false;
 
+    /** Ruta del PDF de bases de convocatoria firmado por ORH (obligatorio antes de E15). */
+    @Column(name = "PDF_BASES_FIRMADO", length = 500)
+    private String pdfBasesFirmado;
+
+    /** Fecha/hora en que ORH registró el PDF de bases firmado. */
+    @Column(name = "FECHA_PDF_BASES_FIRMADO")
+    private LocalDateTime fechaPdfBasesFirmado;
+
     /** true cuando el ROL ORH ejecuta E28 Bonificaciones RF-15.
      *  Habilita E29 Cuadro de Méritos y E31 Publicar Resultados. */
     @Column(name = "BONIFICACIONES_CALCULADAS", nullable = false)
     @Builder.Default
     private Boolean bonificacionesCalculadas = false;
+
+    /** V34 — true si la evaluación técnica usa examen virtual en vez de evaluación manual.
+     *  Coexistencia: false = E26 manual (COMITÉ), true = E26 virtual (POSTULANTE rinde, SISTEMA califica). */
+    @Column(name = "EXAMEN_VIRTUAL_HABILITADO", nullable = false)
+    @Builder.Default
+    private Boolean examenVirtualHabilitado = true;
 
     // ── Estado BPMN ──
 

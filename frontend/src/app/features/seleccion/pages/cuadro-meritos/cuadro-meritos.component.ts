@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   inject,
   OnInit,
@@ -50,6 +51,13 @@ import { CuadroMeritosResponse, MeritoItem } from '../../models/seleccion.model'
             <p class="text-xs text-gray-500 mt-1">N° Convocatoria: {{ cuadro()!.numeroConvocatoria }} · Total: {{ cuadro()!.totalPostulantes }} postulante(s)</p>
           </div>
 
+          @if (sinAptosEntrevista()) {
+            <div class="bg-red-50 border border-red-300 rounded p-3">
+              <p class="font-semibold text-sm text-red-700">Ningún postulante aprobó la entrevista personal.</p>
+              <p class="text-xs text-red-600 mt-1">Todos quedan como NO_SELECCIONADO. La convocatoria puede declararse desierta al publicar resultados.</p>
+            </div>
+          }
+
           <div class="overflow-x-auto">
             <table class="w-full text-xs">
               <thead>
@@ -59,9 +67,9 @@ import { CuadroMeritosResponse, MeritoItem } from '../../models/seleccion.model'
                   <th class="px-3 py-2 text-center">P. Curricular</th>
                   <th class="px-3 py-2 text-center">P. Técnica</th>
                   <th class="px-3 py-2 text-center">Entrevista</th>
+                  <th class="px-3 py-2 text-center">Res. Entrevista</th>
                   <th class="px-3 py-2 text-center">Bonificación</th>
                   <th class="px-3 py-2 text-center font-bold">P. Total</th>
-                  <th class="px-3 py-2 text-center">Resultado</th>
                 </tr>
               </thead>
               <tbody>
@@ -72,11 +80,18 @@ import { CuadroMeritosResponse, MeritoItem } from '../../models/seleccion.model'
                     <td class="px-3 py-2 text-center">{{ m.puntajeCurricular ?? '—' }}</td>
                     <td class="px-3 py-2 text-center">{{ m.puntajeTecnica ?? '—' }}</td>
                     <td class="px-3 py-2 text-center">{{ m.puntajeEntrevista ?? '—' }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="text-xs font-semibold px-1.5 py-0.5 rounded"
+                            [class.bg-green-100]="m.resultadoEntrevista === 'APTO'"
+                            [class.text-green-800]="m.resultadoEntrevista === 'APTO'"
+                            [class.bg-red-100]="m.resultadoEntrevista === 'NO APTO'"
+                            [class.text-red-800]="m.resultadoEntrevista === 'NO APTO'"
+                            [class.text-gray-400]="!m.resultadoEntrevista || m.resultadoEntrevista === '—'">
+                        {{ m.resultadoEntrevista ?? '—' }}
+                      </span>
+                    </td>
                     <td class="px-3 py-2 text-center">{{ m.puntajeBonificacion ?? '—' }}</td>
                     <td class="px-3 py-2 text-center font-bold">{{ m.puntajeTotal ?? '—' }}</td>
-                    <td class="px-3 py-2 text-center">
-                      <span [class]="resultadoClass(m.resultado)">{{ m.resultado }}</span>
-                    </td>
                   </tr>
                 }
               </tbody>
@@ -84,6 +99,15 @@ import { CuadroMeritosResponse, MeritoItem } from '../../models/seleccion.model'
           </div>
 
           <div class="flex flex-wrap gap-2 justify-end">
+            @if (!esFinalizada()) {
+              <button
+                (click)="calcular()"
+                [disabled]="calculando()"
+                class="btn-ghost text-sm"
+              >
+                {{ calculando() ? 'Recalculando...' : 'Recalcular Cuadro RF-16' }}
+              </button>
+            }
             <button
               (click)="descargarPdf()"
               [disabled]="descargando()"
@@ -118,6 +142,12 @@ export class CuadroMeritosComponent implements OnInit {
   readonly descargando = signal(false);
   readonly cuadro = signal<CuadroMeritosResponse | null>(null);
   readonly esFinalizada = signal(false);
+
+  readonly sinAptosEntrevista = computed(() => {
+    const c = this.cuadro();
+    if (!c || c.cuadro.length === 0) return false;
+    return !c.cuadro.some((m) => m.resultadoEntrevista === 'APTO');
+  });
 
   ngOnInit(): void {
     forkJoin({

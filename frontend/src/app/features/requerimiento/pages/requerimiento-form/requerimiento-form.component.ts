@@ -79,6 +79,7 @@ export class RequerimientoFormComponent implements OnInit {
   perfilPreseleccionado = signal<PerfilPuestoResponse | null>(null);
   loadingPerfiles = signal(true);
   saving = signal(false);
+  private idAreaSolicitante = signal<number | null>(null);
 
   form = this.fb.group({
     idPerfilPuesto: [null as number | null, Validators.required],
@@ -87,6 +88,13 @@ export class RequerimientoFormComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    // Obtener idAreaSolicitante real del usuario autenticado
+    this.perfilSvc.obtenerContextoRegistro()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: res => this.idAreaSolicitante.set(res.data.idAreaSolicitante),
+      });
+
     this.perfilSvc.listar({ page: 0, size: 100 }, { estado: 'APROBADO' })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -121,7 +129,7 @@ export class RequerimientoFormComponent implements OnInit {
     const raw = this.form.getRawValue();
     const req: RequerimientoRequest = {
       idPerfilPuesto: raw.idPerfilPuesto!,
-      idAreaSolicitante: 1,
+      idAreaSolicitante: this.idAreaSolicitante()!,
       justificacion: raw.justificacion ?? '',
       cantidadPuestos: raw.cantidadPuestos ?? 1,
     };

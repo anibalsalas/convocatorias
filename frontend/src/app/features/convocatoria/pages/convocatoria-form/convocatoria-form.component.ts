@@ -155,11 +155,14 @@ import { ConvocatoriaService } from '../../services/convocatoria.service';
           <div class="info-box mt-2">
             El N° CAS se genera automáticamente con <strong>SEQ_NUM_CONVOCATORIA</strong>. Siguiente paso: cronograma detallado (E10).
           </div>
+           <div class="info-box mt-2">
+            Al Crear la Convocatoria, Se le Notificará a la Oficina Solicitante, que deberá envíar el Banco de Preguntas y Respuestas de forma Obligatoria (*)
+          </div>
           <div class="form-actions">
             <a routerLink="/sistema/convocatoria" class="btn-ghost">Cancelar</a>
             <button type="submit" class="btn-primary" [disabled]="saving() || form.invalid || !selectedRequerimientoDetail()">
               @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-              Registrar y continuar
+              Crear Convocatoria y Notificar a la Oficina Solicitante
             </button>
           </div>
         </section>

@@ -13,6 +13,7 @@ import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -92,28 +93,27 @@ public class UsuarioService {
         Usuario usuario = usuarioRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
 
+        String emailTrim = req.getEmail() != null ? req.getEmail().trim() : "";
+        final Long idUsuarioActual = usuario.getIdUsuario();
+        if (!emailTrim.isEmpty() && !emailTrim.equalsIgnoreCase(nullToEmpty(usuario.getEmail()))) {
+            usuarioRepo.findByEmail(emailTrim).ifPresent(otro -> {
+                if (!otro.getIdUsuario().equals(idUsuarioActual)) {
+                    throw new DomainException("Email ya registrado: " + emailTrim);
+                }
+            });
+        }
+
         usuario.setNombres(req.getNombres());
         usuario.setApellidos(req.getApellidos());
-        usuario.setEmail(req.getEmail());
+        usuario.setEmail(emailTrim.isEmpty() ? usuario.getEmail() : emailTrim);
         usuario.setIdArea(req.getIdArea());
 
-        // Desactivar roles actuales y reasignar
-        if (usuario.getRoles() != null) {
-            usuario.getRoles().forEach(ur -> ur.setEstado("INACTIVO"));
-        }
-        if (req.getRolesCodigosRol() != null) {
-            for (String codigoRol : req.getRolesCodigosRol()) {
-                Rol rol = rolRepo.findByCodigoRol(codigoRol)
-                        .orElseThrow(() -> new DomainException("Rol no encontrado: " + codigoRol));
-                UsuarioRol ur = UsuarioRol.builder().usuario(usuario).rol(rol).build();
-                usuario.getRoles().add(ur);
-            }
-        }
+        sincronizarRolesUsuario(usuario, req.getRolesCodigosRol());
 
-        usuario = usuarioRepo.save(usuario);
+        Usuario guardado = usuarioRepo.save(usuario);
         auditPort.registrar("TBL_USUARIO", id, "ACTUALIZAR",
-                null, usuario.getEstado(), httpReq, "Roles: " + req.getRolesCodigosRol());
-        return toResponse(usuario);
+                null, guardado.getEstado(), httpReq, "Roles: " + req.getRolesCodigosRol());
+        return toResponse(guardado);
     }
 
     @Transactional
@@ -140,6 +140,41 @@ public class UsuarioService {
                 estadoAnterior, "INACTIVO", httpReq, null);
 
         return toResponse(usuario);
+    }
+
+    /**
+     * Mantiene una sola fila por (usuario, rol) por UK TBL_USUARIO_ROL_UK: reactiva existentes o crea si faltan.
+     */
+    private void sincronizarRolesUsuario(Usuario usuario, List<String> rolesCodigosSolicitados) {
+        List<String> solicitados = rolesCodigosSolicitados == null
+                ? List.of()
+                : rolesCodigosSolicitados.stream().distinct().toList();
+
+        if (usuario.getRoles() != null) {
+            for (UsuarioRol ur : usuario.getRoles()) {
+                String codigo = ur.getRol().getCodigoRol();
+                if (solicitados.contains(codigo)) {
+                    ur.setEstado("ACTIVO");
+                    ur.setFechaAsignacion(LocalDateTime.now());
+                } else {
+                    ur.setEstado("INACTIVO");
+                }
+            }
+        }
+        for (String codigoRol : solicitados) {
+            boolean existeFila = usuario.getRoles() != null && usuario.getRoles().stream()
+                    .anyMatch(ur -> codigoRol.equals(ur.getRol().getCodigoRol()));
+            if (!existeFila) {
+                Rol rol = rolRepo.findByCodigoRol(codigoRol)
+                        .orElseThrow(() -> new DomainException("Rol no encontrado: " + codigoRol));
+                UsuarioRol ur = UsuarioRol.builder().usuario(usuario).rol(rol).build();
+                usuario.getRoles().add(ur);
+            }
+        }
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 
     private UsuarioResponse toResponse(Usuario u) {

@@ -28,7 +28,10 @@ interface ConvPublica {
   estado: string;
   /** Label derivado del backend: "NUEVO" si publicada hace ≤30 días, si no el estado real. */
   estadoPortal?: string;
-  /** Denominación del puesto — viene de PerfilPuesto.denominacionPuesto vía ConvocatoriaPublicaResponse. */
+  /**
+   * Denominación/nivel del puesto — PerfilPuesto.denominacionPuesto (ConvocatoriaPublicaResponse).
+   * En la columna "Puesto" del portal se muestra primero objetoContratacion; nombrePuesto es fallback.
+   */
   nombrePuesto?: string;
   anio: number;
   unidadOrganica: string;

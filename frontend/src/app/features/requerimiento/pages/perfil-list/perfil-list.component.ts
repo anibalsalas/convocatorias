@@ -76,76 +76,91 @@ import { AuthService } from '@core/auth/auth.service';
       </div>
 
       <div class="bg-white rounded-lg shadow border overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-xs">
           <thead>
             <tr class="bg-[#1F2133] text-white">
-              <th class="px-3 py-2 text-left font-semibold text-xs">ID</th>
-              <th class="px-3 py-2 text-left font-semibold text-xs">Denominación del Puesto</th>
-              <th class="px-3 py-2 text-left font-semibold text-xs">Nombre del Puesto</th>
-              <th class="px-3 py-2 text-left font-semibold text-xs">Unidad Orgánica</th>
-              <th class="px-3 py-2 text-center font-semibold text-xs">Puestos</th>
-              <th class="px-3 py-2 text-center font-semibold text-xs">Estado</th>
-              <th class="px-3 py-2 text-center font-semibold text-xs">Fecha</th>
-              <th class="px-3 py-2 text-center font-semibold text-xs">Acciones</th>
+              <th class="px-2 py-1 text-left font-semibold">ID</th>
+              <th class="px-2 py-1 text-left font-semibold">Denominación del Puesto</th>
+              <th class="px-2 py-1 text-left font-semibold">Nombre del Puesto</th>
+              <th class="px-2 py-1 text-left font-semibold">Unidad Orgánica</th>
+              <th class="px-1 py-1 text-center font-semibold w-10">Ptos.</th>
+              <th class="px-2 py-1 text-center font-semibold">Estado</th>
+              <th class="px-2 py-1 text-left font-semibold">Observaciones</th>
+              <th class="px-2 py-1 text-center font-semibold">Fecha</th>
+              <th class="px-2 py-1 text-center font-semibold">{{ canVerPerfilPuesto() ? 'Ver Perfil' : 'Editar' }}</th>
+              @if (canVerValidar()) {
+                <th class="px-2 py-1 text-center font-semibold">Validar</th>
+              }
+              <th class="px-2 py-1 text-center font-semibold">Req.</th>
+              <th class="px-2 py-1 text-center font-semibold">PDF</th>
             </tr>
           </thead>
           <tbody>
             @if (loading()) {
-              <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 text-sm">
+              <tr><td [attr.colspan]="canVerValidar() ? 12 : 11" class="px-2 py-8 text-center text-gray-400">
                 <span class="animate-spin inline-block mr-2">⟳</span> Cargando perfiles...
               </td></tr>
             } @else if (perfiles().length === 0) {
-              <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 text-sm">
+              <tr><td [attr.colspan]="canVerValidar() ? 12 : 11" class="px-2 py-8 text-center text-gray-400">
                 No se encontraron perfiles de puesto.
               </td></tr>
             } @else {
               @for (p of perfiles(); track p.idPerfilPuesto) {
                 <tr class="border-t hover:bg-gray-50 transition-colors">
-                  <td class="px-3 py-2 font-mono text-xs text-gray-500">{{ p.idPerfilPuesto }}</td>
-                  <td class="px-3 py-2 font-medium text-gray-800 text-sm">{{ p.denominacionPuesto }}</td>
-                  <td class="px-3 py-2 text-gray-600 text-sm">{{ p.nombrePuesto || '—' }}</td>
-                  <td class="px-3 py-2 text-gray-600 text-sm">{{ p.unidadOrganica }}</td>
-                  <td class="px-3 py-2 text-center text-sm">{{ p.cantidadPuestos }}</td>
-                  <td class="px-3 py-2 text-center">
+                  <td class="px-2 py-1 font-mono text-gray-500">{{ p.idPerfilPuesto }}</td>
+                  <td class="px-2 py-1 font-medium text-gray-800">{{ p.denominacionPuesto }}</td>
+                  <td class="px-2 py-1 text-gray-600">{{ p.nombrePuesto || '—' }}</td>
+                  <td class="px-2 py-1 text-gray-600">{{ p.unidadOrganica }}</td>
+                  <td class="px-1 py-1 text-center w-10">{{ p.cantidadPuestos }}</td>
+                  <td class="px-2 py-1 text-center">
                     <app-status-badge [estado]="p.estado" [label]="p.estado" />
                   </td>
-                  <td class="px-3 py-2 text-center text-xs text-gray-500">{{ p.fechaCreacion | datePeru }}</td>
-                  <td class="px-3 py-2 text-center">
-                    <div class="flex justify-center gap-1 flex-wrap">
-                      @if (canEditarPerfil()) {
-                        <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto]"
-                          class="btn-ghost text-xs" title="Editar">✏️</a>
-                      }
-
-                      @if (p.estado === 'PENDIENTE' && canVerValidar()) {
+                  <td class="px-2 py-1 text-left text-gray-500 max-w-[150px] break-words whitespace-normal">{{ p.observaciones || '—' }}</td>
+                  <td class="px-2 py-1 text-center text-gray-500">{{ p.fechaCreacion | datePeru }}</td>
+                  <!-- Columna: Editar / Ver Perfil Puesto -->
+                  <td class="px-2 py-1 text-center">
+                    @if (canVerPerfilPuesto()) {
+                      <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto, 'ver']"
+                        class="btn-ghost text-xs" title="Ver Perfil Puesto">👁️</a>
+                    } @else if (canEditarPerfil()) {
+                      <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto]"
+                        class="btn-ghost text-xs" title="Editar">✏️</a>
+                    }
+                  </td>
+                  <!-- Columna: Validar/Aprobar (solo ORH/ADMIN) -->
+                  @if (canVerValidar()) {
+                    <td class="px-2 py-1 text-center">
+                      @if (p.estado === 'PENDIENTE') {
                         <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto, 'validar']"
                           class="btn-ghost text-xs" title="Validar">🔍</a>
                       }
-
-                      @if (p.estado === 'VALIDADO' && canVerAprobar()) {
+                      @if (p.estado === 'VALIDADO') {
                         <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto, 'validar']"
                           class="btn-ghost text-xs" title="Aprobar">✅</a>
                       }
-
-                      @if (canCrearRequerimiento() && p.estado === 'APROBADO' && !p.tieneRequerimientoAsociado) {
-                        <a [routerLink]="['/sistema/requerimiento/nuevo']"
-                           [queryParams]="{ idPerfilPuesto: p.idPerfilPuesto }"
-                           class="btn-ghost text-xs"
-                           title="Crear requerimiento">📝</a>
-                      }
-
-                      @if (canCrearRequerimiento() && p.estado === 'APROBADO' && p.tieneRequerimientoAsociado) {
-                        <span class="px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-500"
-                              [title]="'Ya existe requerimiento asociado' + (p.estadoRequerimientoAsociado ? ': ' + p.estadoRequerimientoAsociado : '')">
-                          Req. creado
-                        </span>
-                      }
-
-                      @if (canVerPdf()) {
-                        <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto, 'pdf']"
-                          class="btn-ghost text-xs" title="Ver PDF">📄</a>
-                      }
-                    </div>
+                    </td>
+                  }
+                  <!-- Columna: Crear Requerimiento -->
+                  <td class="px-2 py-1 text-center">
+                    @if (canCrearRequerimiento() && p.estado === 'APROBADO' && !p.tieneRequerimientoAsociado) {
+                      <a [routerLink]="['/sistema/requerimiento/nuevo']"
+                         [queryParams]="{ idPerfilPuesto: p.idPerfilPuesto }"
+                         class="btn-ghost text-xs"
+                         title="Crear requerimiento">📝</a>
+                    }
+                    @if (canCrearRequerimiento() && p.estado === 'APROBADO' && p.tieneRequerimientoAsociado) {
+                      <span class="px-1 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-500"
+                            [title]="'Ya existe requerimiento asociado' + (p.estadoRequerimientoAsociado ? ': ' + p.estadoRequerimientoAsociado : '')">
+                        Req. creado
+                      </span>
+                    }
+                  </td>
+                  <!-- Columna: Ver Perfil PDF -->
+                  <td class="px-2 py-1 text-center">
+                    @if (canVerPdf()) {
+                      <a [routerLink]="['/sistema/requerimiento/perfil', p.idPerfilPuesto, 'pdf']"
+                        class="btn-ghost text-xs" title="Ver PDF">📄</a>
+                    }
                   </td>
                 </tr>
               }
@@ -173,7 +188,8 @@ export class PerfilListComponent {
 
   // ── Permisos ─────────────────────────────────────────────────────────────
   readonly canCrearPerfil         = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
-  readonly canEditarPerfil        = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
+  readonly canEditarPerfil        = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']) && !this.auth.hasRole('ROLE_ORH'));
+  readonly canVerPerfilPuesto     = computed(() => this.auth.hasRole('ROLE_ORH'));
   readonly canCrearRequerimiento  = computed(() => this.auth.hasAnyRole(['ROLE_AREA_SOLICITANTE', 'ROLE_ADMIN']));
   readonly canVerValidar          = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));
   readonly canVerAprobar          = computed(() => this.auth.hasAnyRole(['ROLE_ORH', 'ROLE_ADMIN']));

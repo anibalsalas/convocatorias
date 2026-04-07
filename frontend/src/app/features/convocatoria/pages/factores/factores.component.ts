@@ -235,7 +235,7 @@ const ETIQUETAS_FASE: Record<string, string> = {
         <div class="flex items-end justify-end gap-3">
           <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'comite']"
              [queryParams]="modoLectura ? { modo: 'lectura' } : null"
-             class="btn-ghost">← Volver a comité</a>
+             class="btn-ghost"></a>
           @if (!modoLectura) {
             <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'acta']" class="btn-primary">Continuar a Acta →</a>
           }

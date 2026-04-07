@@ -10,7 +10,9 @@ import pe.gob.acffaa.sisconv.application.dto.response.*;
 import pe.gob.acffaa.sisconv.application.service.ComunicadoService;
 import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.application.service.SeleccionService;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/convocatorias")
@@ -106,9 +108,31 @@ public class SeleccionController {
         return ResponseEntity.ok(ApiResponse.ok(r, r.getMensaje()));
     }
 
-    /** E24-PUBLICAR: acción explícita COMITÉ — persiste flag + devuelve PDF */
+    /** E24-UPLOAD: ORH sube PDF firmado digitalmente antes de publicar (DS 065-2011-PCM) */
+    @PostMapping("/{id}/upload-pdf-firmado-e24")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadPdfFirmadoE24(
+            @PathVariable Long id,
+            @RequestParam("archivo") MultipartFile archivo,
+            HttpServletRequest http) {
+        Map<String, Object> result = service.uploadPdfFirmadoE24(id, archivo, http);
+        return ResponseEntity.ok(ApiResponse.ok(result, "PDF firmado subido correctamente"));
+    }
+
+    /** E24-DOWNLOAD: descarga el PDF firmado subido por ORH */
+    @GetMapping("/{id}/pdf-firmado-e24")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH','COMITE')")
+    public ResponseEntity<byte[]> descargarPdfFirmadoE24(@PathVariable Long id) {
+        byte[] pdf = service.descargarPdfFirmadoE24(id);
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_PDF);
+        h.set("Content-Disposition", "attachment;filename=RESULT-CURRICULAR-FIRMADO-" + id + ".pdf");
+        return new ResponseEntity<>(pdf, h, HttpStatus.OK);
+    }
+
+    /** E24-PUBLICAR: acción explícita ORH — requiere PDF firmado subido (DS 065-2011-PCM) */
     @PostMapping("/{id}/publicar-resultados-curricular")
-    @PreAuthorize("hasAnyRole('ADMIN','COMITE')")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
     public ResponseEntity<byte[]> publicarResultadosCurricular(@PathVariable Long id, HttpServletRequest http) {
         byte[] pdf = service.publicarResultadosCurricular(id, http);
         HttpHeaders h = new HttpHeaders();
@@ -128,9 +152,31 @@ public class SeleccionController {
         return new ResponseEntity<>(pdf, h, HttpStatus.OK);
     }
 
-    /** E26-PUBLICAR: acción explícita COMITÉ — persiste flag + devuelve PDF */
+    /** E26-UPLOAD: ORH sube PDF firmado de resultados técnicos (DS 065-2011-PCM) */
+    @PostMapping("/{id}/upload-pdf-firmado-e26")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadPdfFirmadoE26(
+            @PathVariable Long id,
+            @RequestParam("archivo") MultipartFile archivo,
+            HttpServletRequest http) {
+        Map<String, Object> result = service.uploadPdfFirmadoE26(id, archivo, http);
+        return ResponseEntity.ok(ApiResponse.ok(result, "PDF firmado subido correctamente"));
+    }
+
+    /** E26-DOWNLOAD: descarga el PDF firmado de resultados técnicos subido por ORH */
+    @GetMapping("/{id}/pdf-firmado-e26")
+    @PreAuthorize("hasAnyRole('ADMIN','ORH','COMITE')")
+    public ResponseEntity<byte[]> descargarPdfFirmadoE26(@PathVariable Long id) {
+        byte[] pdf = service.descargarPdfFirmadoE26(id);
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_PDF);
+        h.set("Content-Disposition", "attachment;filename=RESULT-TECNICA-FIRMADO-" + id + ".pdf");
+        return new ResponseEntity<>(pdf, h, HttpStatus.OK);
+    }
+
+    /** E26-PUBLICAR: acción explícita COMITÉ (presencial) u ORH (virtual) — persiste flag + devuelve PDF */
     @PostMapping("/{id}/publicar-resultados-tecnica")
-    @PreAuthorize("hasAnyRole('ADMIN','COMITE')")
+    @PreAuthorize("hasAnyRole('ADMIN','COMITE','ORH')")
     public ResponseEntity<byte[]> publicarResultadosTecnica(@PathVariable Long id, HttpServletRequest http) {
         byte[] pdf = service.publicarResultadosTecnica(id, http);
         HttpHeaders h = new HttpHeaders();

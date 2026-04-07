@@ -1,9 +1,9 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, OnInit, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ReactiveFormsModule, FormBuilder, FormArray, FormControl, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, Validators } from '@angular/forms';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { RequerimientoService } from '../../services/requerimiento.service';
-import { RequerimientoResponse, ConfigurarReglasRequest, CriterioItem } from '../../models/requerimiento.model';
+import { RequerimientoResponse, ConfigurarReglasRequest } from '../../models/requerimiento.model';
 import { ApiResponse } from '@shared/models/api-response.model';
 import { ToastService } from '@core/services/toast.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
@@ -97,40 +97,6 @@ import { PageHeaderComponent } from '@shared/components/page-header/page-header.
             </div>
           </div>
 
-          <!-- Criterios curriculares -->
-          <div class="card space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-gray-800">SubCriterios de Evaluación Curricular</h3>
-              <button type="button" (click)="addCriterio()" class="text-sm text-[#1F2133] hover:underline font-medium">+ Agregar criterio</button>
-            </div>
-
-            @if (criteriosArray.length === 0) {
-              <p class="text-sm text-yellow-600">Agregue al menos un criterio de evaluación curricular.</p>
-            }
-
-            @for (ctrl of criteriosArray.controls; track $index; let i = $index) {
-              <div class="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
-                <span class="text-xs text-gray-400 pt-2 font-mono w-6">{{ i + 1 }}.</span>
-                <div class="flex-1">
-                  <input [formControl]="getCriterioControl(i, 'criterio')" class="input-field mb-1" placeholder="Ej: Formación académica" />
-                </div>
-                <div class="w-28">
-                  <input [formControl]="getCriterioControl(i, 'puntajeMaximo')" type="text" inputmode="decimal"
-                    maxlength="6" class="input-field" placeholder="0–100"
-                    (input)="filtrarDecimal($event, getCriterioControl(i, 'puntajeMaximo'), 100)" />
-                  <span class="text-xs text-gray-400">Ptj. máximo</span>
-                </div>
-                <div class="w-24">
-                  <input [formControl]="getCriterioControl(i, 'peso')" type="text" inputmode="decimal"
-                    maxlength="6" class="input-field" placeholder="0–100"
-                    (input)="filtrarDecimal($event, getCriterioControl(i, 'peso'), 100)" />
-                  <span class="text-xs text-gray-400">Peso %</span>
-                </div>
-                <button type="button" (click)="removeCriterio(i)" class="btn-ghost text-red-500 text-xs mt-1">✕</button>
-              </div>
-            }
-          </div>
-
           <div class="flex justify-end">
             <button type="submit" [disabled]="saving() || totalPesos() !== 100" class="btn-primary">
               @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
@@ -161,16 +127,12 @@ export class MotorReglasComponent implements OnInit {
     umbralCurricular: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
     umbralTecnica: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
     umbralEntrevista: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
-    criteriosCurriculares: this.fb.array([]),
   });
 
   pesoCurr = signal(30);
   pesoTec = signal(35);
   pesoEnt = signal(35);
   totalPesos = computed(() => this.pesoCurr() + this.pesoTec() + this.pesoEnt());
-
-  get criteriosArray(): FormArray { return this.form.get('criteriosCurriculares') as FormArray; }
-  getCriterioControl(i: number, field: string): FormControl { return (this.criteriosArray.at(i) as ReturnType<typeof this.fb.group>).get(field) as FormControl; }
 
   ngOnInit(): void {
     const id = +this.route.snapshot.params['id'];
@@ -203,19 +165,8 @@ export class MotorReglasComponent implements OnInit {
     ctrl.updateValueAndValidity();
   }
 
-  addCriterio(): void {
-    this.criteriosArray.push(this.fb.group({
-      criterio: ['', Validators.required],
-      puntajeMaximo: [null, [Validators.required, Validators.min(0.01), Validators.max(100)]],
-      peso: [null, [Validators.required, Validators.min(0.01), Validators.max(100)]],
-    }));
-  }
-
-  removeCriterio(i: number): void { this.criteriosArray.removeAt(i); }
-
   onConfigurar(): void {
     if (this.totalPesos() !== 100) { this.toast.error('Los pesos deben sumar exactamente 100% (CK_CONV_PESOS)'); return; }
-    if (this.criteriosArray.length === 0) { this.toast.warning('Agregue al menos un criterio curricular'); return; }
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
 
     this.saving.set(true);
@@ -228,10 +179,7 @@ export class MotorReglasComponent implements OnInit {
       umbralCurricular: raw.umbralCurricular!,
       umbralTecnica: raw.umbralTecnica!,
       umbralEntrevista: raw.umbralEntrevista!,
-      criteriosCurriculares: (raw.criteriosCurriculares ?? []).map((c: unknown) => {
-        const item = c as { criterio: string; puntajeMaximo: number; peso: number };
-        return { criterio: item.criterio, puntajeMaximo: item.puntajeMaximo, peso: item.peso };
-      }),
+      criteriosCurriculares: [],
     };
 
     this.svc.configurarReglas(id, body).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({

@@ -19,4 +19,6 @@ public interface IPostulacionRepository {
     long countByConvocatoriaIdAndEstado(Long idConv, String estado);
     boolean existsByConvocatoriaIdAndEstadoIn(Long idConv, java.util.List<String> estados);
     List<Postulacion> findByConvocatoriaIdAndEstadoIn(Long idConv, java.util.List<String> estados);
+
+    List<Postulacion> findAptosByConvocatoriaWithPostulante(Long idConv);
 }

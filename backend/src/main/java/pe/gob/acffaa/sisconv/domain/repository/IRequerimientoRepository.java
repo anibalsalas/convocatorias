@@ -25,6 +25,9 @@ public interface IRequerimientoRepository {
     /** Filtro por área solicitante */
     Page<Requerimiento> findByIdAreaSolicitante(Long idArea, Pageable pageable);
 
+    /** Filtro por estado + área solicitante */
+    Page<Requerimiento> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable);
+
     boolean existsByNumeroRequerimiento(String numero);
 
     /** Contar requerimientos del año actual para generar correlativo */

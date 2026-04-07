@@ -9,7 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, DatePipe } from '@angular/common';
 import { forkJoin, take, finalize, timeout, TimeoutError, switchMap } from 'rxjs';
 import { SeleccionService } from '../../services/seleccion.service';
 import { ToastService } from '@core/services/toast.service';
@@ -77,8 +77,45 @@ function observacionParaNoApto(p: PostulacionSeleccion): string {
 @Component({
   selector: 'app-eval-curricular',
   standalone: true,
-  imports: [RouterLink, FormsModule, PageHeaderComponent, DecimalPipe],
+  imports: [RouterLink, FormsModule, PageHeaderComponent, DecimalPipe, DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    .stepper-circle {
+      width: 22px; height: 22px; border-radius: 50%; display: inline-flex;
+      align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+      border: 2px solid #d1d5db; color: #9ca3af; background: #fff; flex-shrink: 0;
+    }
+    .stepper-circle--active { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+    .stepper-circle--done { border-color: #22c55e; color: #fff; background: #22c55e; }
+    .stepper-circle--pending { border-color: #e5e7eb; color: #d1d5db; }
+    .stepper-line {
+      flex: 1; height: 2px; background: #e5e7eb; min-width: 20px; max-width: 48px; margin: 0 4px;
+    }
+    .stepper-line--done { background: #22c55e; }
+    .stepper-content { padding: 6px 0 2px 0; }
+    .stepper-btn {
+      display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px;
+      border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;
+      transition: all .15s;
+    }
+    .stepper-btn--green { background: #dcfce7; color: #166534; border: 1.5px solid #86efac; }
+    .stepper-btn--green:hover:not(:disabled) { background: #bbf7d0; }
+    .stepper-btn--blue { background: #2563eb; color: #fff; }
+    .stepper-btn--blue:hover:not(:disabled) { background: #1d4ed8; }
+    .stepper-btn--gray { background: #f3f4f6; color: #9ca3af; border: 1.5px solid #e5e7eb; cursor: not-allowed; }
+    .stepper-btn--outline { background: #fff; color: #6b7280; border: 1px solid #d1d5db; padding: 4px 10px; border-radius: 4px; }
+    .stepper-btn--outline:hover { background: #f9fafb; }
+    .stepper-upload-zone {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 14px 20px; border: 2px dashed #fbbf24; border-radius: 8px;
+      background: #fffbeb; transition: all .15s; text-align: center;
+    }
+    .stepper-upload-zone:hover { border-color: #f59e0b; background: #fef3c7; }
+    .stepper-upload-done {
+      display: flex; flex-direction: column; padding: 8px 12px;
+      border: 1.5px solid #86efac; border-radius: 8px; background: #f0fdf4;
+    }
+  `],
   template: `
     <div class="space-y-4">
       <app-page-header
@@ -178,15 +215,11 @@ function observacionParaNoApto(p: PostulacionSeleccion): string {
                 </div>
               }
             </div>
-            <div class="flex flex-wrap gap-2 mt-2">
-              @if (esComiteOAdmin()) {
-                <button
-                  (click)="publicarResultados()"
-                  [disabled]="publicando()"
-                  class="btn-primary text-sm disabled:opacity-50"
-                >
-                  {{ publicando() ? '⟳ Generando PDF...' : '📄 Publicar Resultados E24' }}
-                </button>
+            <div class="flex flex-wrap gap-2 mt-2 items-center">
+              @if (esComiteOAdmin() && !esOrhOAdmin()) {
+                <span class="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded">
+                  ℹ️ Los resultados serán publicados por ORH
+                </span>
               }
               @if (esOrhOAdmin()) {
                 <a [routerLink]="['/sistema/seleccion', idConv, 'codigos-anonimos']"
@@ -200,13 +233,30 @@ function observacionParaNoApto(p: PostulacionSeleccion): string {
 
         <!-- Panel acciones en modoResultados (re-entrada sin resultado en sesión) -->
         @if (modoResultados() && !resultado()) {
-          <div class="card border border-blue-200 bg-blue-50 p-4 space-y-2">
+          <div class="card border border-blue-200 bg-blue-50 p-4 space-y-3">
             <p class="font-semibold text-blue-700 text-sm">
               Resultados de evaluación curricular E24 — Vista de solo lectura
             </p>
-            <div class="flex flex-wrap gap-2 mt-2 items-center">
-              @if (esComiteOAdmin()) {
+
+            <!-- COMITÉ: solo ve estado, no puede publicar -->
+            @if (esComiteOAdmin() && !esOrhOAdmin()) {
+              <div class="flex flex-wrap gap-2 items-center">
                 @if (convInfo()?.resultadosCurricularPublicados) {
+                  <span class="text-xs text-green-700 font-semibold bg-green-100 border border-green-300 px-3 py-1.5 rounded">
+                    ✅ Resultados E24 ya publicados por ORH
+                  </span>
+                } @else {
+                  <span class="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded">
+                    ℹ️ Los resultados serán publicados por ORH
+                  </span>
+                }
+              </div>
+            }
+
+            <!-- ORH: flujo de 3 pasos — Generar PDF → Subir Firmado → Publicar -->
+            @if (esOrhOAdmin()) {
+              @if (convInfo()?.resultadosCurricularPublicados) {
+                <div class="flex flex-wrap gap-2 items-center">
                   <span class="text-xs text-green-700 font-semibold bg-green-100 border border-green-300 px-3 py-1.5 rounded">
                     ✅ Resultados E24 ya publicados
                   </span>
@@ -217,22 +267,109 @@ function observacionParaNoApto(p: PostulacionSeleccion): string {
                   >
                     {{ descargandoPdf() ? '⟳ Descargando...' : '↓ Descargar PDF E24' }}
                   </button>
-                }
-                <button
-                  (click)="publicarResultados()"
-                  [disabled]="publicando()"
-                  class="btn-primary text-sm disabled:opacity-50"
-                >
-                  {{ publicando() ? '⟳ Generando PDF...' : convInfo()?.resultadosCurricularPublicados ? '🔄 Re-publicar E24' : '📄 Publicar Resultados E24' }}
-                </button>
+                </div>
+              } @else {
+                <!-- Stepper visual -->
+                <div class="flex items-center gap-0 mt-1 mb-2">
+                  <!-- Paso 1 indicator -->
+                  <div class="flex items-center gap-1.5">
+                    <span class="stepper-circle stepper-circle--active">1</span>
+                    <span class="text-[10px] font-semibold text-blue-700">Generar PDF</span>
+                  </div>
+                  <div class="stepper-line" [class.stepper-line--done]="convInfo()?.pdfFirmadoE24Subido"></div>
+                  <!-- Paso 2 indicator -->
+                  <div class="flex items-center gap-1.5">
+                    <span class="stepper-circle"
+                      [class.stepper-circle--done]="convInfo()?.pdfFirmadoE24Subido"
+                      [class.stepper-circle--active]="!convInfo()?.pdfFirmadoE24Subido">2</span>
+                    <span class="text-[10px] font-semibold"
+                      [class.text-green-600]="convInfo()?.pdfFirmadoE24Subido"
+                      [class.text-gray-500]="!convInfo()?.pdfFirmadoE24Subido">Firmar y Subir</span>
+                  </div>
+                  <div class="stepper-line" [class.stepper-line--done]="convInfo()?.pdfFirmadoE24Subido"></div>
+                  <!-- Paso 3 indicator -->
+                  <div class="flex items-center gap-1.5">
+                    <span class="stepper-circle"
+                      [class.stepper-circle--active]="convInfo()?.pdfFirmadoE24Subido"
+                      [class.stepper-circle--pending]="!convInfo()?.pdfFirmadoE24Subido">3</span>
+                    <span class="text-[10px] font-semibold"
+                      [class.text-blue-700]="convInfo()?.pdfFirmadoE24Subido"
+                      [class.text-gray-400]="!convInfo()?.pdfFirmadoE24Subido">Publicar</span>
+                  </div>
+                </div>
+
+                <!-- Paso 1: Generar PDF -->
+                <div class="stepper-content">
+                  <button
+                    (click)="descargarResultados()"
+                    [disabled]="descargandoPdf()"
+                    class="stepper-btn stepper-btn--green disabled:opacity-50"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    {{ descargandoPdf() ? 'Generando...' : 'Generar PDF Resultados Eval. Curricular' }}
+                  </button>
+                </div>
+
+                <!-- Paso 2: Subir PDF firmado -->
+                <div class="stepper-content">
+                  @if (convInfo()?.pdfFirmadoE24Subido) {
+                    <div class="stepper-upload-done">
+                      <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <div class="text-xs">
+                          <span class="font-semibold text-green-700">PDF firmado subido</span>
+                          <span class="text-gray-400 ml-1.5">{{ convInfo()?.fechaPdfFirmadoE24 | date:'dd/MM/yyyy HH:mm' }}</span>
+                        </div>
+                      </div>
+                      <label class="stepper-btn stepper-btn--outline text-[11px] cursor-pointer mt-1.5">
+                        Cambiar archivo
+                        <input type="file" accept=".pdf" class="hidden"
+                          (change)="onUploadPdfFirmado($event)"
+                          [disabled]="subiendoPdf()">
+                      </label>
+                    </div>
+                  } @else {
+                    <label class="stepper-upload-zone cursor-pointer"
+                      [class.opacity-60]="subiendoPdf()">
+                      <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <span class="text-xs font-semibold text-amber-700">
+                        {{ subiendoPdf() ? 'Subiendo archivo...' : 'Haga clic para subir el PDF firmado' }}
+                      </span>
+                      <span class="text-[10px] text-gray-400">Firme con FIRMA ONPE y suba el archivo aquí (máx. 10 MB)</span>
+                      <input type="file" accept=".pdf" class="hidden"
+                        (change)="onUploadPdfFirmado($event)"
+                        [disabled]="subiendoPdf()">
+                    </label>
+                  }
+                </div>
+
+                <!-- Paso 3: Publicar -->
+                <div class="stepper-content">
+                  <div class="flex items-center gap-3">
+                    <button
+                      (click)="publicarResultados()"
+                      [disabled]="publicando() || !convInfo()?.pdfFirmadoE24Subido"
+                      class="stepper-btn disabled:opacity-40"
+                      [class.stepper-btn--blue]="convInfo()?.pdfFirmadoE24Subido"
+                      [class.stepper-btn--gray]="!convInfo()?.pdfFirmadoE24Subido"
+                      [title]="!convInfo()?.pdfFirmadoE24Subido ? 'Debe subir el PDF firmado antes de publicar' : 'Publicar resultados E24'"
+                    >
+                      {{ publicando() ? '⟳ Publicando...' : 'Publicar E24' }}
+                    </button>
+                    @if (!convInfo()?.pdfFirmadoE24Subido) {
+                      <span class="text-[10px] text-gray-400 italic">Requiere PDF firmado (DS 065-2011-PCM)</span>
+                    }
+                  </div>
+                </div>
               }
-              @if (esOrhOAdmin()) {
+
+              <div class="mt-3 pt-3 border-t border-blue-100">
                 <a [routerLink]="['/sistema/seleccion', idConv, 'codigos-anonimos']"
                    class="btn-secondary text-sm inline-block">
                   Continuar → E25 Códigos Anónimos
                 </a>
-              }
-            </div>
+              </div>
+            }
           </div>
         }
 
@@ -516,6 +653,7 @@ export class EvalCurricularComponent {
   readonly enviando      = signal(false);
   readonly publicando    = signal(false);
   readonly descargandoPdf = signal(false);
+  readonly subiendoPdf    = signal(false);
   readonly entradas      = signal<EntradaEval[]>([]);
   readonly factoresPadre = signal<FactorDetalle[]>([]);
   readonly resultado     = signal<EvalCurricularResponse | null>(null);
@@ -811,6 +949,43 @@ export class EvalCurricularComponent {
         error: () => {
           this.publicando.set(false);
           this.toast.error('No se pudo publicar los resultados E24.');
+        },
+      });
+  }
+
+  /** Sube el PDF firmado digitalmente por ORH (DS 065-2011-PCM) */
+  protected onUploadPdfFirmado(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      this.toast.error('Solo se permiten archivos PDF.');
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.toast.error('El archivo excede el límite de 10 MB.');
+      input.value = '';
+      return;
+    }
+    this.subiendoPdf.set(true);
+    this.svc.uploadPdfFirmadoE24(this.idConv, file)
+      .pipe(take(1))
+      .subscribe({
+        next: (res) => {
+          this.subiendoPdf.set(false);
+          this.convInfo.update(c => c ? {
+            ...c,
+            pdfFirmadoE24Subido: true,
+            fechaPdfFirmadoE24: res.fechaSubida,
+          } : c);
+          this.toast.success('PDF firmado subido correctamente.');
+          input.value = '';
+        },
+        error: () => {
+          this.subiendoPdf.set(false);
+          this.toast.error('No se pudo subir el PDF firmado.');
+          input.value = '';
         },
       });
   }

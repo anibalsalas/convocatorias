@@ -93,7 +93,7 @@ class PerfilPuestoServiceTest {
         when(mapper.toResponse(perfil)).thenReturn(response);
         when(requerimientoRepo.existsByPerfilPuesto_IdPerfilPuestoAndEstadoIn(anyLong(), anySet())).thenReturn(false);
 
-        Page<PerfilPuestoResponse> result = service.listar("PENDIENTE", pageable);
+        Page<PerfilPuestoResponse> result = service.listar("PENDIENTE", null, pageable);
 
         assertEquals(1, result.getTotalElements());
         verify(perfilRepo).findByEstado("PENDIENTE", pageable);

@@ -6,4 +6,5 @@ import java.util.*;
 public interface JpaCuadroMeritosRepository extends JpaRepository<CuadroMeritos,Long>{
     List<CuadroMeritos> findByConvocatoriaIdConvocatoria(Long ic);
     Optional<CuadroMeritos> findByPostulacionIdPostulacion(Long id);
+    boolean existsByConvocatoriaIdConvocatoria(Long idConvocatoria);
 }

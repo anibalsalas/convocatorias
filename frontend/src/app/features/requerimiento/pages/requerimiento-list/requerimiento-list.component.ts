@@ -198,7 +198,7 @@ export class RequerimientoListComponent implements OnInit {
     const filtros: Record<string, string> = {};
     if (this.filtroEstado) filtros['estado'] = this.filtroEstado;
 
-    this.svc.listar({ page: this.page(), size: 10, sort: 'fechaCreacion,desc' }, filtros)
+    this.svc.listar({ page: this.page(), size: 10, sort: ['fechaCreacion,desc', 'idRequerimiento,desc'] }, filtros)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res: ApiResponse<Page<RequerimientoResponse>>) => {

@@ -26,4 +26,11 @@ public interface IConvocatoriaRepository {
     boolean existsByIdRequerimiento(Long idRequerimiento);
     long countPendientesComite(String username);
     long countPendientesPublicar();
+    List<Convocatoria> findPendientesBancoByArea(Long idArea);
+
+    /** V34 ORH: banco listo, configuracion E26-V pendiente de publicacion. */
+    List<Convocatoria> findConvocatoriasBancoCargadoPendienteConfigOrh();
+
+    /** ORH: comité registrado pero aún no notificado a rol COMITE (no COMITE_CONFORMADO). */
+    List<Convocatoria> findConvocatoriasPendienteNotificarComiteOrh();
 }

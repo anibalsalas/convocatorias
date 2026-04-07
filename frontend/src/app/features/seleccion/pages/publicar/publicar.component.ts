@@ -3,6 +3,7 @@ import {
   Component,
   DestroyRef,
   inject,
+  OnInit,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -25,7 +26,23 @@ import { PublicarResultadosResponse } from '../../models/seleccion.model';
         <a [routerLink]="['/sistema/seleccion', idConv, 'cuadro-meritos']" class="btn-ghost text-sm">← Cuadro Méritos</a>
       </app-page-header>
 
-      @if (!publicado()) {
+      @if (cargando()) {
+        <div class="card p-6">
+          <p class="text-sm text-gray-500">Verificando estado de la convocatoria...</p>
+        </div>
+      } @else if (yaFinalizada() && !publicado()) {
+        <div class="card space-y-4">
+          <div class="bg-green-50 border border-green-200 rounded p-4 text-center">
+            <div class="text-4xl mb-2">✓</div>
+            <h2 class="text-lg font-bold text-green-700">Resultados ya publicados</h2>
+            <p class="text-sm text-gray-600 mt-1">Esta convocatoria ya fue finalizada previamente.</p>
+          </div>
+          <div class="flex gap-2 justify-end">
+            <a [routerLink]="['/sistema/seleccion', idConv, 'cuadro-meritos']" class="btn-ghost text-sm">← Cuadro Méritos</a>
+            <a routerLink="/sistema/seleccion" class="btn-primary text-sm">← Volver a Selección</a>
+          </div>
+        </div>
+      } @else if (!publicado()) {
         <div class="card space-y-4">
           <div class="bg-amber-50 border border-amber-200 rounded p-4 text-sm text-amber-800">
             <strong>⚠ Acción irreversible</strong>
@@ -97,7 +114,7 @@ import { PublicarResultadosResponse } from '../../models/seleccion.model';
     </div>
   `,
 })
-export class PublicarSeleccionComponent {
+export class PublicarSeleccionComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly seleccionService = inject(SeleccionService);
@@ -107,7 +124,24 @@ export class PublicarSeleccionComponent {
   readonly idConv = Number(this.route.snapshot.paramMap.get('id'));
   readonly publicando = signal(false);
   readonly publicado = signal(false);
+  readonly yaFinalizada = signal(false);
+  readonly cargando = signal(true);
   readonly resultado = signal<PublicarResultadosResponse | null>(null);
+
+  ngOnInit(): void {
+    this.seleccionService
+      .obtenerConvocatoria(this.idConv)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (conv) => {
+          if (conv?.estado === 'FINALIZADA') {
+            this.yaFinalizada.set(true);
+          }
+          this.cargando.set(false);
+        },
+        error: () => this.cargando.set(false),
+      });
+  }
 
   publicar(): void {
     if (this.publicando()) return;

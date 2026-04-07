@@ -6,5 +6,6 @@ import java.util.List;
 
 public interface JpaCronogramaRepository extends JpaRepository<Cronograma, Long> {
     List<Cronograma> findByConvocatoriaIdConvocatoriaOrderByOrden(Long idConvocatoria);
+    List<Cronograma> findByConvocatoriaIdConvocatoriaIn(List<Long> ids);
     void deleteByConvocatoriaIdConvocatoria(Long idConvocatoria);
 }

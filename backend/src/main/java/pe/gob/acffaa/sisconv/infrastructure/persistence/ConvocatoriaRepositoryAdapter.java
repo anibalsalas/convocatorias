@@ -99,4 +99,19 @@ public class ConvocatoriaRepositoryAdapter implements IConvocatoriaRepository {
     public long countPendientesPublicar() {
         return jpa.countPendientesPublicar();
     }
+
+    @Override
+    public List<Convocatoria> findPendientesBancoByArea(Long idArea) {
+        return jpa.findPendientesBancoByArea(idArea);
+    }
+
+    @Override
+    public List<Convocatoria> findConvocatoriasBancoCargadoPendienteConfigOrh() {
+        return jpa.findConvocatoriasBancoCargadoPendienteConfigOrh();
+    }
+
+    @Override
+    public List<Convocatoria> findConvocatoriasPendienteNotificarComiteOrh() {
+        return jpa.findConvocatoriasPendienteNotificarComiteOrh();
+    }
 }

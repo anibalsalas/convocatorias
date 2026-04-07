@@ -16,7 +16,7 @@ import { Component, ChangeDetectionStrategy, input, output } from '@angular/core
           <h3 class="text-lg font-bold text-gray-800 mb-2">{{ title() }}</h3>
           <p class="text-sm text-gray-600 mb-6">{{ message() }}</p>
           <div class="flex gap-3 justify-end">
-            <button (click)="cancel.emit()" class="btn-ghost">Cancelar</button>
+            <button (click)="cancel.emit()" class="btn-ghost">{{ cancelText() }}</button>
             <button
               (click)="confirm.emit()"
               [class]="confirmDanger() ? 'btn-danger' : 'btn-primary'">
@@ -33,6 +33,8 @@ export class ConfirmDialogComponent {
   title = input<string>('Confirmar acción');
   message = input<string>('¿Está seguro de realizar esta acción?');
   confirmText = input<string>('Confirmar');
+  /** Etiqueta del botón que cancela (no confirma) la acción. */
+  cancelText = input<string>('Cancelar');
   confirmDanger = input<boolean>(false);
 
   confirm = output<void>();

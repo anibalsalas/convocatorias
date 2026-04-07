@@ -1,6 +1,6 @@
 export interface PerfilFormacionAcademicaRequest {
   gradoAcademico: string;
-  especialidad: string;
+  especialidad?: string;
   requiereColegiatura: boolean;
   requiereHabilitacionProfesional: boolean;
   orden: number;
@@ -41,6 +41,12 @@ export interface CondicionPuestoRequest {
   lugarPrestacion: string;
   jornadaSemanal: number;
   otrasCondiciones?: string;
+  /** V16 — Bases PDF sección IV */
+  horarioInicio?: string;
+  horarioFin?: string;
+  diasLaborales?: string;
+  modalidadServicio?: string;
+  tipoInicioContrato?: string;
 }
 
 export interface PerfilRegistroContextResponse {
@@ -56,6 +62,13 @@ export interface NivelPuestoResponse {
   orden?: number;
 }
 
+export interface DenominacionPuestoResponse {
+  idDenominacionPuesto: number;
+  codigo: string;
+  descripcion: string;
+  orden?: number;
+}
+
 export interface PerfilPuestoRequest {
   nombrePuesto?: string;
   denominacionPuesto: string;
@@ -63,9 +76,6 @@ export interface PerfilPuestoRequest {
   idAreaSolicitante: number;
   idNivelPuesto?: number | null;
   idNivelFormacion?: number | null;
-  dependenciaJerarquicaLineal?: string;
-  dependenciaFuncional?: string;
-  puestosCargo?: number | null;
   experienciaGeneral?: string;
   experienciaEspecifica?: string;
   habilidades?: string;
@@ -95,7 +105,7 @@ export interface AprobarPerfilRequest {
 export interface PerfilFormacionAcademicaResponse {
   idPerfilFormacion: number;
   gradoAcademico: string;
-  especialidad: string;
+  especialidad?: string;
   requiereColegiatura: boolean;
   requiereHabilitacionProfesional: boolean;
   orden: number;
@@ -141,6 +151,11 @@ export interface CondicionPuestoResponse {
   lugarPrestacion: string;
   jornadaSemanal: number;
   otrasCondiciones: string;
+  horarioInicio?: string | null;
+  horarioFin?: string | null;
+  diasLaborales?: string | null;
+  modalidadServicio?: string | null;
+  tipoInicioContrato?: string | null;
 }
 
 export interface PerfilPuestoResponse {
@@ -151,9 +166,6 @@ export interface PerfilPuestoResponse {
   idAreaSolicitante: number;
   idNivelPuesto?: number | null;
   idNivelFormacion?: number | null;
-  dependenciaJerarquicaLineal?: string;
-  dependenciaFuncional?: string;
-  puestosCargo?: number | null;
   experienciaGeneral?: string;
   experienciaEspecifica?: string;
   habilidades?: string;

@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
+import { SistemaPendingExitService } from '@core/services/sistema-pending-exit.service';
 import { ToastService } from '@core/services/toast.service';
 
 interface NavItem { label: string; iconKey: string; route: string; roles: string[]; }
@@ -113,7 +114,7 @@ const ICON_PATHS: Record<string, string> = {
               <div class="text-[10px] text-gray-400 mt-0.5">{{ roleLabel() }}</div>
             </div>
             <!-- Botón salir -->
-            <button (click)="auth.logout()"
+            <button (click)="onSalir()"
                     class="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500
                            hover:bg-red-50 px-2 py-1.5 rounded transition-colors ml-1"
                     title="Cerrar sesión">
@@ -152,9 +153,14 @@ const ICON_PATHS: Record<string, string> = {
   `,
 })
 export class SistemaLayoutComponent {
-  readonly auth        = inject(AuthService);
+  readonly auth         = inject(AuthService);
   readonly toastService = inject(ToastService);
-  readonly collapsed   = signal(false);
+  private readonly pendingExit = inject(SistemaPendingExitService);
+  readonly collapsed    = signal(false);
+
+  onSalir(): void {
+    this.pendingExit.attemptExit(() => this.auth.logout());
+  }
 
   readonly initials = computed(() => {
     const nombre = this.auth.currentUser()?.nombreCompleto ?? '';

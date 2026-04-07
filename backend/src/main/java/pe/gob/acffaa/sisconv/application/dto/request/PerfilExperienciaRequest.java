@@ -27,7 +27,6 @@ public class PerfilExperienciaRequest {
     @Size(max = 10, message = "La unidad de tiempo no debe exceder 10 caracteres")
     private String unidadTiempo;
 
-    @NotBlank(message = "El nivel mínimo del puesto es obligatorio")
     @Size(max = 120, message = "El nivel mínimo del puesto no debe exceder 120 caracteres")
     private String nivelMinimoPuesto;
 

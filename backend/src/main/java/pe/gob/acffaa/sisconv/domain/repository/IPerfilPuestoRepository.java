@@ -24,12 +24,18 @@ public interface IPerfilPuestoRepository {
     /** Listado por área solicitante */
     Page<PerfilPuesto> findByIdAreaSolicitante(Long idArea, Pageable pageable);
 
+    /** Listado por estado + área solicitante */
+    Page<PerfilPuesto> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable);
+
     boolean existsById(Long id);
 
     void delete(PerfilPuesto perfil);
 
     /** Cuenta perfiles aprobados sin requerimiento vigente asociado */
     long countAprobadosSinRequerimientoVigente();
+
+    /** Cuenta perfiles aprobados sin requerimiento vigente — filtrado por área */
+    long countAprobadosSinRequerimientoVigenteByArea(Long idArea);
 
     /** Cuenta perfiles pendientes de validar o aprobar por ORH (estados PENDIENTE, VALIDADO) */
     long countPendientesValidarAprobar();

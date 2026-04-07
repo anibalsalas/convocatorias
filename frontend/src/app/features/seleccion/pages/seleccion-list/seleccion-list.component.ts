@@ -82,6 +82,21 @@ interface AvisoNotificacion {
         }
       }
 
+      <!-- Avisos ORH: pendiente publicar resultados eval. curricular E24 -->
+      @if (esOrh()) {
+        @for (c of convocatorias(); track c.idConvocatoria) {
+          @if (c.estado === 'EN_SELECCION' && c.resultadosEvalCurricularRegistrados && !c.resultadosCurricularPublicados) {
+            <div class="flex items-start gap-2 bg-orange-50 border border-orange-300 rounded-md px-3 py-2 text-xs text-orange-800">
+              <span class="mt-0.5">📋</span>
+              <span>
+                La <strong>{{ c.numeroConvocatoria }}</strong> tiene resultados de evaluación curricular registrados
+                pendientes de publicar. Ingrese para generar PDF, firmarlo y publicar (E24).
+              </span>
+            </div>
+          }
+        }
+      }
+
       <!-- Avisos ORH: postulantes APTOS listos para Códigos Anónimos E25 -->
       @if (esOrh()) {
         @for (c of convocatorias(); track c.idConvocatoria) {
@@ -190,19 +205,23 @@ interface AvisoNotificacion {
                     <app-status-badge [estado]="c.estado" [label]="c.estado" />
                   </td>
                   <td class="px-3 py-2 text-center">
-                    <a
-                      [routerLink]="['/sistema/seleccion', c.idConvocatoria, 'postulantes']"
-                      class="text-xs px-3 py-1 rounded font-semibold transition-colors inline-block"
-                      [class]="c.estado === 'PUBLICADA'
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                        : c.estado === 'EN_SELECCION'
-                        ? 'bg-[#1E3A5F] hover:bg-[#2D5F8A] text-white'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'"
-                    >
-                      {{ c.estado === 'PUBLICADA' ? 'Ver Postulantes →'
-                         : c.estado === 'EN_SELECCION' ? 'Continuar →'
-                         : 'Ver resultados' }}
-                    </a>
+                    <span [title]="tooltipAccion(c)">
+                      <a
+                        [routerLink]="habilitadoAccion(c) ? ['/sistema/seleccion', c.idConvocatoria, 'postulantes'] : null"
+                        class="text-xs px-3 py-1 rounded font-semibold transition-colors inline-block"
+                        [class]="!habilitadoAccion(c)
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed pointer-events-none'
+                          : c.estado === 'PUBLICADA'
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                          : c.estado === 'EN_SELECCION'
+                          ? 'bg-[#1E3A5F] hover:bg-[#2D5F8A] text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'"
+                      >
+                        {{ c.estado === 'PUBLICADA' ? 'Ver Postulantes →'
+                           : c.estado === 'EN_SELECCION' ? 'Continuar →'
+                           : 'Ver resultados' }}
+                      </a>
+                    </span>
                   </td>
                 </tr>
               }
@@ -235,6 +254,9 @@ export class SeleccionListComponent {
   });
 
   filtroEstado = '';
+
+  /** Fecha actual ISO (yyyy-MM-dd) — se calcula una vez al construir el componente. */
+  private readonly hoy = new Date().toISOString().slice(0, 10);
 
   constructor() {
     this.cargar();
@@ -285,6 +307,21 @@ export class SeleccionListComponent {
         },
         error: (err: unknown) => { console.error('[seleccion-list] Error al cargar avisos:', err); },
       });
+  }
+
+  /** Gate: solo PUBLICADA requiere validar fecha EVAL_CURRICULAR; el resto siempre habilitado. */
+  habilitadoAccion(c: ConvocatoriaSeleccionItem): boolean {
+    if (c.estado !== 'PUBLICADA') return true;
+    if (!c.fechaInicioEvalCurricular) return false;
+    return this.hoy >= c.fechaInicioEvalCurricular;
+  }
+
+  tooltipAccion(c: ConvocatoriaSeleccionItem): string {
+    if (c.estado !== 'PUBLICADA') return 'Ya puede ingresar';
+    if (!c.fechaInicioEvalCurricular) return 'Aún no se llega a la fecha de evaluación curricular';
+    return this.hoy >= c.fechaInicioEvalCurricular
+      ? 'Ya puede ingresar'
+      : 'Aún no se llega a la fecha de evaluación curricular';
   }
 
   descartarAviso(aviso: AvisoNotificacion): void {

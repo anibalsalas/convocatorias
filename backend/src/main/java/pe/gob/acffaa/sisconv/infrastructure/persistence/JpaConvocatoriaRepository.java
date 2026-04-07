@@ -56,4 +56,31 @@ public interface JpaConvocatoriaRepository extends JpaRepository<Convocatoria, L
            "WHERE c.estado = pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_ELABORACION " +
            "AND c.notificacionActaEnviada = true")
     long countPendientesPublicar();
+
+    @Query("SELECT c FROM Convocatoria c " +
+           "JOIN c.requerimiento r " +
+           "WHERE r.idAreaSolicitante = :idArea " +
+           "AND c.examenVirtualHabilitado = true " +
+           "AND c.estado IN (pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_ELABORACION, "
+           + "pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.PUBLICADA, "
+           + "pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_SELECCION)")
+    List<Convocatoria> findPendientesBancoByArea(@Param("idArea") Long idArea);
+
+    /**
+     * V34 Dashboard ORH: examen virtual habilitado, banco completo (>=20), examen aun no publicado/cerrado.
+     */
+    @Query("SELECT DISTINCT c FROM Convocatoria c " +
+           "WHERE c.examenVirtualHabilitado = true " +
+           "AND (SELECT COUNT(bp) FROM BancoPregunta bp WHERE bp.convocatoria.idConvocatoria = c.idConvocatoria) >= 20 " +
+           "AND NOT EXISTS (SELECT cfg FROM ConfigExamen cfg WHERE cfg.convocatoria.idConvocatoria = c.idConvocatoria " +
+           "AND cfg.estado IN ('PUBLICADO', 'CERRADO')) " +
+           "ORDER BY c.idConvocatoria DESC")
+    List<Convocatoria> findConvocatoriasBancoCargadoPendienteConfigOrh();
+
+    @Query("SELECT DISTINCT c FROM Convocatoria c, ComiteSeleccion cs "
+            + "WHERE cs.convocatoria.idConvocatoria = c.idConvocatoria "
+            + "AND c.estado = pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria.EN_ELABORACION "
+            + "AND cs.estado <> 'COMITE_CONFORMADO' "
+            + "ORDER BY c.idConvocatoria DESC")
+    List<Convocatoria> findConvocatoriasPendienteNotificarComiteOrh();
 }

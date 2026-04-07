@@ -3,6 +3,8 @@ package pe.gob.acffaa.sisconv.infrastructure.persistence;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import pe.gob.acffaa.sisconv.domain.model.Postulacion;
 
 import java.util.List;
@@ -39,4 +41,9 @@ public interface JpaPostulacionRepository extends JpaRepository<Postulacion, Lon
     boolean existsByConvocatoria_IdConvocatoriaAndEstadoIn(Long idConvocatoria, java.util.List<String> estados);
 
     List<Postulacion> findByConvocatoria_IdConvocatoriaAndEstadoIn(Long idConvocatoria, java.util.List<String> estados);
+
+    @Query("SELECT DISTINCT p FROM Postulacion p LEFT JOIN FETCH p.postulante "
+            + "WHERE p.convocatoria.idConvocatoria = :idConv "
+            + "AND p.estado IN ('APTO', 'GANADOR', 'ACCESITARIO', 'NO_SELECCIONADO')")
+    List<Postulacion> findAptosByConvocatoriaWithPostulante(@Param("idConv") Long idConv);
 }

@@ -26,6 +26,13 @@ import {
   NotificarCodigosResponse,
   ComunicadoResponse,
   ComunicadoRequest,
+  BancoPreguntaRequest,
+  BancoPreguntaEstadoResponse,
+  ConfigExamenRequest,
+  ConfigExamenResponse,
+  ExamenPostulanteResponse,
+  ResponderExamenRequest,
+  ResultadoConsolidado,
 } from '../models/seleccion.model';
 
 @Injectable({ providedIn: 'root' })
@@ -298,9 +305,41 @@ export class SeleccionService {
       .pipe(map((r) => r.data));
   }
 
-  // ── E24-PDF — PDF de resultados curriculares (COMITÉ descarga) ───────────
+  // ── E24 — Firma digital y publicación (ORH — DS 065-2011-PCM) ────────────
 
-  /** POST — publica resultados E24 (persiste flag) y retorna PDF */
+  /** POST — ORH sube PDF firmado digitalmente */
+  uploadPdfFirmadoE24(idConv: number, file: File): Observable<{ archivo: string; fechaSubida: string }> {
+    const fd = new FormData();
+    fd.append('archivo', file);
+    return this.api
+      .postFormData<{ archivo: string; fechaSubida: string }>(`/convocatorias/${idConv}/upload-pdf-firmado-e24`, fd)
+      .pipe(map((r) => r.data));
+  }
+
+  /** GET — descarga el PDF firmado subido por ORH */
+  descargarPdfFirmadoE24(idConv: number): Observable<Blob> {
+    return this.api.getBlob(`/convocatorias/${idConv}/pdf-firmado-e24`);
+  }
+
+  // ── Dashboard ORH — convocatorias con evaluación curricular registrada pendiente de publicar ──
+
+  listarPendientesPublicarE24Orh(): Observable<ConvocatoriaSeleccionItem[]> {
+    return this.api
+      .getPage<ConvocatoriaSeleccionItem>(
+        '/convocatorias',
+        { page: 0, size: 100, sort: 'fechaPublicacion,desc' },
+        { estado: 'EN_SELECCION' },
+      )
+      .pipe(
+        map((r) =>
+          (r.data?.content ?? []).filter(
+            (c) => c.resultadosEvalCurricularRegistrados && !c.resultadosCurricularPublicados,
+          ),
+        ),
+      );
+  }
+
+  /** POST — ORH publica resultados E24 (requiere PDF firmado) y retorna PDF */
   publicarResultadosCurricular(idConv: number): Observable<Blob> {
     return this.api.postBlob(`/convocatorias/${idConv}/publicar-resultados-curricular`, {});
   }
@@ -308,6 +347,22 @@ export class SeleccionService {
   /** GET — re-descarga PDF curricular (ya publicado anteriormente) */
   resultadosCurricularPdf(idConv: number): Observable<Blob> {
     return this.api.getBlob(`/convocatorias/${idConv}/resultados-curricular-pdf`);
+  }
+
+  // ── E26-V — Firma digital resultados técnicos (ORH — DS 065-2011-PCM) ──────
+
+  /** POST — ORH sube PDF firmado de resultados técnicos E26 */
+  uploadPdfFirmadoE26(idConv: number, file: File): Observable<{ archivo: string; fechaSubida: string }> {
+    const fd = new FormData();
+    fd.append('archivo', file);
+    return this.api
+      .postFormData<{ archivo: string; fechaSubida: string }>(`/convocatorias/${idConv}/upload-pdf-firmado-e26`, fd)
+      .pipe(map((r) => r.data));
+  }
+
+  /** GET — descarga el PDF firmado E26 subido por ORH */
+  descargarPdfFirmadoE26(idConv: number): Observable<Blob> {
+    return this.api.getBlob(`/convocatorias/${idConv}/pdf-firmado-e26`);
   }
 
   // ── E30 — PDF de resultados ───────────────────────────────────────────────
@@ -373,4 +428,68 @@ export class SeleccionService {
       .pipe(map((r) => r.data ?? []));
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // V34 — Examen Técnico Virtual
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** ORH solicita al Área Solicitante que cargue el banco de preguntas */
+  solicitarBancoPreguntas(idConv: number): Observable<{ mensaje: string; idConvocatoria: number }> {
+    return this.api
+      .post<{ mensaje: string; idConvocatoria: number }>(`/convocatorias/${idConv}/solicitar-banco`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  cargarBancoPreguntas(idConv: number, req: BancoPreguntaRequest): Observable<BancoPreguntaEstadoResponse> {
+    return this.api
+      .post<BancoPreguntaEstadoResponse>(`/convocatorias/${idConv}/banco-preguntas`, req)
+      .pipe(map((r) => r.data));
+  }
+
+  estadoBancoPreguntas(idConv: number): Observable<BancoPreguntaEstadoResponse> {
+    return this.api
+      .get<BancoPreguntaEstadoResponse>(`/convocatorias/${idConv}/banco-preguntas/estado`)
+      .pipe(map((r) => r.data));
+  }
+
+  configurarExamen(idConv: number, req: ConfigExamenRequest): Observable<ConfigExamenResponse> {
+    return this.api
+      .post<ConfigExamenResponse>(`/convocatorias/${idConv}/config-examen`, req)
+      .pipe(map((r) => r.data));
+  }
+
+  obtenerConfigExamen(idConv: number): Observable<ConfigExamenResponse> {
+    return this.api
+      .get<ConfigExamenResponse>(`/convocatorias/${idConv}/config-examen`)
+      .pipe(map((r) => r.data));
+  }
+
+  publicarExamen(idConv: number): Observable<ConfigExamenResponse> {
+    return this.api
+      .post<ConfigExamenResponse>(`/convocatorias/${idConv}/publicar-examen`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  notificarExamen(idConv: number): Observable<ConfigExamenResponse> {
+    return this.api
+      .post<ConfigExamenResponse>(`/convocatorias/${idConv}/notificar-examen`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  iniciarExamen(idConv: number, idPost: number): Observable<ExamenPostulanteResponse> {
+    return this.api
+      .post<ExamenPostulanteResponse>(`/convocatorias/${idConv}/examen/${idPost}/iniciar`, {})
+      .pipe(map((r) => r.data));
+  }
+
+  responderExamen(idConv: number, idPost: number, req: ResponderExamenRequest): Observable<ExamenPostulanteResponse> {
+    return this.api
+      .post<ExamenPostulanteResponse>(`/convocatorias/${idConv}/examen/${idPost}/responder`, req)
+      .pipe(map((r) => r.data));
+  }
+
+  resultadosExamen(idConv: number): Observable<ResultadoConsolidado[]> {
+    return this.api
+      .get<ResultadoConsolidado[]>(`/convocatorias/${idConv}/examen-resultados`)
+      .pipe(map((r) => r.data));
+  }
 }

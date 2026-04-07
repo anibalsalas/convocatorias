@@ -1,18 +1,29 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Observable, Subject, take } from 'rxjs';
+import { AuthService } from '@core/auth/auth.service';
+import { SistemaPendingExitService } from '@core/services/sistema-pending-exit.service';
 import { ConvocatoriaService } from '../../services/convocatoria.service';
 import { ActaResponse, ConvocatoriaResponse } from '../../models/convocatoria.model';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import { StatusBadgeComponent } from '@shared/components/status-badge/status-badge.component';
 import { PdfViewerComponent } from '@shared/components/pdf-viewer/pdf-viewer.component';
+import { ConfirmDialogComponent } from '@shared/components/confirm-dialog/confirm-dialog.component';
 import { ToastService } from '@core/services/toast.service';
 
 @Component({
   selector: 'app-acta',
   standalone: true,
-  imports: [RouterLink, DatePipe, PageHeaderComponent, StatusBadgeComponent, PdfViewerComponent],
+  imports: [
+    RouterLink,
+    DatePipe,
+    PageHeaderComponent,
+    StatusBadgeComponent,
+    PdfViewerComponent,
+    ConfirmDialogComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="space-y-6">
@@ -46,7 +57,11 @@ import { ToastService } from '@core/services/toast.service';
 
         @if (!modoLectura) {
           <div class="card flex flex-wrap items-center gap-3">
-            <button (click)="onGenerarActa()" class="btn-primary" [disabled]="generating() || uploading()">
+            <button
+              (click)="onGenerarActa()"
+              class="btn-primary"
+              [disabled]="generating() || uploading() || actaYaGenerada()"
+              [title]="actaYaGenerada() ? 'Acta ya generada para esta convocatoria.' : 'Generar PDF del acta de instalación'">
               {{ generating() ? 'Generando...' : 'Generar acta de instalación' }}
             </button>
 
@@ -115,12 +130,13 @@ import { ToastService } from '@core/services/toast.service';
                 </div>
               } @else {
                 <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                  Genera el acta y luego carga el PDF firmado para habilitar la aprobación final.
+                  El acta ya fue generada. Cargue el PDF firmado y la fecha de firma para habilitar la notificación a ORH.
                 </div>
               }
             } @else {
-              <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                Aún no se ha generado ningún acta para esta convocatoria.
+              <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 space-y-2">
+                <p>Aún no se ha generado ningún acta para esta convocatoria.</p>
+                <p class="text-amber-800 font-medium">Genere el acta y luego cargue el PDF firmado para habilitar la aprobación final.</p>
               </div>
             }
 
@@ -160,15 +176,25 @@ import { ToastService } from '@core/services/toast.service';
       } @else {
         <div class="card text-center py-12 text-gray-400">No se pudo cargar la convocatoria.</div>
       }
+
+      <app-confirm-dialog
+        [open]="showLeaveConfirm()"
+        [title]="leaveDialogTitle()"
+        [message]="leaveDialogMessage()"
+        confirmText="Sí, salir"
+        cancelText="Permanecer"
+        (confirm)="onLeaveConfirm()"
+        (cancel)="onLeaveCancel()" />
     </div>
   `,
 })
 export class ActaComponent {
   private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly convocatoriaService = inject(ConvocatoriaService);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly auth = inject(AuthService);
+  private readonly pendingExit = inject(SistemaPendingExitService);
 
   readonly idConvocatoria = Number(this.route.snapshot.paramMap.get('id'));
   readonly modoLectura = this.route.snapshot.queryParamMap.get('modo') === 'lectura';
@@ -182,18 +208,30 @@ export class ActaComponent {
   readonly previewUrl = signal<string>('');
 
   readonly notificando = signal(false);
+  readonly showLeaveConfirm = signal(false);
+  readonly leaveDialogTitle = signal('');
+  readonly leaveDialogMessage = signal('');
+  private readonly leaveDecision$ = new Subject<boolean>();
 
   readonly selectedFileName = computed(() => this.selectedFile()?.name ?? '');
-  readonly actaEstado = computed(() => this.acta()?.firmada ? 'FIRMADA' : (this.acta()?.estado || 'PENDIENTE'));
+  readonly actaEstado = computed(() => (this.acta()?.firmada ? 'FIRMADA' : (this.acta()?.estado || 'PENDIENTE')));
+  readonly actaYaGenerada = computed(() => this.acta() !== null);
 
   constructor() {
+    this.pendingExit.registerCheck(() => this.confirmLeave());
+    this.destroyRef.onDestroy(() => {
+      this.pendingExit.clearCheck();
+      this.revokePreviewUrl();
+    });
+
     if (!Number.isFinite(this.idConvocatoria) || this.idConvocatoria <= 0) {
       this.loadingConvocatoria.set(false);
       this.globalError.set('Identificador de convocatoria inválido.');
       return;
     }
 
-    this.convocatoriaService.obtener(this.idConvocatoria)
+    this.convocatoriaService
+      .obtener(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
@@ -208,33 +246,98 @@ export class ActaComponent {
       });
   }
 
+  /** Usado por `actaCanDeactivateGuard` y por `SistemaPendingExitService` (Salir). */
+  confirmLeave(): Observable<boolean> | boolean {
+    if (!this.shouldWarnLeave()) {
+      return true;
+    }
+    const copy = this.buildLeaveDialogCopy();
+    this.leaveDialogTitle.set(copy.title);
+    this.leaveDialogMessage.set(copy.message);
+    this.showLeaveConfirm.set(true);
+    return this.leaveDecision$.pipe(take(1));
+  }
+
+  private shouldWarnLeave(): boolean {
+    if (this.modoLectura) return false;
+    if (!this.auth.hasAnyRole(['ROLE_COMITE', 'ROLE_ADMIN'])) return false;
+    const a = this.acta();
+    const c = this.convocatoria();
+    if (!a) return false;
+    if (!a.firmada) return true;
+    return !c?.notificacionActaEnviada;
+  }
+
+  private buildLeaveDialogCopy(): { title: string; message: string } {
+    const a = this.acta()!;
+    if (!a.firmada) {
+      return {
+        title: 'Carga de acta pendiente',
+        message:
+          'Aún debe cargar el PDF del acta firmado e indicar la fecha de firma. Si sale ahora, ese paso quedará pendiente. ¿Desea salir de todas formas?',
+      };
+    }
+    return {
+      title: 'Notificación a ORH pendiente',
+      message:
+        'Aún debe usar «Notificar a ORH» para que la convocatoria pueda continuar hacia publicación. Si sale ahora, ese aviso quedará pendiente. ¿Desea salir de todas formas?',
+    };
+  }
+
+  onLeaveConfirm(): void {
+    this.showLeaveConfirm.set(false);
+    this.leaveDecision$.next(true);
+  }
+
+  onLeaveCancel(): void {
+    this.showLeaveConfirm.set(false);
+    this.leaveDecision$.next(false);
+  }
+
   /** Carga el acta existente (si la hay) al entrar a la vista. */
   private cargarActaExistente(): void {
-    this.convocatoriaService.obtenerActa(this.idConvocatoria)
+    this.convocatoriaService
+      .obtenerActa(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
           if (res.data) {
             this.acta.set(res.data);
-            if (res.data.firmada) {
+            if (res.data.rutaArchivoPdf || res.data.firmada) {
               this.cargarPreviewDesdeBackend();
             }
           }
         },
-        error: () => { /* silencioso: acta no existe aún */ },
+        error: () => {
+          /* silencioso: acta no existe aún */
+        },
       });
+  }
+
+  private revokePreviewUrl(): void {
+    const prev = this.previewUrl();
+    if (prev && prev.startsWith('blob:')) {
+      URL.revokeObjectURL(prev);
+    }
+  }
+
+  private setPreviewUrl(url: string): void {
+    this.revokePreviewUrl();
+    this.previewUrl.set(url);
   }
 
   /** Solicita el PDF al backend (endpoint GET /acta-instalacion/pdf) y genera blob URL. */
   private cargarPreviewDesdeBackend(): void {
-    this.convocatoriaService.descargarActaPdf(this.idConvocatoria)
+    this.convocatoriaService
+      .descargarActaPdf(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (blob) => {
-          const url = URL.createObjectURL(blob);
-          this.previewUrl.set(url);
+          this.setPreviewUrl(URL.createObjectURL(blob));
         },
-        error: () => { /* silencioso: archivo aún no existe en disco (E13 sin generación real) */ },
+        error: () => {
+          /* silencioso: archivo aún no existe en disco */
+        },
       });
   }
 
@@ -242,7 +345,8 @@ export class ActaComponent {
     this.globalError.set('');
     this.generating.set(true);
 
-    this.convocatoriaService.generarActaInstalacion(this.idConvocatoria)
+    this.convocatoriaService
+      .generarActaInstalacion(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
@@ -264,7 +368,7 @@ export class ActaComponent {
     const file = input.files?.[0] ?? null;
     if (!file) {
       this.selectedFile.set(null);
-      this.previewUrl.set('');
+      this.setPreviewUrl('');
       return;
     }
 
@@ -275,8 +379,7 @@ export class ActaComponent {
     }
 
     this.selectedFile.set(file);
-    const blobUrl = URL.createObjectURL(file);
-    this.previewUrl.set(blobUrl);
+    this.setPreviewUrl(URL.createObjectURL(file));
   }
 
   onCargarActa(fechaFirma: string): void {
@@ -288,15 +391,14 @@ export class ActaComponent {
     }
 
     this.uploading.set(true);
-    this.convocatoriaService.cargarActaFirmada(this.idConvocatoria, file, fechaFirma || null)
+    this.convocatoriaService
+      .cargarActaFirmada(this.idConvocatoria, file, fechaFirma || null)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this.uploading.set(false);
           this.acta.set(response.data);
           this.toast.success(response.message || 'Acta firmada cargada correctamente.');
-          // Preview ya fue seteado con blob URL al seleccionar el archivo.
-          // También cargamos desde backend para que persista en recargas futuras.
           this.cargarPreviewDesdeBackend();
         },
         error: (err: { error?: { message?: string } }) => {
@@ -310,7 +412,8 @@ export class ActaComponent {
   onNotificarOrh(): void {
     this.globalError.set('');
     this.notificando.set(true);
-    this.convocatoriaService.notificarActaOrh(this.idConvocatoria)
+    this.convocatoriaService
+      .notificarActaOrh(this.idConvocatoria)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
@@ -325,5 +428,4 @@ export class ActaComponent {
         },
       });
   }
-
 }

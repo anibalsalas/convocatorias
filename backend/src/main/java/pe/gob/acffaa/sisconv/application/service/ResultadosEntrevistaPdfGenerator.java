@@ -15,13 +15,13 @@ import java.util.Optional;
 
 /**
  * Generador de Resultados de Entrevista Personal PDF — E27.
- * Lista de postulantes con puntaje de entrevista (promedio comité) y resultado.
- * Patrón: mismo que ResultadosTecnicaPdfGenerator (OpenPDF 1.3.39).
+ * Lista de postulantes con puntaje de entrevista (promedio comité) y resultado APTO/NO APTO
+ * según umbral del factor padre ENTREVISTA (mismo criterio que pantalla ORH).
  */
 public class ResultadosEntrevistaPdfGenerator {
 
-    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 14, Font.BOLD);
-    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 11, Font.BOLD);
+    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 12, Font.BOLD);
+    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 12, Font.BOLD);
     private static final Font SECTION_FONT  = new Font(Font.HELVETICA, 10, Font.BOLD);
     private static final Font BODY_FONT     = new Font(Font.HELVETICA,  9, Font.NORMAL);
     private static final Font BODY_BOLD     = new Font(Font.HELVETICA,  9, Font.BOLD);
@@ -29,22 +29,23 @@ public class ResultadosEntrevistaPdfGenerator {
     private static final Font TABLE_CELL    = new Font(Font.HELVETICA,  8, Font.NORMAL);
     private static final Font SMALL_FONT    = new Font(Font.HELVETICA,  7, Font.NORMAL);
 
-    private static final Color HEADER_BG  = new Color(15, 52, 96);
-    private static final Color APTO_BG    = new Color(198, 239, 206);
-    private static final Color NO_APTO_BG = new Color(255, 199, 206);
+    private static final Color HEADER_BG     = new Color(15, 52, 96);
+    private static final Color APTO_BG      = new Color(198, 239, 206);
+    private static final Color NO_APTO_BG   = new Color(255, 199, 206);
+    private static final Color PENDIENTE_BG = new Color(245, 245, 245);
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    public byte[] generar(Convocatoria conv, List<Postulacion> postulaciones) {
+    public byte[] generar(Convocatoria conv, List<Postulacion> postulaciones, BigDecimal umbralEntrevista) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4, 36, 36, 60, 40);
             PdfWriter writer = PdfWriter.getInstance(doc, baos);
             writer.setPageEvent(new HeaderFooterEvent(conv.getNumeroConvocatoria()));
             doc.open();
 
-            agregarTitulo(doc, conv, postulaciones);
-            agregarTabla(doc, postulaciones);
-            agregarPie(doc);
+            agregarTitulo(doc, conv, postulaciones, umbralEntrevista);
+            agregarTabla(doc, postulaciones, umbralEntrevista);
+            agregarPie(doc, umbralEntrevista);
 
             doc.close();
             return baos.toByteArray();
@@ -53,18 +54,20 @@ public class ResultadosEntrevistaPdfGenerator {
         }
     }
 
-    private void agregarTitulo(Document doc, Convocatoria conv, List<Postulacion> posts) throws DocumentException {
-        Paragraph titulo = new Paragraph();
-        titulo.setAlignment(Element.ALIGN_CENTER);
-        titulo.add(new Chunk("AGENCIA DE COMPRAS DE LAS FUERZAS ARMADAS", SUBTITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("MINISTERIO DE DEFENSA", BODY_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("RESULTADOS DE ENTREVISTA PERSONAL — RF-13", TITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("PROCESO " + conv.getNumeroConvocatoria(), SUBTITLE_FONT));
-        doc.add(titulo);
+    private void agregarTitulo(Document doc, Convocatoria conv, List<Postulacion> posts,
+            BigDecimal umbralEntrevista) throws DocumentException {
+        ResultadosPdfInstitucionalHeader.addTo(doc);
+        Paragraph pProceso = new Paragraph("PROCESO " + conv.getNumeroConvocatoria() + " – ACFFAA", TITLE_FONT);
+        pProceso.setAlignment(Element.ALIGN_CENTER);
+        pProceso.setSpacingAfter(8f);
+        doc.add(pProceso);
+
+        Paragraph pResultados = new Paragraph();
+        pResultados.setAlignment(Element.ALIGN_CENTER);
+        pResultados.add(new Chunk("RESULTADOS DE LA ENTREVISTA PERSONAL", TITLE_FONT));
+        pResultados.add(Chunk.NEWLINE);
+        pResultados.add(new Chunk("DE " + truncarObjeto(conv.getObjetoContratacion()).toUpperCase() + ".", SUBTITLE_FONT));
+        doc.add(pResultados);
         doc.add(espaciado());
 
         PdfPTable info = new PdfPTable(4);
@@ -75,11 +78,14 @@ public class ResultadosEntrevistaPdfGenerator {
         long conPuntaje = posts.stream().filter(p -> p.getPuntajeEntrevista() != null).count();
         addInfoCell(info, "Entrevistados:", String.valueOf(conPuntaje));
         addInfoCell(info, "Fecha Emisión:", LocalDate.now().format(FMT));
+        addInfoCell(info, "Umbral mínimo (aprobación):", umbralEntrevista.toPlainString() + " pts");
+        addInfoCell(info, "", "");
         doc.add(info);
         doc.add(espaciado());
     }
 
-    private void agregarTabla(Document doc, List<Postulacion> posts) throws DocumentException {
+    private void agregarTabla(Document doc, List<Postulacion> posts, BigDecimal umbralEntrevista)
+            throws DocumentException {
         Paragraph sec = new Paragraph("CUADRO DE RESULTADOS — ENTREVISTA PERSONAL", SECTION_FONT);
         sec.setSpacingBefore(6);
         sec.setSpacingAfter(6);
@@ -104,22 +110,36 @@ public class ResultadosEntrevistaPdfGenerator {
         for (Postulacion p : posts) {
             Postulante pt = p.getPostulante();
             String nombre = pt.getApellidoPaterno() + " " + pt.getApellidoMaterno() + ", " + pt.getNombres();
-            String puntaje = Optional.ofNullable(p.getPuntajeEntrevista())
+            String puntajeStr = Optional.ofNullable(p.getPuntajeEntrevista())
                     .map(BigDecimal::toPlainString).orElse("—");
-            boolean tieneEntrevista = p.getPuntajeEntrevista() != null;
-            Color bg = tieneEntrevista ? APTO_BG : NO_APTO_BG;
-            String resultado = tieneEntrevista ? "APTO" : "PENDIENTE";
-            addRow(tbl, bg, String.valueOf(row + 1), nombre, puntaje, resultado);
+
+            Color bg;
+            String resultado;
+            BigDecimal pj = p.getPuntajeEntrevista();
+            if (pj == null) {
+                bg = PENDIENTE_BG;
+                resultado = "PENDIENTE";
+            } else if (pj.compareTo(umbralEntrevista) >= 0) {
+                bg = APTO_BG;
+                resultado = "APTO";
+            } else {
+                bg = NO_APTO_BG;
+                resultado = "NO APTO";
+            }
+            addRow(tbl, bg, String.valueOf(row + 1), nombre, puntajeStr, resultado);
             row++;
         }
         doc.add(tbl);
     }
 
-    private void agregarPie(Document doc) throws DocumentException {
+    private void agregarPie(Document doc, BigDecimal umbralEntrevista) throws DocumentException {
         doc.add(espaciado());
         Paragraph leyenda = new Paragraph();
         leyenda.add(new Chunk("Nota:  ", BODY_BOLD));
-        leyenda.add(new Chunk("El puntaje de entrevista es el promedio de los puntajes otorgados por cada miembro del comité (RF-13 — Quórum > 50%).", BODY_FONT));
+        leyenda.add(new Chunk("El puntaje de entrevista es el promedio de los puntajes otorgados por cada miembro del comité (RF-13 — Quórum > 50%). ", BODY_FONT));
+        leyenda.add(new Chunk("APTO: supera o iguala el umbral mínimo (", BODY_FONT));
+        leyenda.add(new Chunk(umbralEntrevista.toPlainString() + " pts", BODY_BOLD));
+        leyenda.add(new Chunk("). NO APTO: no supera el umbral.", BODY_FONT));
         doc.add(leyenda);
         doc.add(espaciado());
         Paragraph firma = new Paragraph();
@@ -149,6 +169,12 @@ public class ResultadosEntrevistaPdfGenerator {
     }
 
     private String safe(String val) { return val != null ? val : "—"; }
+
+    private String truncarObjeto(String obj) {
+        if (obj == null) return "—";
+        int idx = obj.toUpperCase().indexOf("PARA LA OFICINA");
+        return idx > 0 ? obj.substring(0, idx).trim() : obj;
+    }
 
     private Paragraph espaciado() {
         Paragraph p = new Paragraph(" ");

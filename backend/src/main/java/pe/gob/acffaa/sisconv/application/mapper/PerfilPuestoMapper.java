@@ -20,9 +20,6 @@ public class PerfilPuestoMapper {
                 .idAreaSolicitante(req.getIdAreaSolicitante())
                 .idNivelPuesto(req.getIdNivelPuesto())
                 .idNivelFormacion(req.getIdNivelFormacion())
-                .dependenciaJerarquicaLineal(req.getDependenciaJerarquicaLineal())
-                .dependenciaFuncional(req.getDependenciaFuncional())
-                .puestosCargo(req.getPuestosCargo())
                 .experienciaGeneral(req.getExperienciaGeneral())
                 .experienciaEspecifica(req.getExperienciaEspecifica())
                 .habilidades(req.getHabilidades())
@@ -52,9 +49,6 @@ public class PerfilPuestoMapper {
                 .idAreaSolicitante(pp.getIdAreaSolicitante())
                 .idNivelPuesto(pp.getIdNivelPuesto())
                 .idNivelFormacion(pp.getIdNivelFormacion())
-                .dependenciaJerarquicaLineal(pp.getDependenciaJerarquicaLineal())
-                .dependenciaFuncional(pp.getDependenciaFuncional())
-                .puestosCargo(pp.getPuestosCargo())
                 .experienciaGeneral(pp.getExperienciaGeneral())
                 .experienciaEspecifica(pp.getExperienciaEspecifica())
                 .habilidades(pp.getHabilidades())
@@ -159,6 +153,11 @@ public class PerfilPuestoMapper {
                 .lugarPrestacion(req.getLugarPrestacion())
                 .jornadaSemanal(req.getJornadaSemanal() != null ? req.getJornadaSemanal() : 48)
                 .otrasCondiciones(req.getOtrasCondiciones())
+                .horarioInicio(emptyToNull(req.getHorarioInicio()))
+                .horarioFin(emptyToNull(req.getHorarioFin()))
+                .diasLaborales(emptyToNull(req.getDiasLaborales()))
+                .modalidadServicio(emptyToNull(req.getModalidadServicio()))
+                .tipoInicioContrato(emptyToNull(req.getTipoInicioContrato()))
                 .perfilPuesto(pp)
                 .build());
     }
@@ -251,6 +250,18 @@ public class PerfilPuestoMapper {
                 .lugarPrestacion(c.getLugarPrestacion())
                 .jornadaSemanal(c.getJornadaSemanal())
                 .otrasCondiciones(c.getOtrasCondiciones())
+                .horarioInicio(c.getHorarioInicio())
+                .horarioFin(c.getHorarioFin())
+                .diasLaborales(c.getDiasLaborales())
+                .modalidadServicio(c.getModalidadServicio())
+                .tipoInicioContrato(c.getTipoInicioContrato())
                 .build();
+    }
+
+    private static String emptyToNull(String s) {
+        if (s == null || s.isBlank()) {
+            return null;
+        }
+        return s.trim();
     }
 }

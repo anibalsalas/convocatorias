@@ -40,6 +40,8 @@ class PostulacionServiceTest {
     @Mock private IUsuarioRepository usuarioRepo;
     @Mock private IAuditPort audit;
     @Mock private IEvaluacionCurricularRepository evalCurrRepo;
+    @Mock private IConfigExamenRepository configExamenRepo;
+    @Mock private IExamenPostulanteRepository examenPostulanteRepo;
     @Mock private HttpServletRequest http;
     @Mock private NotificacionService notificacionService;
 
@@ -60,7 +62,9 @@ class PostulacionServiceTest {
                 audit,
                 mapper,
                 notificacionService,
-                evalCurrRepo
+                evalCurrRepo,
+                configExamenRepo,
+                examenPostulanteRepo
         );
 
         lenient().when(http.getRemoteAddr()).thenReturn("127.0.0.1");

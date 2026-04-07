@@ -3,6 +3,13 @@
  * Modelos frontend alineados al backend E9–E16 + CRUD miembros.
  */
 
+/** Dashboard AREA_SOLICITANTE — aviso por convocatoria (examen virtual / banco). */
+export interface AvisoBancoAreaResponse {
+  idConvocatoria: number;
+  numeroConvocatoria: string;
+  bancoCompleto: boolean;
+}
+
 export interface ConvocatoriaRequest {
   idRequerimiento: number;
   numeroConvocatoria?: string | null;
@@ -140,7 +147,14 @@ export interface ConvocatoriaResponse {
   notificacionCodigosEnviada?: boolean | null;
   /** E14: COMITÉ ya notificó a ORH que el acta está firmada y la convocatoria lista para publicar */
   notificacionActaEnviada?: boolean | null;
+  /** ORH: comité registrado pero falta «Notificar a Comité» (no COMITE_CONFORMADO). */
+  comitePendienteNotificarOrh?: boolean | null;
+  /** PDF de bases firmado registrado (pre-requisito E15). */
+  basesFirmadasSubidas?: boolean | null;
+  fechaPdfBasesFirmado?: string | null;
   mensaje?: string | null;
+  /** Si true (por defecto en backend), aplica validación de banco de preguntas (examen virtual). */
+  examenVirtualHabilitado?: boolean | null;
 }
 
 export interface ActividadCronogramaResponse {

@@ -27,9 +27,11 @@ public class PerfilPuestoRepositoryAdapter implements IPerfilPuestoRepository {
     @Override public Page<PerfilPuesto> findByEstado(String estado, Pageable pageable) { return jpa.findByEstado(estado, pageable); }
     @Override public Page<PerfilPuesto> findAll(Pageable pageable) { return jpa.findAllOrdered(pageable); }
     @Override public Page<PerfilPuesto> findByIdAreaSolicitante(Long idArea, Pageable pageable) { return jpa.findByIdAreaSolicitante(idArea, pageable); }
+    @Override public Page<PerfilPuesto> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable) { return jpa.findByEstadoAndIdAreaSolicitante(estado, idArea, pageable); }
     @Override public boolean existsById(Long id) { return jpa.existsById(id); }
     @Override public void delete(PerfilPuesto perfil) { jpa.delete(perfil); }
     @Override public long countAprobadosSinRequerimientoVigente() { return jpa.countAprobadosSinRequerimientoVigente(); }
+    @Override public long countAprobadosSinRequerimientoVigenteByArea(Long idArea) { return jpa.countAprobadosSinRequerimientoVigenteByArea(idArea); }
     @Override public long countPendientesValidarAprobar() {
         return jpa.countByEstadoIn(Set.of("PENDIENTE", "VALIDADO"));
     }

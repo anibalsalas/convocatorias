@@ -53,7 +53,7 @@ export const seleccionRoutes: Routes = [
   {
     path: ':id/eval-curricular',
     canActivate: [authGuard],
-    data: { roles: ['ROLE_ADMIN', 'ROLE_COMITE'] },
+    data: { roles: ['ROLE_ADMIN', 'ROLE_COMITE', 'ROLE_ORH'] },
     loadComponent: () =>
       import('./pages/eval-curricular/eval-curricular.component').then(
         (m) => m.EvalCurricularComponent,
@@ -75,6 +75,43 @@ export const seleccionRoutes: Routes = [
     loadComponent: () =>
       import('./pages/eval-tecnica/eval-tecnica.component').then(
         (m) => m.EvalTecnicaComponent,
+      ),
+  },
+  // V34 — Examen Técnico Virtual
+  {
+    path: ':id/banco-preguntas',
+    canActivate: [authGuard],
+    data: { roles: ['ROLE_ADMIN', 'ROLE_AREA_SOLICITANTE'] },
+    loadComponent: () =>
+      import('./pages/banco-preguntas/banco-preguntas.component').then(
+        (m) => m.BancoPreguntasComponent,
+      ),
+  },
+  {
+    path: ':id/config-examen',
+    canActivate: [authGuard],
+    data: { roles: ['ROLE_ADMIN', 'ROLE_ORH'] },
+    loadComponent: () =>
+      import('./pages/config-examen/config-examen.component').then(
+        (m) => m.ConfigExamenComponent,
+      ),
+  },
+  {
+    path: ':id/examen-virtual/:idPost',
+    canActivate: [authGuard],
+    data: { roles: ['ROLE_ADMIN', 'ROLE_POSTULANTE'] },
+    loadComponent: () =>
+      import('./pages/examen-virtual/examen-virtual.component').then(
+        (m) => m.ExamenVirtualComponent,
+      ),
+  },
+  {
+    path: ':id/examen-resultados',
+    canActivate: [authGuard],
+    data: { roles: ['ROLE_ADMIN', 'ROLE_ORH'] },
+    loadComponent: () =>
+      import('./pages/examen-resultados/examen-resultados.component').then(
+        (m) => m.ExamenResultadosComponent,
       ),
   },
   {

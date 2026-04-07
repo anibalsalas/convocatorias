@@ -79,8 +79,15 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error("Error en cronograma. Verifique las fechas y etapas."));
         }
-        // ORA-00001: restricción única en TBL_USUARIO (PK desfasada o documento/email duplicado)
-        if (msg != null && msg.contains("TBL_USUARIO")) {
+        // UK (ID_USUARIO, ID_ROL) en puente roles — no confundir con duplicado de email
+        if (msg != null && (msg.contains("TBL_USUARIO_ROL") || msg.contains("TBL_USUARIO_ROL_UK"))) {
+            log.warn("Conflicto de integridad en TBL_USUARIO_ROL: {}", msg);
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error(
+                            "Conflicto al actualizar los roles del usuario. Verifique la asignación o contacte al administrador."));
+        }
+        // ORA-00001: restricción única en TBL_USUARIO (username/email duplicado, PK desfasada, etc.)
+        if (msg != null && msg.contains("TBL_USUARIO") && !msg.contains("TBL_USUARIO_ROL")) {
             log.warn("Conflicto de integridad en TBL_USUARIO: {}", msg);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.error("El documento/email ya está registrado"));

@@ -13,8 +13,13 @@ import pe.gob.acffaa.sisconv.domain.enums.EstadoConvocatoria;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoPostulacion;
 import pe.gob.acffaa.sisconv.domain.model.*;
 import pe.gob.acffaa.sisconv.domain.repository.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -42,6 +47,8 @@ public class SeleccionService {
     private final IAuditPort audit;
     private final SeleccionMapper mapper;
     private final NotificacionService notificacionService;
+    private final IConfigExamenRepository configExamenRepo;
+    private final ICronogramaRepository cronogramaRepo;
     private final ResultadosPdfGenerator pdfGenerator = new ResultadosPdfGenerator();
 
     public SeleccionService(IPostulacionRepository pr, IConvocatoriaRepository cr,
@@ -49,11 +56,11 @@ public class SeleccionService {
             IEntrevistaPersonalRepository epr, IEntrevistaMiembroRepository emr,
             IBonificacionRepository br, ICuadroMeritosRepository mr,
             IFactorEvaluacionRepository fr, IUsuarioRepository ur, IAuditPort a, SeleccionMapper m,
-            NotificacionService ns) {
+            NotificacionService ns, IConfigExamenRepository cer, ICronogramaRepository crr) {
         this.postRepo=pr; this.convRepo=cr; this.evalCurrRepo=ecr; this.evalTecRepo=etr;
         this.entrevistaRepo=epr; this.entMiembroRepo=emr; this.bonifRepo=br;
         this.meritoRepo=mr; this.factorRepo=fr; this.usuarioRepo=ur; this.audit=a; this.mapper=m;
-        this.notificacionService=ns;
+        this.notificacionService=ns; this.configExamenRepo=cer; this.cronogramaRepo=crr;
     }
 
     private String user() { return SecurityContextHolder.getContext().getAuthentication().getName(); }
@@ -423,6 +430,7 @@ public class SeleccionService {
         List<CuadroMeritos> meritos = new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConv));
         if (meritos.isEmpty()) throw new ResourceNotFoundException("CuadroMeritos", idConv);
         meritos.sort(Comparator.comparingInt(CuadroMeritos::getOrdenMerito));
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConv);
         List<CuadroMeritosResponse.MeritoItem> cuadro = meritos.stream()
                 .map(cm -> CuadroMeritosResponse.MeritoItem.builder()
                         .ordenMerito(cm.getOrdenMerito())
@@ -433,6 +441,7 @@ public class SeleccionService {
                         .puntajeEntrevista(cm.getPuntajeEntrevista())
                         .puntajeBonificacion(cm.getPuntajeBonificacion())
                         .puntajeTotal(cm.getPuntajeTotal())
+                        .resultadoEntrevista(etiquetaResultadoEntrevista(cm.getPuntajeEntrevista(), umbralEnt))
                         .resultado(cm.getResultado())
                         .build())
                 .collect(Collectors.toList());
@@ -476,19 +485,35 @@ public class SeleccionService {
         posts.sort((a, b) -> b.getPuntajeTotal().compareTo(a.getPuntajeTotal()));
         int cantPuestos = Optional.ofNullable(conv.getRequerimiento().getCantidadPuestos()).orElse(1);
         List<CuadroMeritosResponse.MeritoItem> cuadro = new ArrayList<>();
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConv);
 
-        for (int i = 0; i < posts.size(); i++) {
-            Postulacion p = posts.get(i);
-            // CK_CUADRO_RESULTADO: GANADOR, ACCESITARIO, NO_SELECCIONADO
+        // Separar aprobados y reprobados en entrevista (eliminatoria)
+        List<Postulacion> aprobadosEnt = new ArrayList<>();
+        List<Postulacion> reprobadosEnt = new ArrayList<>();
+        for (Postulacion p : posts) {
+            BigDecimal pe = Optional.ofNullable(p.getPuntajeEntrevista()).orElse(BigDecimal.ZERO);
+            if (pe.compareTo(umbralEnt) >= 0) {
+                aprobadosEnt.add(p);
+            } else {
+                reprobadosEnt.add(p);
+            }
+        }
+
+        // Asignar resultado: solo aprobados en entrevista compiten por GANADOR/ACCESITARIO
+        int orden = 0;
+        int puestoAsignado = 0;
+        for (Postulacion p : aprobadosEnt) {
+            orden++;
             String estadoAnterior = p.getEstado();
             String resultado;
-            if (i < cantPuestos) resultado = "GANADOR";
-            else if (i < cantPuestos * 2) resultado = "ACCESITARIO";
+            if (puestoAsignado < cantPuestos) resultado = "GANADOR";
+            else if (puestoAsignado < cantPuestos * 2) resultado = "ACCESITARIO";
             else resultado = "NO_SELECCIONADO";
+            puestoAsignado++;
 
             validarTransicion(p, resultado);
             p.setEstado(resultado);
-            p.setOrdenMerito(i + 1);
+            p.setOrdenMerito(orden);
             p.setResultado(resultado);
             p.setUsuarioModificacion(user());
             postRepo.save(p);
@@ -497,16 +522,48 @@ public class SeleccionService {
                     .convocatoria(conv).postulacion(p)
                     .puntajeCurricular(p.getPuntajeCurricular()).puntajeTecnica(p.getPuntajeTecnica())
                     .puntajeEntrevista(p.getPuntajeEntrevista()).puntajeBonificacion(p.getPuntajeBonificacion())
-                    .puntajeTotal(p.getPuntajeTotal()).ordenMerito(i + 1)
+                    .puntajeTotal(p.getPuntajeTotal()).ordenMerito(orden)
                     .resultado(resultado).usuarioCreacion(user()).build());
 
             audit.registrar("POSTULACION", p.getIdPostulacion(), "CUADRO_MERITOS", estadoAnterior, resultado, http, null);
             cuadro.add(CuadroMeritosResponse.MeritoItem.builder()
-                    .ordenMerito(i + 1).idPostulacion(p.getIdPostulacion())
+                    .ordenMerito(orden).idPostulacion(p.getIdPostulacion())
                     .nombrePostulante(mapper.nombreCompleto(p.getPostulante()))
                     .puntajeCurricular(p.getPuntajeCurricular()).puntajeTecnica(p.getPuntajeTecnica())
                     .puntajeEntrevista(p.getPuntajeEntrevista()).puntajeBonificacion(p.getPuntajeBonificacion())
-                    .puntajeTotal(p.getPuntajeTotal()).resultado(resultado).build());
+                    .puntajeTotal(p.getPuntajeTotal())
+                    .resultadoEntrevista(etiquetaResultadoEntrevista(p.getPuntajeEntrevista(), umbralEnt))
+                    .resultado(resultado).build());
+        }
+        // Reprobados en entrevista → NO_SELECCIONADO sin importar puntaje total
+        for (Postulacion p : reprobadosEnt) {
+            orden++;
+            String estadoAnterior = p.getEstado();
+            String resultado = "NO_SELECCIONADO";
+
+            validarTransicion(p, resultado);
+            p.setEstado(resultado);
+            p.setOrdenMerito(orden);
+            p.setResultado(resultado);
+            p.setUsuarioModificacion(user());
+            postRepo.save(p);
+
+            meritoRepo.save(CuadroMeritos.builder()
+                    .convocatoria(conv).postulacion(p)
+                    .puntajeCurricular(p.getPuntajeCurricular()).puntajeTecnica(p.getPuntajeTecnica())
+                    .puntajeEntrevista(p.getPuntajeEntrevista()).puntajeBonificacion(p.getPuntajeBonificacion())
+                    .puntajeTotal(p.getPuntajeTotal()).ordenMerito(orden)
+                    .resultado(resultado).usuarioCreacion(user()).build());
+
+            audit.registrar("POSTULACION", p.getIdPostulacion(), "CUADRO_MERITOS", estadoAnterior, resultado, http, null);
+            cuadro.add(CuadroMeritosResponse.MeritoItem.builder()
+                    .ordenMerito(orden).idPostulacion(p.getIdPostulacion())
+                    .nombrePostulante(mapper.nombreCompleto(p.getPostulante()))
+                    .puntajeCurricular(p.getPuntajeCurricular()).puntajeTecnica(p.getPuntajeTecnica())
+                    .puntajeEntrevista(p.getPuntajeEntrevista()).puntajeBonificacion(p.getPuntajeBonificacion())
+                    .puntajeTotal(p.getPuntajeTotal())
+                    .resultadoEntrevista(etiquetaResultadoEntrevista(p.getPuntajeEntrevista(), umbralEnt))
+                    .resultado(resultado).build());
         }
         return CuadroMeritosResponse.builder().idConvocatoria(idConv)
                 .numeroConvocatoria(conv.getNumeroConvocatoria())
@@ -514,14 +571,126 @@ public class SeleccionService {
                 .mensaje("Cuadro de meritos RF-16 calculado").build();
     }
 
+    /** E24-UPLOAD: ORH sube el PDF firmado digitalmente (DS 065-2011-PCM).
+     *  Almacena en filesystem y registra ruta en TBL_CONVOCATORIA. */
+    @Transactional
+    public Map<String, Object> uploadPdfFirmadoE24(Long idConv, MultipartFile archivo, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        if (archivo.isEmpty()) throw new DomainException("El archivo está vacío");
+        String contentType = archivo.getContentType();
+        if (contentType == null || !contentType.equals("application/pdf"))
+            throw new DomainException("Solo se permiten archivos PDF");
+        if (archivo.getSize() > 10 * 1024 * 1024)
+            throw new DomainException("El archivo excede el límite de 10 MB");
+
+        try {
+            Path dir = Path.of("pdfs-firmados", "e24");
+            Files.createDirectories(dir);
+            String nombre = "RESULT-CURRICULAR-FIRMADO-" + conv.getNumeroConvocatoria()
+                    .replaceAll("[^a-zA-Z0-9\\-]", "_") + ".pdf";
+            Path destino = dir.resolve(nombre);
+            Files.copy(archivo.getInputStream(), destino, StandardCopyOption.REPLACE_EXISTING);
+
+            conv.setPdfFirmadoE24(destino.toString());
+            conv.setFechaPdfFirmadoE24(LocalDateTime.now());
+            conv.setUsuarioModificacion(user());
+            convRepo.save(conv);
+
+            audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                    "UPLOAD_PDF_FIRMADO_E24", null, destino.getFileName().toString(),
+                    "ORH subió PDF firmado de resultados curriculares", http);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("archivo", nombre);
+            result.put("fechaSubida", conv.getFechaPdfFirmadoE24().toString());
+            return result;
+        } catch (IOException e) {
+            throw new DomainException("Error al guardar el archivo: " + e.getMessage());
+        }
+    }
+
+    /** E24-DOWNLOAD: descarga el PDF firmado subido por ORH. */
+    public byte[] descargarPdfFirmadoE24(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        if (conv.getPdfFirmadoE24() == null)
+            throw new DomainException("No se ha subido un PDF firmado para E24");
+        try {
+            Path path = Path.of(conv.getPdfFirmadoE24());
+            if (!Files.exists(path))
+                throw new DomainException("El archivo PDF firmado no se encuentra en el servidor");
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            throw new DomainException("Error al leer el archivo: " + e.getMessage());
+        }
+    }
+
+    /** E26-UPLOAD: ORH sube el PDF firmado de resultados técnicos (DS 065-2011-PCM).
+     *  Almacena en filesystem y registra ruta en TBL_CONVOCATORIA. */
+    @Transactional
+    public Map<String, Object> uploadPdfFirmadoE26(Long idConv, MultipartFile archivo, HttpServletRequest http) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        if (archivo.isEmpty()) throw new DomainException("El archivo está vacío");
+        String contentType = archivo.getContentType();
+        if (contentType == null || !contentType.equals("application/pdf"))
+            throw new DomainException("Solo se permiten archivos PDF");
+        if (archivo.getSize() > 10 * 1024 * 1024)
+            throw new DomainException("El archivo excede el límite de 10 MB");
+
+        try {
+            Path dir = Path.of("pdfs-firmados", "e26");
+            Files.createDirectories(dir);
+            String nombre = "RESULT-TECNICA-FIRMADO-" + conv.getNumeroConvocatoria()
+                    .replaceAll("[^a-zA-Z0-9\\-]", "_") + ".pdf";
+            Path destino = dir.resolve(nombre);
+            Files.copy(archivo.getInputStream(), destino, StandardCopyOption.REPLACE_EXISTING);
+
+            conv.setPdfFirmadoE26(destino.toString());
+            conv.setFechaPdfFirmadoE26(LocalDateTime.now());
+            conv.setUsuarioModificacion(user());
+            convRepo.save(conv);
+
+            audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
+                    "UPLOAD_PDF_FIRMADO_E26", null, destino.getFileName().toString(),
+                    "ORH subió PDF firmado de resultados técnicos", http);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("archivo", nombre);
+            result.put("fechaSubida", conv.getFechaPdfFirmadoE26().toString());
+            return result;
+        } catch (IOException e) {
+            throw new DomainException("Error al guardar el archivo: " + e.getMessage());
+        }
+    }
+
+    /** E26-DOWNLOAD: descarga el PDF firmado de resultados técnicos subido por ORH. */
+    public byte[] descargarPdfFirmadoE26(Long idConv) {
+        Convocatoria conv = convRepo.findById(idConv)
+                .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        if (conv.getPdfFirmadoE26() == null)
+            throw new DomainException("No se ha subido un PDF firmado para E26");
+        try {
+            Path path = Path.of(conv.getPdfFirmadoE26());
+            if (!Files.exists(path))
+                throw new DomainException("El archivo PDF firmado no se encuentra en el servidor");
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            throw new DomainException("Error al leer el archivo: " + e.getMessage());
+        }
+    }
+
     /** E24-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-curricular.
-     *  Acción explícita del ROL COMITÉ: persiste el flag resultadosCurricularesPublicados=true
-     *  y retorna el PDF para descarga inmediata.
-     *  Solo después de esta acción el portal muestra el ícono 📄 en la columna. */
+     *  Acción explícita del ROL ORH: requiere PDF firmado subido previamente.
+     *  Persiste flag resultadosCurricularesPublicados=true y retorna PDF.
+     *  Solo después de esta acción el portal muestra el ícono en la columna. */
     @Transactional
     public byte[] publicarResultadosCurricular(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+        if (conv.getPdfFirmadoE24() == null)
+            throw new DomainException("Debe subir el PDF firmado digitalmente antes de publicar (DS 065-2011-PCM)");
         // Incluye: APTO/NO_APTO/GANADOR/ACCESITARIO/NO_SELECCIONADO (puntaje registrado)
         // + VERIFICADO con CON_SANCIONES o NO_ADMITIDO (de facto NO_APTO por DL1451/RF07)
         List<Postulacion> todos = postRepo.findByConvocatoriaId(idConv).stream()
@@ -538,7 +707,7 @@ public class SeleccionService {
         convRepo.save(conv);
         audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
                 "PUBLICAR_RESULT_CURRICULAR", "false", "true",
-                "Publicación de resultados E24 — ROL COMITÉ", http);
+                "Publicación de resultados E24 — ROL ORH (PDF firmado)", http);
 
         // Umbral para PDF consistente con scores (mismo cálculo que evalCurricular)
         List<FactorEvaluacion> factoresPub = factorRepo.findByConvocatoriaId(idConv);
@@ -560,7 +729,10 @@ public class SeleccionService {
                 .comparing((Postulacion p) -> p.getPuntajeCurricular() != null
                         && p.getPuntajeCurricular().compareTo(umbralPubFinal) >= 0 ? 0 : 1)
                 .thenComparing(p -> Optional.ofNullable(p.getPuntajeCurricular()).orElse(BigDecimal.ZERO), Comparator.reverseOrder()));
-        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralPubFinal);
+        ConfigExamen cfgEx = configExamenRepo.findByConvocatoriaId(idConv).orElse(null);
+        Cronograma cronoTec = cronogramaRepo.findByConvocatoriaId(idConv).stream()
+                .filter(c -> "EVAL_TECNICA".equals(c.getEtapa())).findFirst().orElse(null);
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralPubFinal, cfgEx, cronoTec);
     }
 
     /** E24-PDF — GET /convocatorias/{id}/resultados-curricular-pdf.
@@ -600,17 +772,26 @@ public class SeleccionService {
                         .map(pc -> pc.compareTo(umbralFinal) >= 0 ? 0 : 1).orElse(1))
                 .thenComparing(p -> Optional.ofNullable(p.getPuntajeCurricular())
                         .orElse(BigDecimal.ZERO), Comparator.reverseOrder()));
-        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal);
+        ConfigExamen cfgEx2 = configExamenRepo.findByConvocatoriaId(idConv).orElse(null);
+        Cronograma cronoTec2 = cronogramaRepo.findByConvocatoriaId(idConv).stream()
+                .filter(c -> "EVAL_TECNICA".equals(c.getEtapa())).findFirst().orElse(null);
+        return new ResultadosCurricularPdfGenerator().generar(conv, todos, umbralFinal, cfgEx2, cronoTec2);
     }
 
     /** E26-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-tecnica.
-     *  Acción explícita del ROL COMITÉ: persiste el flag resultadosTecnicosPublicados=true
-     *  y retorna el PDF para descarga inmediata.
-     *  Solo después de esta acción el portal muestra el ícono 📄 en la columna Resultados Técnica. */
+     *  Acción explícita del ROL COMITÉ (presencial) u ORH (virtual):
+     *  persiste el flag resultadosTecnicosPublicados=true y retorna el PDF para descarga.
+     *  Para examen virtual (ORH): requiere PDF firmado subido previamente (DS 065-2011-PCM). */
     @Transactional
     public byte[] publicarResultadosTecnica(Long idConv, HttpServletRequest http) {
         Convocatoria conv = convRepo.findById(idConv)
                 .orElseThrow(() -> new ResourceNotFoundException("Convocatoria", idConv));
+
+        // Si es examen virtual, ORH debe haber subido el PDF firmado
+        if (Boolean.TRUE.equals(conv.getExamenVirtualHabilitado()) && conv.getPdfFirmadoE26() == null) {
+            throw new DomainException("Debe subir el PDF firmado digitalmente antes de publicar (DS 065-2011-PCM)");
+        }
+
         List<Postulacion> conPuntaje = postRepo.findByConvocatoriaId(idConv).stream()
                 .filter(p -> p.getPuntajeTecnica() != null)
                 .collect(java.util.stream.Collectors.toList());
@@ -622,7 +803,8 @@ public class SeleccionService {
         convRepo.save(conv);
         audit.registrarConvocatoria(idConv, "CONVOCATORIA", idConv,
                 "PUBLICAR_RESULT_TECNICA", "false", "true",
-                "Publicación de resultados E26 — ROL COMITÉ", http);
+                "Publicación de resultados E26 — " +
+                (Boolean.TRUE.equals(conv.getExamenVirtualHabilitado()) ? "ROL ORH (virtual)" : "ROL COMITÉ"), http);
 
         conPuntaje.sort(Comparator
                 .comparing((Postulacion p) -> "APTO".equals(p.getEstado()) ? 0 : 1)
@@ -648,6 +830,34 @@ public class SeleccionService {
         return new ResultadosTecnicaPdfGenerator().generar(conv, conPuntaje);
     }
 
+    /**
+     * Umbral E27 — factor padre ENTREVISTA (E12), mismas reglas que evalTecnica para TECNICA.
+     */
+    private BigDecimal resolverUmbralEntrevista(Long idConv) {
+        List<FactorEvaluacion> factores = factorRepo.findByConvocatoriaId(idConv);
+        BigDecimal umbral = factores.stream()
+                .filter(f -> "ENTREVISTA".equals(f.getEtapaEvaluacion())
+                        && f.getFactorPadre() == null
+                        && f.getPuntajeMinimo() != null)
+                .map(FactorEvaluacion::getPuntajeMinimo)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (umbral.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal maxPadre = factores.stream()
+                    .filter(f -> "ENTREVISTA".equals(f.getEtapaEvaluacion())
+                            && f.getFactorPadre() == null && f.getPuntajeMaximo() != null)
+                    .map(FactorEvaluacion::getPuntajeMaximo)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            umbral = maxPadre.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP);
+        }
+        return umbral;
+    }
+
+    /** Etiqueta APTO/NO APTO para la columna resultado-entrevista del cuadro de méritos. */
+    private String etiquetaResultadoEntrevista(BigDecimal puntajeEntrevista, BigDecimal umbral) {
+        if (puntajeEntrevista == null) return "—";
+        return puntajeEntrevista.compareTo(umbral) >= 0 ? "APTO" : "NO APTO";
+    }
+
     /** E27-PUBLICAR — POST /convocatorias/{id}/publicar-resultados-entrevista.
      *  Acción explícita del ROL COMITÉ: persiste el flag entrevistaPublicada=true
      *  y retorna el PDF para descarga inmediata. */
@@ -661,6 +871,8 @@ public class SeleccionService {
         if (conPuntaje.isEmpty())
             throw new DomainException("No hay resultados de entrevista para publicar");
 
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConv);
+
         conv.setEntrevistaPublicada(true);
         conv.setUsuarioModificacion(user());
         convRepo.save(conv);
@@ -671,7 +883,7 @@ public class SeleccionService {
         conPuntaje.sort(Comparator
                 .comparing(p -> Optional.ofNullable(p.getPuntajeEntrevista()).orElse(BigDecimal.ZERO),
                         Comparator.reverseOrder()));
-        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje, umbralEnt);
     }
 
     /** E27-PDF — GET /convocatorias/{id}/resultados-entrevista-pdf. */
@@ -683,10 +895,11 @@ public class SeleccionService {
                 .collect(java.util.stream.Collectors.toList());
         if (conPuntaje.isEmpty())
             throw new DomainException("No hay resultados de entrevista para esta convocatoria");
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConv);
         conPuntaje.sort(Comparator
                 .comparing(p -> Optional.ofNullable(p.getPuntajeEntrevista()).orElse(BigDecimal.ZERO),
                         Comparator.reverseOrder()));
-        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje);
+        return new ResultadosEntrevistaPdfGenerator().generar(conv, conPuntaje, umbralEnt);
     }
 
     /** E30 — GET /convocatorias/{id}/resultados-pdf. CU-22 */
@@ -711,6 +924,19 @@ public class SeleccionService {
             throw new DomainException("Convocatoria no esta EN_SELECCION");
         List<CuadroMeritos> meritos = new java.util.ArrayList<>(meritoRepo.findByConvocatoriaId(idConv));
         if (meritos.isEmpty()) throw new DomainException("No hay cuadro de meritos para publicar");
+
+        // Validar coherencia: entrevista eliminatoria — no publicar GANADOR/ACCESITARIO sin aprobar entrevista
+        BigDecimal umbralEnt = resolverUmbralEntrevista(idConv);
+        for (CuadroMeritos cm : meritos) {
+            if ("GANADOR".equals(cm.getResultado()) || "ACCESITARIO".equals(cm.getResultado())) {
+                BigDecimal pe = Optional.ofNullable(cm.getPuntajeEntrevista()).orElse(BigDecimal.ZERO);
+                if (pe.compareTo(umbralEnt) < 0) {
+                    throw new DomainException(
+                            "El cuadro de méritos es inconsistente: hay GANADOR/ACCESITARIO que no aprobó la entrevista. "
+                            + "Recalcule el cuadro de méritos (E29) antes de publicar.");
+                }
+            }
+        }
 
         EstadoConvocatoria destino = EstadoConvocatoria.FINALIZADA;
         if (!conv.getEstado().puedeTransicionarA(destino)) {

@@ -1,7 +1,7 @@
 <div class="perfil-form-compact">
   <app-page-header
-    [title]="isEdit() ? 'Editar Perfil de Puesto' : 'Registrar Perfil Atómico'"
-    subtitle="RPE 065-2020-SERVIR · Formulario de 4 secciones">
+    [title]="modoSoloLectura() ? 'Ver Perfil de Puesto' : isEdit() ? 'Editar Perfil de Puesto' : 'Registrar Perfil Atómico'"
+    subtitle="RPE 065-2020-SERVIR · Formulario en 8 pestañas">
     <a routerLink="/sistema/requerimiento/perfiles" class="btn-ghost">← Volver al listado</a>
   </app-page-header>
 
@@ -27,13 +27,13 @@
           <h2 class="section-title">Datos Generales del Puesto</h2>
           <p class="section-subtitle">La unidad orgánica se autocompleta desde el usuario autenticado.</p>
 
-          @if (!datosGeneralesGuardado()) {
+          @if (!datosGeneralesGuardado() && !modoSoloLectura()) {
             <div class="grid-form grid-form--two">
               <div>
                 <label class="label-field">Denominación del Puesto *</label>
                 <select formControlName="denominacionPuesto" class="input-field">
                   <option value="">— SELECCIONAR —</option>
-                  @for (item of denominacionOptions; track item.value) {
+                  @for (item of denominacionOptions(); track item.value) {
                     <option [value]="item.value">{{ item.label }}</option>
                   }
                 </select>
@@ -66,18 +66,6 @@
                 }
               </div>
               <div>
-                <label class="label-field">Dependencia Jerárquica Lineal</label>
-                <input formControlName="dependenciaJerarquicaLineal" class="input-field" maxlength="250" placeholder="Ej. Jefatura ORH" />
-              </div>
-              <div>
-                <label class="label-field">Dependencia Funcional</label>
-                <input formControlName="dependenciaFuncional" class="input-field" maxlength="250" placeholder="Ej. Dirección General" />
-              </div>
-              <div>
-                <label class="label-field">Puestos a su Cargo</label>
-                <input formControlName="puestosCargo" type="number" min="0" class="input-field" />
-              </div>
-              <div>
                 <label class="label-field">Cantidad de Puestos *</label>
                 <input formControlName="cantidadPuestos" type="number" min="1" class="input-field" />
                 @if (isControlInvalid(form.controls.cantidadPuestos)) {
@@ -93,6 +81,7 @@
                 <span class="error-text">La misión del puesto es obligatoria.</span>
               }
             </div>
+
             <div class="flex gap-2 pt-2">
               <button type="button" class="btn-primary" (click)="guardarDatosGenerales()" [disabled]="saving() || !isDatosGeneralesValid()">
                 @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
@@ -105,7 +94,7 @@
             <div class="table-responsive mt-2">
               <table class="mini-table">
                 <thead>
-                  <tr><th>Denominación</th><th>Nombre</th><th>Unidad</th><th>Nivel</th><th>Puestos</th><th>Acciones</th></tr>
+                  <tr><th>Denominación</th><th>Nombre</th><th>Unidad</th><th>Nivel</th><th>Puestos</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
                 </thead>
                 <tbody>
                   <tr>
@@ -114,10 +103,12 @@
                     <td>{{ datosGeneralesRow()?.unidadOrganica }}</td>
                     <td>{{ nivelPuestoLabel(datosGeneralesRow()?.idNivelPuesto) }}</td>
                     <td>{{ datosGeneralesRow()?.cantidadPuestos }}</td>
-                    <td>
-                      <button type="button" class="btn-link" (click)="editarDatosGenerales()">Editar</button>
-                      <button type="button" class="btn-link-danger" (click)="eliminarDatosGenerales()">Eliminar</button>
-                    </td>
+                    @if (!modoSoloLectura()) {
+                      <td>
+                        <button type="button" class="btn-link" (click)="editarDatosGenerales()">Editar</button>
+                        <button type="button" class="btn-link-danger" (click)="eliminarDatosGenerales()">Eliminar</button>
+                      </td>
+                    }
                   </tr>
                 </tbody>
               </table>
@@ -126,68 +117,86 @@
         </section>
       }
 
-      <!-- TAB 1: Formación Académica -->
+      <!-- TAB 1: Experiencia -->
       @if (activeTab() === 1) {
         <section class="card-section">
-          <h2 class="section-title">Formación Académica</h2>
-          <p class="section-subtitle">Registra los grados y especialidades requeridos para el perfil.</p>
+          <h2 class="section-title">Experiencia</h2>
+          <p class="section-subtitle">Registra la experiencia general y específica requerida.</p>
 
-          @if (!perfilId()) {
+          @if (!perfilId() && !modoSoloLectura()) {
             <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
-          } @else {
-            <div class="grid-form grid-form--two" [formGroup]="formacionForm">
-              <div>
-                <label class="label-field">Grado Académico *</label>
-                <select formControlName="gradoAcademico" class="input-field">
-                  <option value="">— SELECCIONAR —</option>
-                  @for (item of gradoAcademicoOptions; track item) {
-                    <option [value]="item">{{ item }}</option>
-                  }
-                </select>
-                @if (isControlInvalid(formacionForm.controls.gradoAcademico)) {
-                  <span class="error-text">Selecciona el grado académico.</span>
-                }
-              </div>
-              <div>
-                <label class="label-field">Especialidad *</label>
-                <input formControlName="especialidad" class="input-field" maxlength="200" placeholder="Ej. Derecho, Ingeniería" (input)="onEspecialidadInput()" />
-                @if (isControlInvalid(formacionForm.controls.especialidad)) {
-                  <span class="error-text">La especialidad es obligatoria.</span>
-                }
-              </div>
-              <div class="col-span-2 checkbox-row">
-                <label class="checkbox-field"><input type="checkbox" formControlName="requiereColegiatura" /><span>Requiere colegiatura</span></label>
-                <label class="checkbox-field"><input type="checkbox" formControlName="requiereHabilitacionProfesional" /><span>Requiere habilitación profesional</span></label>
-              </div>
-            </div>
-            <div class="flex gap-2 pt-2">
-              <button type="button" class="btn-primary" (click)="guardarFormacion()" [disabled]="saving() || !formacionForm.valid">
-                @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-                {{ editingFormacionIndex() !== null ? 'Actualizar' : 'Guardar' }}
-              </button>
-              @if (editingFormacionIndex() !== null) {
-                <button type="button" class="btn-outline" (click)="cancelarEdicionFormacion()">Cancelar</button>
-              }
-            </div>
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div class="grid-form grid-form--two" [formGroup]="experienciaForm">
+                <div>
+                  <label class="label-field">Tipo de experiencia *</label>
+                  <select formControlName="tipoExperiencia" class="input-field">
+                    @for (item of experienciaTipoOptions; track item) {
+                      <option [value]="item">{{ item }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="inline-grid">
+                  <div>
+                    <label class="label-field">Cantidad *</label>
+                    <input formControlName="cantidad" type="text" inputmode="numeric" maxlength="2" autocomplete="off"
+                      class="input-field" placeholder="1–99"
+                      (input)="filtrarCantidadExperiencia($event)" />
+                    @if (isControlInvalid(experienciaForm.controls.cantidad)) {
+                      <span class="error-text">Ingrese un valor entre 1 y 99.</span>
+                    }
+                  </div>
+                  <div>
+                    <label class="label-field">Unidad *</label>
+                    <select formControlName="unidadTiempo" class="input-field">
+                      @for (item of unidadTiempoOptions; track item) {
+                        <option [value]="item">{{ item }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
 
-            @if (formacionesGuardadas().length > 0) {
+                <div class="col-span-2">
+                  <label class="label-field">Detalle de la experiencia *</label>
+                  <textarea formControlName="detalle" class="input-field" rows="3" maxlength="1000"
+                    placeholder="Describe la experiencia requerida"></textarea>
+                  @if (isControlInvalid(experienciaForm.controls.detalle)) {
+                    <span class="error-text">El detalle es obligatorio.</span>
+                  }
+                </div>
+              </div>
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarExperiencia()" [disabled]="saving() || !experienciaForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingExperienciaIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingExperienciaIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionExperiencia()">Cancelar</button>
+                }
+              </div>
+            }
+
+            @if (experienciasGuardadas().length > 0) {
               <div class="table-responsive mt-3">
                 <table class="mini-table">
                   <thead>
-                    <tr><th>#</th><th>Grado</th><th>Especialidad</th><th>Colegiatura</th><th>Habilitación</th><th>Acciones</th></tr>
+                    <tr><th>#</th><th>Tipo</th><th>Cantidad</th><th>Unidad</th><th>Detalle</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
                   </thead>
                   <tbody>
-                    @for (f of formacionesGuardadas(); track f.idPerfilFormacion; let i = $index) {
+                    @for (e of experienciasGuardadas(); track e.idPerfilExperiencia; let i = $index) {
                       <tr>
                         <td>{{ i + 1 }}</td>
-                        <td>{{ f.gradoAcademico }}</td>
-                        <td>{{ f.especialidad }}</td>
-                        <td>{{ f.requiereColegiatura ? 'Sí' : 'No' }}</td>
-                        <td>{{ f.requiereHabilitacionProfesional ? 'Sí' : 'No' }}</td>
-                        <td>
-                          <button type="button" class="btn-link" (click)="editarFormacion(i)">Editar</button>
-                          <button type="button" class="btn-link-danger" (click)="eliminarFormacion(i)">Eliminar</button>
-                        </td>
+                        <td>{{ e.tipoExperiencia }}</td>
+                        <td>{{ e.cantidad }}</td>
+                        <td>{{ e.unidadTiempo }}</td>
+
+                        <td class="max-w-[200px] truncate">{{ e.detalle }}</td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarExperiencia(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarExperiencia(i)">Eliminar</button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -198,61 +207,249 @@
         </section>
       }
 
-      <!-- TAB 2: Conocimientos -->
+      <!-- TAB 2: Competencias -->
       @if (activeTab() === 2) {
         <section class="card-section">
-          <h2 class="section-title">Conocimientos</h2>
-          <p class="section-subtitle">Matriz de conocimientos, horas y nivel de dominio.</p>
+          <h2 class="section-title">Competencias</h2>
+          <p class="section-subtitle">Habilidades y aptitudes requeridas para el puesto.</p>
 
-          @if (!perfilId()) {
+          @if (!perfilId() && !modoSoloLectura()) {
             <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
-          } @else {
-            <div class="grid-form grid-form--two" [formGroup]="conocimientoForm">
-              <div>
-                <label class="label-field">Tipo de conocimiento *</label>
-                <select formControlName="tipoConocimiento" class="input-field" (change)="onConocimientoTypeChange()">
-                  @for (item of conocimientoTipoOptions; track item) {
-                    <option [value]="item">{{ item }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label class="label-field">Nivel de dominio *</label>
-                <select formControlName="nivelDominio" class="input-field">
-                  @for (item of dominioOptions; track item) {
-                    <option [value]="item">{{ item }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-span-2">
-                <label class="label-field">Descripción *</label>
-                <input formControlName="descripcion" class="input-field" maxlength="300" placeholder="Ej. Excel avanzado" />
-                @if (isControlInvalid(conocimientoForm.controls.descripcion)) {
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div [formGroup]="competenciaForm">
+                <label class="label-field">Descripción de la competencia *</label>
+                <input formControlName="descripcion" class="input-field" maxlength="300" placeholder="Ej. Capacidad de trabajo en equipo" />
+                @if (isControlInvalid(competenciaForm.controls.descripcion)) {
                   <span class="error-text">La descripción es obligatoria.</span>
                 }
               </div>
-              <div>
-                <label class="label-field">Nro. Horas</label>
-                <input formControlName="horas" type="text" inputmode="numeric" maxlength="3"
-                  class="input-field" placeholder="0"
-                  (input)="filtrarHoras($event)" />
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarCompetencia()" [disabled]="saving() || !competenciaForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingCompetenciaIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingCompetenciaIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionCompetencia()">Cancelar</button>
+                }
               </div>
-            </div>
-            <div class="flex gap-2 pt-2">
-              <button type="button" class="btn-primary" (click)="guardarConocimiento()" [disabled]="saving() || !conocimientoForm.valid">
-                @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-                {{ editingConocimientoIndex() !== null ? 'Actualizar' : 'Guardar' }}
-              </button>
-              @if (editingConocimientoIndex() !== null) {
-                <button type="button" class="btn-outline" (click)="cancelarEdicionConocimiento()">Cancelar</button>
-              }
-            </div>
+            }
+
+            @if (competenciasGuardadas().length > 0) {
+              <div class="table-responsive mt-3">
+                <table class="mini-table">
+                  <thead>
+                    <tr><th>#</th><th>Competencia</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
+                  </thead>
+                  <tbody>
+                    @for (c of competenciasGuardadas(); track c.idPerfilConocimiento; let i = $index) {
+                      <tr>
+                        <td>{{ i + 1 }}</td>
+                        <td>{{ c.descripcion }}</td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarCompetencia(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarCompetencia(i)">Eliminar</button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- TAB 3: Formación Académica -->
+      @if (activeTab() === 3) {
+        <section class="card-section">
+          <h2 class="section-title">Formación Académica</h2>
+          <p class="section-subtitle">Registra la formación académica requerida para el perfil.</p>
+
+          @if (!perfilId() && !modoSoloLectura()) {
+            <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div [formGroup]="formacionForm">
+                <div>
+                  <label class="label-field">Formación Académica *</label>
+                  <textarea formControlName="gradoAcademico" class="input-field" rows="2" maxlength="500"
+                    placeholder="Ej. Bachiller de la carrera de Ingeniería Industrial, Sistemas y/o administración."></textarea>
+                  @if (isControlInvalid(formacionForm.controls.gradoAcademico)) {
+                    <span class="error-text">La formación académica es obligatoria.</span>
+                  }
+                </div>
+                <div class="checkbox-row mt-2">
+                  <label class="checkbox-field"><input type="checkbox" formControlName="requiereColegiatura" /><span>Requiere colegiatura</span></label>
+                  <label class="checkbox-field"><input type="checkbox" formControlName="requiereHabilitacionProfesional" /><span>Requiere habilitación profesional</span></label>
+                </div>
+              </div>
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarFormacion()" [disabled]="saving() || !formacionForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingFormacionIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingFormacionIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionFormacion()">Cancelar</button>
+                }
+              </div>
+            }
+
+            @if (formacionesGuardadas().length > 0) {
+              <div class="table-responsive mt-3">
+                <table class="mini-table">
+                  <thead>
+                    <tr><th>#</th><th>Formación Académica</th><th>Colegiatura</th><th>Habilitación</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
+                  </thead>
+                  <tbody>
+                    @for (f of formacionesGuardadas(); track f.idPerfilFormacion; let i = $index) {
+                      <tr>
+                        <td>{{ i + 1 }}</td>
+                        <td>{{ f.gradoAcademico }}</td>
+                        <td>{{ f.requiereColegiatura ? 'Sí' : 'No' }}</td>
+                        <td>{{ f.requiereHabilitacionProfesional ? 'Sí' : 'No' }}</td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarFormacion(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarFormacion(i)">Eliminar</button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- TAB 4: Cursos / Especialización -->
+      @if (activeTab() === 4) {
+        <section class="card-section">
+          <h2 class="section-title">Cursos y estudios de especialización</h2>
+          <p class="section-subtitle">Registro tipo CURSO (incluye horas académicas).</p>
+
+          @if (!perfilId() && !modoSoloLectura()) {
+            <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div class="grid-form grid-form--two" [formGroup]="cursoForm">
+                <div class="col-span-2">
+                  <label class="label-field">Descripción del curso / especialización *</label>
+                  <input formControlName="descripcion" class="input-field" maxlength="300" placeholder="Ej. Diplomado en gestión pública" />
+                  @if (isControlInvalid(cursoForm.controls.descripcion)) {
+                    <span class="error-text">La descripción es obligatoria.</span>
+                  }
+                </div>
+                <div>
+                  <label class="label-field">Horas académicas *</label>
+                  <input formControlName="horas" type="text" inputmode="numeric" maxlength="3"
+                    class="input-field" placeholder="0"
+                    (input)="filtrarHorasCurso($event)" />
+                  @if (isControlInvalid(cursoForm.controls.horas)) {
+                    <span class="error-text">Ingrese las horas (0–999).</span>
+                  }
+                </div>
+              </div>
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarCurso()" [disabled]="saving() || !cursoForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingCursoIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingCursoIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionCurso()">Cancelar</button>
+                }
+              </div>
+            }
+
+            @if (cursosGuardados().length > 0) {
+              <div class="table-responsive mt-3">
+                <table class="mini-table">
+                  <thead>
+                    <tr><th>#</th><th>Curso / especialización</th><th>Horas</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
+                  </thead>
+                  <tbody>
+                    @for (c of cursosGuardados(); track c.idPerfilConocimiento; let i = $index) {
+                      <tr>
+                        <td>{{ i + 1 }}</td>
+                        <td>{{ c.descripcion }}</td>
+                        <td>{{ c.horas ?? '—' }}</td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarCurso(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarCurso(i)">Eliminar</button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- TAB 5: Conocimientos para el puesto -->
+      @if (activeTab() === 5) {
+        <section class="card-section">
+          <h2 class="section-title">Conocimientos para el puesto</h2>
+          <p class="section-subtitle">Ofimática, idiomas u otros conocimientos (no competencias ni cursos).</p>
+
+          @if (!perfilId() && !modoSoloLectura()) {
+            <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div class="grid-form grid-form--two" [formGroup]="conocimientoForm">
+                <div>
+                  <label class="label-field">Tipo de conocimiento *</label>
+                  <select formControlName="tipoConocimiento" class="input-field" (change)="onConocimientoTypeChange()">
+                    @for (item of conocimientoTipoOptions; track item) {
+                      <option [value]="item">{{ item }}</option>
+                    }
+                  </select>
+                </div>
+                <div>
+                  <label class="label-field">Nivel de dominio *</label>
+                  <select formControlName="nivelDominio" class="input-field">
+                    @for (item of dominioOptions; track item) {
+                      <option [value]="item">{{ item }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label class="label-field">Descripción *</label>
+                  <input formControlName="descripcion" class="input-field" maxlength="300" placeholder="Ej. Excel avanzado" />
+                  @if (isControlInvalid(conocimientoForm.controls.descripcion)) {
+                    <span class="error-text">La descripción es obligatoria.</span>
+                  }
+                </div>
+                <div>
+                  <label class="label-field">Nro. Horas</label>
+                  <input formControlName="horas" type="text" inputmode="numeric" maxlength="3"
+                    class="input-field" placeholder="0"
+                    (input)="filtrarHoras($event)" />
+                </div>
+              </div>
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarConocimiento()" [disabled]="saving() || !conocimientoForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingConocimientoIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingConocimientoIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionConocimiento()">Cancelar</button>
+                }
+              </div>
+            }
 
             @if (conocimientosGuardados().length > 0) {
               <div class="table-responsive mt-3">
                 <table class="mini-table">
                   <thead>
-                    <tr><th>#</th><th>Tipo</th><th>Descripción</th><th>Nivel</th><th>Horas</th><th>Acciones</th></tr>
+                    <tr><th>#</th><th>Tipo</th><th>Descripción</th><th>Nivel</th><th>Horas</th>@if (!modoSoloLectura()) {<th>Acciones</th>}</tr>
                   </thead>
                   <tbody>
                     @for (c of conocimientosGuardados(); track c.idPerfilConocimiento; let i = $index) {
@@ -262,10 +459,12 @@
                         <td>{{ c.descripcion }}</td>
                         <td>{{ c.nivelDominio }}</td>
                         <td>{{ c.horas ?? '—' }}</td>
-                        <td>
-                          <button type="button" class="btn-link" (click)="editarConocimiento(i)">Editar</button>
-                          <button type="button" class="btn-link-danger" (click)="eliminarConocimiento(i)">Eliminar</button>
-                        </td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarConocimiento(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarConocimiento(i)">Eliminar</button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -276,85 +475,65 @@
         </section>
       }
 
-      <!-- TAB 3: Experiencia -->
-      @if (activeTab() === 3) {
+      <!-- TAB 6: Características del Puesto (III Bases) -->
+      @if (activeTab() === 6) {
         <section class="card-section">
-          <h2 class="section-title">Experiencia</h2>
-          <p class="section-subtitle">Registra la experiencia general y específica requerida.</p>
+          <h2 class="section-title">Características del Puesto</h2>
+          <p class="section-subtitle">
+            Principales actividades a desarrollar — sección III del PDF de bases. Cada ítem se numerará como a., b., c., …
+          </p>
 
-          @if (!perfilId()) {
+          @if (!perfilId() && !modoSoloLectura()) {
             <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
-          } @else {
-            <div class="grid-form grid-form--two" [formGroup]="experienciaForm">
-              <div>
-                <label class="label-field">Tipo de experiencia *</label>
-                <select formControlName="tipoExperiencia" class="input-field">
-                  @for (item of experienciaTipoOptions; track item) {
-                    <option [value]="item">{{ item }}</option>
-                  }
-                </select>
-              </div>
-              <div class="inline-grid">
-                <div>
-                  <label class="label-field">Cantidad *</label>
-                  <input formControlName="cantidad" type="number" min="1" class="input-field" />
-                </div>
-                <div>
-                  <label class="label-field">Unidad *</label>
-                  <select formControlName="unidadTiempo" class="input-field">
-                    @for (item of unidadTiempoOptions; track item) {
-                      <option [value]="item">{{ item }}</option>
-                    }
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label class="label-field">Nivel mínimo del puesto *</label>
-                <select formControlName="nivelMinimoPuesto" class="input-field">
-                  <option value="">— SELECCIONAR —</option>
-                  @for (item of nivelMinimoOptions; track item) {
-                    <option [value]="item">{{ item }}</option>
-                  }
-                </select>
-              </div>
-              <div class="col-span-2">
-                <label class="label-field">Detalle de la experiencia *</label>
-                <textarea formControlName="detalle" class="input-field" rows="3" maxlength="1000"
-                  placeholder="Describe la experiencia requerida"></textarea>
-                @if (isControlInvalid(experienciaForm.controls.detalle)) {
-                  <span class="error-text">El detalle es obligatorio.</span>
+          } @else if (perfilId()) {
+            @if (!modoSoloLectura()) {
+              <div [formGroup]="funcionForm">
+                <label class="label-field">Descripción de la actividad *</label>
+                <textarea formControlName="descripcionFuncion" class="input-field" rows="3" maxlength="500"
+                  placeholder="Ej. Establecer y mantener los procesos del sistema de gestión de calidad."></textarea>
+                @if (isControlInvalid(funcionForm.controls.descripcionFuncion)) {
+                  <span class="error-text">Ingrese la descripción (máx. 500 caracteres).</span>
                 }
               </div>
-            </div>
-            <div class="flex gap-2 pt-2">
-              <button type="button" class="btn-primary" (click)="guardarExperiencia()" [disabled]="saving() || !experienciaForm.valid">
-                @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-                {{ editingExperienciaIndex() !== null ? 'Actualizar' : 'Guardar' }}
-              </button>
-              @if (editingExperienciaIndex() !== null) {
-                <button type="button" class="btn-outline" (click)="cancelarEdicionExperiencia()">Cancelar</button>
-              }
-            </div>
+              <div class="flex gap-2 pt-2">
+                <button type="button" class="btn-primary" (click)="guardarFuncion()" [disabled]="saving() || !funcionForm.valid">
+                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                  {{ editingFuncionIndex() !== null ? 'Actualizar' : 'Agregar' }}
+                </button>
+                @if (editingFuncionIndex() !== null) {
+                  <button type="button" class="btn-outline" (click)="cancelarEdicionFuncion()">Cancelar</button>
+                }
+              </div>
+            }
 
-            @if (experienciasGuardadas().length > 0) {
+            @if (funcionesGuardadas().length > 0) {
               <div class="table-responsive mt-3">
                 <table class="mini-table">
                   <thead>
-                    <tr><th>#</th><th>Tipo</th><th>Cantidad</th><th>Unidad</th><th>Nivel</th><th>Detalle</th><th>Acciones</th></tr>
+                    <tr>
+                      <th>Letra</th>
+                      <th>Actividad</th>
+                      @if (!modoSoloLectura()) {
+                        <th>Orden</th>
+                        <th>Acciones</th>
+                      }
+                    </tr>
                   </thead>
                   <tbody>
-                    @for (e of experienciasGuardadas(); track e.idPerfilExperiencia; let i = $index) {
+                    @for (f of funcionesGuardadas(); track f.idFuncionPuesto; let i = $index) {
                       <tr>
-                        <td>{{ i + 1 }}</td>
-                        <td>{{ e.tipoExperiencia }}</td>
-                        <td>{{ e.cantidad }}</td>
-                        <td>{{ e.unidadTiempo }}</td>
-                        <td>{{ e.nivelMinimoPuesto }}</td>
-                        <td class="max-w-[200px] truncate">{{ e.detalle }}</td>
-                        <td>
-                          <button type="button" class="btn-link" (click)="editarExperiencia(i)">Editar</button>
-                          <button type="button" class="btn-link-danger" (click)="eliminarExperiencia(i)">Eliminar</button>
-                        </td>
+                        <td>{{ letraActividad(i) }}</td>
+                        <td class="pre-line max-w-md">{{ f.descripcionFuncion }}</td>
+                        @if (!modoSoloLectura()) {
+                          <td>
+                            <button type="button" class="btn-link text-xs" (click)="moverFuncionArriba(i)" [disabled]="i === 0 || saving()">↑</button>
+                            <button type="button" class="btn-link text-xs" (click)="moverFuncionAbajo(i)" [disabled]="i === funcionesGuardadas().length - 1 || saving()">↓</button>
+                          </td>
+                          <td>
+                            <button type="button" class="btn-link" (click)="editarFuncion(i)">Editar</button>
+                            <button type="button" class="btn-link-danger" (click)="eliminarFuncion(i)">Eliminar</button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -365,8 +544,8 @@
         </section>
       }
 
-      <!-- TAB 4: Condiciones del Puesto -->
-      @if (activeTab() === 4) {
+      <!-- TAB 7: Condiciones del Puesto -->
+      @if (activeTab() === 7) {
         <section class="card-section">
           <h2 class="section-title">Condiciones del Puesto</h2>
           @if (condicionesReadonly()) {
@@ -376,18 +555,22 @@
               Las condiciones económicas solo son editables antes de la conformidad OPP.
             </p>
           } @else {
-            <p class="section-subtitle">Remuneración y condiciones contractuales — D.Leg. 1057 (CAS).</p>
+            <p class="section-subtitle">
+              Alineado a la sección IV del PDF de bases — D.Leg. 1057 (CAS). La jornada en horas es dato legal;
+              el horario en franja (días + HH:MM) es el que replica el PDF cuando los tres campos están completos.
+            </p>
           }
 
           @if (!perfilId()) {
             <p class="text-amber-700 text-sm">Guarde primero los Datos Generales para continuar.</p>
           } @else {
             <div class="grid-form grid-form--two" [formGroup]="condicionForm">
+              <!-- Campos editables -->
               <div>
                 <label class="label-field">Remuneración mensual (S/) <span class="text-red-500">*</span></label>
                 <input formControlName="remuneracionMensual" type="number" min="0.01" step="0.01"
-                  class="input-field" [class.input-field--readonly]="condicionesReadonly()"
-                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  class="input-field" [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.readonly]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null"
                   placeholder="Ej. 3500.00" />
                 @if (isControlInvalid(condicionForm.controls.remuneracionMensual)) {
                   <span class="error-text">Ingrese una remuneración válida mayor a 0.</span>
@@ -396,47 +579,86 @@
               <div>
                 <label class="label-field">Jornada semanal (horas)</label>
                 <input formControlName="jornadaSemanal" type="number" min="1" max="48"
-                  class="input-field" [class.input-field--readonly]="condicionesReadonly()"
-                  [attr.readonly]="condicionesReadonly() ? true : null" />
-                <span class="helper-text">Máximo 48 h/semana — D.Leg. 1057.</span>
+                  class="input-field" [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.readonly]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null" />
+                <span class="helper-text">Registro CAS (máx. 48 h). En el PDF también se muestra si indica franja horaria abajo.</span>
               </div>
               <div>
-                <label class="label-field">Duración del contrato <span class="text-red-500">*</span></label>
-                <input formControlName="duracionContrato" class="input-field"
-                  [class.input-field--readonly]="condicionesReadonly()"
-                  [attr.readonly]="condicionesReadonly() ? true : null"
-                  maxlength="100" placeholder="Ej. 3 meses renovables" />
+                <label class="label-field">Inicio del contrato (texto en bases)</label>
+                <select formControlName="tipoInicioContrato" class="input-field"
+                  [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.disabled]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null">
+                  <option value="">— Predeterminado (suscripción del contrato) —</option>
+                  <option value="A_LA_FIRMA">Desde la suscripción del contrato</option>
+                  <option value="INMEDIATO">Inmediato (al publicar la convocatoria)</option>
+                  <option value="FECHA_FIJA">Fecha fija (según contrato)</option>
+                </select>
+              </div>
+              <div>
+                <label class="label-field">Término del contrato (Fin en bases) <span class="text-red-500">*</span></label>
+                <input formControlName="duracionContrato" type="date" class="input-field"
+                  [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.readonly]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null"
+                  [min]="minFechaTermino" />
+                <span class="helper-text">Se imprime en el PDF en la línea «Fin:».</span>
                 @if (isControlInvalid(condicionForm.controls.duracionContrato)) {
-                  <span class="error-text">La duración del contrato es obligatoria.</span>
+                  <span class="error-text">Seleccione una fecha de término válida (no anterior a hoy).</span>
                 }
               </div>
+              <!-- Campos hardcodeados — siempre readonly -->
               <div>
-                <label class="label-field">Lugar de prestación del servicio <span class="text-red-500">*</span></label>
-                <input formControlName="lugarPrestacion" class="input-field"
-                  [class.input-field--readonly]="condicionesReadonly()"
-                  [attr.readonly]="condicionesReadonly() ? true : null"
-                  maxlength="300" placeholder="Ej. Miraflores, Lima" />
-                @if (isControlInvalid(condicionForm.controls.lugarPrestacion)) {
-                  <span class="error-text">El lugar de prestación es obligatorio.</span>
-                }
+                <label class="label-field">Lugar de prestación del servicio</label>
+                <input formControlName="lugarPrestacion" class="input-field input-field--readonly" readonly
+                  maxlength="300" />
+              </div>
+              <div>
+                <label class="label-field">Días laborales</label>
+                <input formControlName="diasLaborales" class="input-field input-field--readonly" readonly
+                  maxlength="100" />
+              </div>
+              <div>
+                <label class="label-field">Hora inicio (HH:MM)</label>
+                <input formControlName="horarioInicio" class="input-field input-field--readonly" readonly
+                  maxlength="5" />
+              </div>
+              <div>
+                <label class="label-field">Hora fin (HH:MM)</label>
+                <input formControlName="horarioFin" class="input-field input-field--readonly" readonly
+                  maxlength="5" />
+              </div>
+              <!-- Campos editables (continuación) -->
+              <div>
+                <label class="label-field">Modalidad de servicio</label>
+                <select formControlName="modalidadServicio" class="input-field"
+                  [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.disabled]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null">
+                  <option value="">— Sin especificar —</option>
+                  <option value="PRESENCIAL">PRESENCIAL</option>
+                  <option value="REMOTO">REMOTO</option>
+                  <option value="SEMIPRESENCIAL">SEMIPRESENCIAL</option>
+                </select>
               </div>
               <div class="col-span-2">
                 <label class="label-field">Otras condiciones</label>
                 <textarea formControlName="otrasCondiciones" class="input-field"
-                  [class.input-field--readonly]="condicionesReadonly()"
-                  [attr.readonly]="condicionesReadonly() ? true : null"
+                  [class.input-field--readonly]="modoSoloLectura() || condicionGuardada() || condicionesReadonly()"
+                  [attr.readonly]="(modoSoloLectura() || condicionGuardada() || condicionesReadonly()) ? true : null"
                   rows="2" maxlength="1000"
                   placeholder="Ej. Disponibilidad para viajes eventuales"></textarea>
               </div>
             </div>
-            @if (!condicionesReadonly()) {
+            @if (!condicionesReadonly() && !modoSoloLectura()) {
               <div class="flex gap-2 pt-2">
-                <button type="button" class="btn-primary"
-                  (click)="guardarCondicion()"
-                  [disabled]="saving() || !condicionForm.valid">
-                  @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
-                  Guardar condiciones
-                </button>
+                @if (!condicionGuardada()) {
+                  <button type="button" class="btn-primary"
+                    (click)="guardarCondicion()"
+                    [disabled]="saving() || !condicionForm.valid">
+                    @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
+                    Guardar condiciones
+                  </button>
+                } @else {
+                  <button type="button" class="btn-outline" (click)="editarCondicion()">Editar</button>
+                }
               </div>
             }
           }
@@ -448,16 +670,26 @@
           @if (activeTab() > 0) {
             <button type="button" class="btn-outline" (click)="prevTab()">← Anterior</button>
           }
-          @if (activeTab() < 4) {
+          @if (activeTab() < 7) {
             <button type="button" class="btn-primary" (click)="nextTab()">Siguiente →</button>
           }
         </div>
-        @if (activeTab() === 4 && perfilId()) {
-          <button type="button" class="btn-primary" (click)="finalizar()">
+        @if (activeTab() === 7 && perfilId() && !mensajeFinalizado() && !modoSoloLectura()) {
+          <button type="button" class="btn-primary" (click)="finalizar()" [disabled]="saving()">
+            @if (saving()) { <span class="animate-spin mr-1">⟳</span> }
             Finalizar y Notificar a ORH
           </button>
         }
       </div>
+
+      @if (mensajeFinalizado() && !modoSoloLectura()) {
+        <div class="alert-success mt-4">
+          <strong>{{ mensajeFinalizado() }}</strong>
+        </div>
+        <div class="flex gap-2 pt-3">
+          <a routerLink="/sistema/requerimiento/perfiles" class="btn-outline">← Volver al listado</a>
+        </div>
+      }
     </form>
   }
 </div>

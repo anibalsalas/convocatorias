@@ -85,9 +85,14 @@ public class RequerimientoService {
      */
     public Page<RequerimientoResponse> listar(String estado, Long idArea, Pageable pageable) {
         Page<Requerimiento> page;
-        if (estado != null && !estado.isBlank()) {
+        boolean tieneEstado = estado != null && !estado.isBlank();
+        boolean tieneArea = idArea != null;
+
+        if (tieneEstado && tieneArea) {
+            page = reqRepo.findByEstadoAndIdAreaSolicitante(estado, idArea, pageable);
+        } else if (tieneEstado) {
             page = reqRepo.findByEstado(estado, pageable);
-        } else if (idArea != null) {
+        } else if (tieneArea) {
             page = reqRepo.findByIdAreaSolicitante(idArea, pageable);
         } else {
             page = reqRepo.findAll(pageable);
@@ -160,11 +165,13 @@ public class RequerimientoService {
      * @param idUsuario  ID del usuario autenticado (del JWT)
      * @param httpReq    Request HTTP para auditoría
      * @return Requerimiento creado con estado ELABORADO
-     * @throws DomainException si el perfil no está APROBADO
+     * @param esAdministrador si true, omite la validación de coincidencia de área (solo ADMIN)
+     * @throws DomainException si el perfil no está APROBADO o el área no coincide con el perfil
      */
     @Transactional
     public RequerimientoResponse crear(RequerimientoRequest request, String username,
-                                       Long idUsuario, HttpServletRequest httpReq) {
+                                       Long idUsuario, HttpServletRequest httpReq,
+                                       boolean esAdministrador) {
         // 1. Validar que el perfil de puesto existe
         PerfilPuesto perfil = perfilRepo.findById(request.getIdPerfilPuesto())
                 .orElseThrow(() -> new ResourceNotFoundException("PerfilPuesto", request.getIdPerfilPuesto()));
@@ -176,12 +183,30 @@ public class RequerimientoService {
                     + "Estado actual: " + perfil.getEstado());
         }
 
-        // 3. Generar número correlativo: REQ-2026-0001
+        // 3. El requerimiento debe elaborarse para la misma área que originó el perfil (E6 — área solicitante).
+        if (!esAdministrador) {
+            Long idAreaReq = request.getIdAreaSolicitante();
+            Long idAreaPerfil = perfil.getIdAreaSolicitante();
+            if (idAreaReq == null) {
+                throw new DomainException("idAreaSolicitante es obligatorio para crear el requerimiento.");
+            }
+            if (idAreaPerfil == null) {
+                throw new DomainException("El perfil de puesto no tiene área solicitante asociada.");
+            }
+            if (!idAreaReq.equals(idAreaPerfil)) {
+                throw new DomainException(
+                        "El área solicitante del requerimiento debe coincidir con el área del perfil de puesto. "
+                                + "Área en solicitud: " + idAreaReq + ", área del perfil: " + idAreaPerfil + ". "
+                                + "Quien elabora el requerimiento debe pertenecer al mismo ámbito orgánico que solicitó el perfil.");
+            }
+        }
+
+        // 4. Generar número correlativo: REQ-2026-0001
         int anioActual = Year.now().getValue();
         long count = reqRepo.countByAnio(anioActual);
         String numero = String.format("REQ-%d-%04d", anioActual, count + 1);
 
-        // 4. Crear requerimiento con estado ELABORADO
+        // 5. Crear requerimiento con estado ELABORADO
         Requerimiento req = Requerimiento.builder()
                 .numeroRequerimiento(numero)
                 .perfilPuesto(perfil)
@@ -329,7 +354,7 @@ public class RequerimientoService {
      * Flujo CU-05:
      *   1. ORH define pesos: Eval. Curricular __%, Eval. Técnica __%, Entrevista __%
      *   2. ORH define umbrales mínimos por etapa
-     *   3. ORH registra criterios curriculares detallados
+     *   3. (Opcional) ORH registra criterios curriculares detallados como reglas FILTRO
      *   4. Sistema valida que la suma de pesos = 100% (CK_CONV_PESOS)
      *   5. Estado → CONFIGURADO (Conformidad, listo para Etapa 2)
      *
@@ -387,9 +412,12 @@ public class RequerimientoService {
                 "ENTREVISTA", request.getPesoEntrevista(), request.getUmbralEntrevista(),
                 3, username));
 
-        // N reglas FILTRO — criterios curriculares detallados
+        // N reglas FILTRO — criterios curriculares detallados (0 si lista null/vacía)
+        List<ConfigurarReglasRequest.CriterioItem> criterios = request.getCriteriosCurriculares() != null
+                ? request.getCriteriosCurriculares()
+                : List.of();
         int prioridad = 10;
-        for (ConfigurarReglasRequest.CriterioItem criterio : request.getCriteriosCurriculares()) {
+        for (ConfigurarReglasRequest.CriterioItem criterio : criterios) {
             ReglaMotor regla = ReglaMotor.builder()
                     .requerimiento(req)
                     .tipoRegla("FILTRO")
@@ -418,7 +446,7 @@ public class RequerimientoService {
                 "Pesos: C=" + request.getPesoEvalCurricular()
                 + "/T=" + request.getPesoEvalTecnica()
                 + "/E=" + request.getPesoEntrevista()
-                + ", Criterios: " + request.getCriteriosCurriculares().size());
+                + ", Criterios: " + criterios.size());
 
 
                 notificacionService.notificarUsuario(

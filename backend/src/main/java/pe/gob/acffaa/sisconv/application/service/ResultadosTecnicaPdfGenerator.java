@@ -20,8 +20,8 @@ import java.util.Optional;
  */
 public class ResultadosTecnicaPdfGenerator {
 
-    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 14, Font.BOLD);
-    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 11, Font.BOLD);
+    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 12, Font.BOLD);
+    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 12, Font.BOLD);
     private static final Font SECTION_FONT  = new Font(Font.HELVETICA, 10, Font.BOLD);
     private static final Font BODY_FONT     = new Font(Font.HELVETICA, 9,  Font.NORMAL);
     private static final Font BODY_BOLD     = new Font(Font.HELVETICA, 9,  Font.BOLD);
@@ -43,9 +43,15 @@ public class ResultadosTecnicaPdfGenerator {
             writer.setPageEvent(new HeaderFooterEvent(conv.getNumeroConvocatoria()));
             doc.open();
 
-            agregarTitulo(doc, conv, postulaciones);
+            long aprobadosTecnica = contarAprobadosTecnica(postulaciones);
+            boolean desiertoPorTecnica = aprobadosTecnica == 0;
+
+            agregarTitulo(doc, conv, postulaciones, desiertoPorTecnica);
             agregarTabla(doc, postulaciones);
-            agregarPie(doc);
+            if (desiertoPorTecnica) {
+                agregarComunicadoYDeclaratoriaDesierto(doc, conv);
+            }
+            agregarPie(doc, desiertoPorTecnica);
 
             doc.close();
             return baos.toByteArray();
@@ -54,18 +60,27 @@ public class ResultadosTecnicaPdfGenerator {
         }
     }
 
-    private void agregarTitulo(Document doc, Convocatoria conv, List<Postulacion> posts) throws DocumentException {
-        Paragraph titulo = new Paragraph();
-        titulo.setAlignment(Element.ALIGN_CENTER);
-        titulo.add(new Chunk("AGENCIA DE COMPRAS DE LAS FUERZAS ARMADAS", SUBTITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("MINISTERIO DE DEFENSA", BODY_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("RESULTADOS DE EVALUACIÓN TÉCNICA — RF-11", TITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("PROCESO " + conv.getNumeroConvocatoria(), SUBTITLE_FONT));
-        doc.add(titulo);
+    private static long contarAprobadosTecnica(List<Postulacion> posts) {
+        return posts.stream().filter(p -> eraApto(p.getEstado())).count();
+    }
+
+    private void agregarTitulo(Document doc, Convocatoria conv, List<Postulacion> posts,
+            boolean desiertoPorTecnica) throws DocumentException {
+        ResultadosPdfInstitucionalHeader.addTo(doc);
+        Paragraph pProceso = new Paragraph("PROCESO " + conv.getNumeroConvocatoria() + " – ACFFAA", TITLE_FONT);
+        pProceso.setAlignment(Element.ALIGN_CENTER);
+        pProceso.setSpacingAfter(8f);
+        doc.add(pProceso);
+
+        Paragraph pResultados = new Paragraph();
+        pResultados.setAlignment(Element.ALIGN_CENTER);
+        String lineaTitulo = desiertoPorTecnica
+                ? "RESULTADOS DE EVALUACIÓN TÉCNICA Y DECLARATORIA DE DESIERTO"
+                : "RESULTADOS DE LA EVALUACIÓN TÉCNICA";
+        pResultados.add(new Chunk(lineaTitulo, TITLE_FONT));
+        pResultados.add(Chunk.NEWLINE);
+        pResultados.add(new Chunk("DE " + truncarObjeto(conv.getObjetoContratacion()).toUpperCase() + ".", SUBTITLE_FONT));
+        doc.add(pResultados);
         doc.add(espaciado());
 
         PdfPTable info = new PdfPTable(4);
@@ -117,7 +132,41 @@ public class ResultadosTecnicaPdfGenerator {
         doc.add(tbl);
     }
 
-    private void agregarPie(Document doc) throws DocumentException {
+    /**
+     * Comunicado y declaratoria cuando aprobadosTecnica == 0 (bases: proceso desierto
+     * si no hay candidatos/as aprobados/as en alguna etapa).
+     */
+    private void agregarComunicadoYDeclaratoriaDesierto(Document doc, Convocatoria conv) throws DocumentException {
+        doc.add(espaciado());
+        Paragraph secCom = new Paragraph("COMUNICADO", SECTION_FONT);
+        secCom.setSpacingAfter(4);
+        doc.add(secCom);
+        Paragraph p1 = new Paragraph(
+                "Por el presente documento, en cumplimiento de las bases del proceso "
+                        + safe(conv.getNumeroConvocatoria())
+                        + " y de la normativa aplicable al régimen CAS, se comunica a la ciudadanía los resultados "
+                        + "de la Evaluación Técnica, etapa eliminatoria, en la cual ningún postulante alcanzó "
+                        + "la condición de aprobado(a).",
+                BODY_FONT);
+        p1.setAlignment(Element.ALIGN_JUSTIFIED);
+        doc.add(p1);
+        doc.add(espaciado());
+
+        Paragraph secDec = new Paragraph("DECLARATORIA", SECTION_FONT);
+        secDec.setSpacingAfter(4);
+        doc.add(secDec);
+        Paragraph p2 = new Paragraph(
+                "En consecuencia, se declara DESIERTO el proceso de selección, en aplicación de las bases "
+                        + "(cuando no se cuente con postulantes o candidatos/as aprobados/as en alguna etapa). "
+                        + "No proceden la etapa de Entrevista Personal, el cuadro de méritos ni los resultados finales "
+                        + "para esta convocatoria.",
+                BODY_FONT);
+        p2.setAlignment(Element.ALIGN_JUSTIFIED);
+        doc.add(p2);
+        doc.add(espaciado());
+    }
+
+    private void agregarPie(Document doc, boolean desiertoPorTecnica) throws DocumentException {
         doc.add(espaciado());
         Paragraph leyenda = new Paragraph();
         leyenda.add(new Chunk("Leyenda:  ", BODY_BOLD));
@@ -125,6 +174,19 @@ public class ResultadosTecnicaPdfGenerator {
         leyenda.add(new Chunk("NO APTO — no supera el umbral mínimo", BODY_FONT));
         doc.add(leyenda);
         doc.add(espaciado());
+        if (desiertoPorTecnica) {
+            Paragraph pieInst = new Paragraph();
+            pieInst.setAlignment(Element.ALIGN_CENTER);
+            pieInst.add(new Chunk(
+                    "Agencia de Compras de las Fuerzas Armadas — Ministerio de Defensa del Perú",
+                    BODY_BOLD));
+            pieInst.add(Chunk.NEWLINE);
+            pieInst.add(new Chunk(
+                    "Documento generado para fines de transparencia y publicación institucional.",
+                    SMALL_FONT));
+            doc.add(pieInst);
+            doc.add(espaciado());
+        }
         Paragraph firma = new Paragraph();
         firma.setAlignment(Element.ALIGN_RIGHT);
         firma.add(new Chunk("Generado el " + LocalDate.now().format(FMT)
@@ -158,6 +220,12 @@ public class ResultadosTecnicaPdfGenerator {
     }
 
     private String safe(String val) { return val != null ? val : "—"; }
+
+    private String truncarObjeto(String obj) {
+        if (obj == null) return "—";
+        int idx = obj.toUpperCase().indexOf("PARA LA OFICINA");
+        return idx > 0 ? obj.substring(0, idx).trim() : obj;
+    }
 
     private Paragraph espaciado() {
         Paragraph p = new Paragraph(" ");

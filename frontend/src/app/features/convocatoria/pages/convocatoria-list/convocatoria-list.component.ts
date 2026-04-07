@@ -58,22 +58,32 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
             <tr class="bg-[#1F2133] text-white">
               <th class="px-3 py-2 text-left font-semibold text-xs">N° Convocatoria</th>
               <th class="px-3 py-2 text-left font-semibold text-xs">Descripción</th>
+              <th class="px-1 py-2 text-center font-semibold text-xs whitespace-nowrap">Ver Convocatoria</th>
               <th class="px-3 py-2 text-left font-semibold text-xs">Requerimiento</th>
               <th class="px-3 py-2 text-center font-semibold text-xs">Estado</th>
               <th class="px-3 py-2 text-center font-semibold text-xs">Publicación</th>
-              <th class="px-3 py-2 text-center font-semibold text-xs">Acciones</th>
+              @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
+                <th class="px-1 py-2 text-center font-semibold text-xs whitespace-nowrap">Cronograma</th>
+                <th class="px-1 py-2 text-center font-semibold text-xs">Comité</th>
+                <th class="px-1 py-2 text-center font-semibold text-xs whitespace-nowrap">Ver Bases</th>
+                <th class="px-1 py-2 text-center font-semibold text-xs whitespace-nowrap">Publicar Convocatoria</th>
+              }
+              @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
+                <th class="px-1 py-2 text-center font-semibold text-xs">Factores</th>
+                <th class="px-1 py-2 text-center font-semibold text-xs">Acta</th>
+              }
             </tr>
           </thead>
           <tbody>
             @if (loading()) {
               <tr>
-                <td colspan="6" class="px-3 py-8 text-center text-gray-400 text-sm">
+                <td colspan="12" class="px-3 py-8 text-center text-gray-400 text-sm">
                   <span class="animate-spin inline-block mr-2">⟳</span> Cargando convocatorias...
                 </td>
               </tr>
             } @else if (convocatorias().length === 0) {
               <tr>
-                <td colspan="6" class="px-3 py-8 text-center text-gray-400 text-sm">No se encontraron convocatorias.</td>
+                <td colspan="12" class="px-3 py-8 text-center text-gray-400 text-sm">No se encontraron convocatorias.</td>
               </tr>
             } @else {
               @for (conv of convocatorias(); track conv.idConvocatoria) {
@@ -89,8 +99,15 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
                     @if ((hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) && conv.estado === 'EN_ELABORACION' && conv.notificacionActaEnviada) {
                       <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 ml-1 align-middle"
                             title="El Comité notificó que el acta está firmada. Esta convocatoria está lista para su publicación.">
-                        ● Listo para publicar
+● Listo para publicar
                       </span>
+                    }
+                    @if ((hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) && conv.estado === 'EN_ELABORACION' && conv.comitePendienteNotificarOrh) {
+                      <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'comite']"
+                         class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 ml-1 align-middle hover:bg-rose-100"
+                         title="Debe usar «Notificar a Comité» para avisar a los usuarios con rol COMITE">
+                        ● Falta notificar comité
+                      </a>
                     }
                   </td>
                   <td class="px-3 py-2 text-gray-800 text-sm">
@@ -99,26 +116,42 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
                       <div class="text-xs text-gray-500 mt-0.5 line-clamp-2">{{ conv.objetoContratacion }}</div>
                     }
                   </td>
+                  <td class="px-1 py-2 text-center align-middle">
+                    <button
+                      (click)="abrirModal(conv.idConvocatoria)"
+                      class="btn-ghost text-xs"
+                      title="Ver / Editar convocatoria"
+                      aria-label="Ver y editar convocatoria">👁</button>
+                  </td>
                   <td class="px-3 py-2 text-gray-700 text-xs">{{ conv.requerimiento?.numeroRequerimiento || '—' }}</td>
                   <td class="px-3 py-2 text-center">
                     <app-status-badge [estado]="conv.estado" [label]="conv.estado" />
                   </td>
                   <td class="px-3 py-2 text-center text-xs text-gray-500">{{ conv.fechaPublicacion ? (conv.fechaPublicacion | datePeru) : '—' }}</td>
-                  
-                  <td class="px-3 py-2 text-center">
-                    <div class="flex justify-center gap-1 flex-wrap">
-                      <!-- Icono ver/editar (disponible para todos los estados) -->
-                      <button
-                        (click)="abrirModal(conv.idConvocatoria)"
-                        class="btn-ghost text-xs"
-                        title="Ver / Editar convocatoria"
-                        aria-label="Ver y editar convocatoria">👁</button>
 
-                      @if (conv.estado === 'EN_ELABORACION') {
-                        <!-- ORH: Cronograma (siempre), Comité (cronograma conformado), Ver bases (bases generables), Publicar (bases + acta firmada) -->
-                        @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
+                  @if (conv.estado === 'DESIERTA' || conv.estado === 'CANCELADA') {
+                    @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
+                      <td colspan="4" class="px-3 py-2 text-center text-xs text-gray-400">Sin acciones</td>
+                    }
+                    @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
+                      <td colspan="2" class="px-3 py-2 text-center text-xs text-gray-400">Sin acciones</td>
+                    }
+                  } @else {
+                    @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
                           <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'cronograma']"
                             class="btn-ghost text-xs" title="Cronograma" aria-label="Ir a cronograma">📅</a>
+                        } @else if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'cronograma']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Cronograma (solo lectura)" aria-label="Cronograma en solo lectura">📅</a>
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
+                        }
+                      </td>
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
                           @if (conv.cronogramaConformado) {
                             <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'comite']"
                               class="btn-ghost text-xs" title="Comité" aria-label="Ir a comité">👥</a>
@@ -127,6 +160,16 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
                               title="Comité: requiere cronograma conformado (5 actividades)"
                               aria-label="Comité deshabilitado: cronograma pendiente">👥</span>
                           }
+                        } @else if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'comite']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Comité (solo lectura)" aria-label="Comité en solo lectura">👥</a>
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
+                        }
+                      </td>
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
                           @if (conv.basesGeneradas) {
                             <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'bases']"
                               class="btn-ghost text-xs" title="Ver bases" aria-label="Ver bases PDF">📄</a>
@@ -135,6 +178,15 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
                               title="Ver bases: requiere cronograma y factores con peso 100%"
                               aria-label="Ver bases deshabilitado">📄</span>
                           }
+                        } @else if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'bases']"
+                            class="btn-ghost text-xs" title="Ver bases PDF" aria-label="Ver bases PDF">📄</a>
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
+                        }
+                      </td>
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
                           @if (conv.basesGeneradas && conv.tieneActaFirmada) {
                             <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'publicar']"
                               class="btn-ghost text-xs" title="Publicar" aria-label="Publicar convocatoria">🚀</a>
@@ -143,48 +195,48 @@ import { NotificacionService } from '@features/notificaciones/services/notificac
                               title="Publicar: requiere bases generadas y acta de instalación firmada"
                               aria-label="Publicar deshabilitado">🚀</span>
                           }
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
                         }
-                        <!-- COMITÉ: Factores y Acta — solo si ORH registró el comité -->
-                        @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
+                      </td>
+                    }
+                    @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
                           @if (hasRole('ROLE_ADMIN') || comiteRegistrado(conv.idConvocatoria)) {
                             <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
                               class="btn-ghost text-xs" title="Factores" aria-label="Ir a factores">⚖️</a>
+                          } @else {
+                            <span class="btn-ghost text-xs opacity-40 cursor-not-allowed"
+                              title="Requiere que ORH registre el comité" aria-label="Factores deshabilitado">⚖️</span>
+                          }
+                        } @else if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
+                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
+                            [queryParams]="{ modo: 'lectura' }"
+                            class="btn-ghost text-xs" title="Factores (solo lectura)" aria-label="Factores en solo lectura">⚖️</a>
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
+                        }
+                      </td>
+                      <td class="px-1 py-2 text-center align-middle">
+                        @if (conv.estado === 'EN_ELABORACION') {
+                          @if (hasRole('ROLE_ADMIN') || comiteRegistrado(conv.idConvocatoria)) {
                             <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'acta']"
                               class="btn-ghost text-xs" title="Acta" aria-label="Ir a acta">📋</a>
                           } @else {
                             <span class="btn-ghost text-xs opacity-40 cursor-not-allowed"
-                              title="Requiere que ORH registre el comité" aria-label="Factores deshabilitado">⚖️</span>
-                            <span class="btn-ghost text-xs opacity-40 cursor-not-allowed"
                               title="Requiere que ORH registre el comité" aria-label="Acta deshabilitada">📋</span>
                           }
-                        }
-                      }
-                      @if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
-                        <!-- Solo lectura: mismos iconos que EN_ELABORACION pero sin Publicar -->
-                        @if (hasRole('ROLE_ORH') || hasRole('ROLE_ADMIN')) {
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'cronograma']"
-                            [queryParams]="{ modo: 'lectura' }"
-                            class="btn-ghost text-xs" title="Cronograma (solo lectura)">📅</a>
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'comite']"
-                            [queryParams]="{ modo: 'lectura' }"
-                            class="btn-ghost text-xs" title="Comité (solo lectura)">👥</a>
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'bases']"
-                            class="btn-ghost text-xs" title="Ver bases PDF">📄</a>
-                        }
-                        @if (hasRole('ROLE_COMITE') || hasRole('ROLE_ADMIN')) {
-                          <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'factores']"
-                            [queryParams]="{ modo: 'lectura' }"
-                            class="btn-ghost text-xs" title="Factores (solo lectura)">⚖️</a>
+                        } @else if (conv.estado === 'PUBLICADA' || conv.estado === 'EN_SELECCION' || conv.estado === 'FINALIZADA' || conv.estado === 'APROBADA') {
                           <a [routerLink]="['/sistema/convocatoria', conv.idConvocatoria, 'acta']"
                             [queryParams]="{ modo: 'lectura' }"
-                            class="btn-ghost text-xs" title="Acta (solo lectura)">📋</a>
+                            class="btn-ghost text-xs" title="Acta (solo lectura)" aria-label="Acta en solo lectura">📋</a>
+                        } @else {
+                          <span class="text-gray-400" aria-hidden="true">—</span>
                         }
-                      }
-                      @if (conv.estado === 'DESIERTA' || conv.estado === 'CANCELADA') {
-                        <span class="text-xs text-gray-400">Sin acciones</span>
-                      }
-                    </div>
-                  </td>
+                      </td>
+                    }
+                  }
 
                 </tr>
               }

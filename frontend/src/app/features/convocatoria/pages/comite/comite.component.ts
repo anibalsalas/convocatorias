@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { startWith } from 'rxjs';
+import { Observable, Subject, startWith, take } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ToastService } from '@core/services/toast.service';
@@ -250,14 +250,7 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
                     {{ savingNotificar() ? 'Notificando...' : 'Notificar a Comité' }}
                   </button>
                 }
-                <a [routerLink]="['/sistema/convocatoria', idConvocatoria, 'factores']"
-                  class="btn-primary"
-                  [class.opacity-50]="!puedeIrAFactores()"
-                  [class.pointer-events-none]="!puedeIrAFactores()"
-                  [attr.aria-disabled]="!puedeIrAFactores()"
-                  [title]="puedeIrAFactores() ? 'Ir a Factores' : 'Requiere mínimo 3 miembros con Pdte., Sec. y Vocal'">
-                  Continuar a Factores →
-                </a>
+              
               </div>
             }
           </div>
@@ -463,6 +456,15 @@ const ACFFAA_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@acffaa\.gob\.pe$/;
         [confirmDanger]="true"
         (confirm)="onEliminarConfirmado()"
         (cancel)="showDeleteConfirm.set(false)" />
+
+      <app-confirm-dialog
+        [open]="showLeaveConfirm()"
+        title="Notificación al comité pendiente"
+        message="Aún no ha usado «Notificar a Comité». Si sale ahora, los miembros no recibirán el aviso institucional hasta que regrese y complete ese paso. ¿Desea salir de todas formas?"
+        confirmText="Sí, salir"
+        cancelText="Permanecer"
+        (confirm)="onLeaveConfirm()"
+        (cancel)="onLeaveCancel()" />
     </div>
   `,
 })
@@ -528,6 +530,8 @@ export class ComiteComponent {
   readonly idMiembroEditando = signal<number | null>(null);
   readonly showDeleteConfirm = signal(false);
   readonly miembroAEliminar = signal<MiembroDetalleItem | null>(null);
+  readonly showLeaveConfirm = signal(false);
+  private readonly leaveDecision$ = new Subject<boolean>();
 
   // ── Formulario de captura única (compartido entre batch y CRUD) ──
   readonly captureForm = this.fb.group({
@@ -566,6 +570,35 @@ export class ComiteComponent {
   private readonly fechaStatus = toSignal(
     this.ctrlFechaDesignacion.statusChanges.pipe(startWith(this.ctrlFechaDesignacion.status)),
   );
+
+  /** Usado por `comiteCanDeactivateGuard`: confirma salida si falta notificar al comité. */
+  confirmLeave(): Observable<boolean> | boolean {
+    if (!this.shouldWarnLeave()) {
+      return true;
+    }
+    this.showLeaveConfirm.set(true);
+    return this.leaveDecision$.pipe(take(1));
+  }
+
+  private shouldWarnLeave(): boolean {
+    if (this.loading()) return false;
+    if (!this.isOrh()) return false;
+    if (this.modoLectura) return false;
+    const c = this.comiteExistente();
+    if (!c) return false;
+    if (c.estado === 'COMITE_CONFORMADO') return false;
+    return this.comiteEstructuraConformada();
+  }
+
+  onLeaveConfirm(): void {
+    this.showLeaveConfirm.set(false);
+    this.leaveDecision$.next(true);
+  }
+
+  onLeaveCancel(): void {
+    this.showLeaveConfirm.set(false);
+    this.leaveDecision$.next(false);
+  }
 
   constructor() {
     if (!Number.isFinite(this.idConvocatoria) || this.idConvocatoria <= 0) {
@@ -641,7 +674,8 @@ export class ComiteComponent {
     const input = event.target as HTMLInputElement;
     const limpio = input.value.replace(/[^A-Za-z0-9\-]/g, '').toUpperCase().slice(0, 80);
     input.value = limpio;
-    this.ctrlResolucion.setValue(limpio, { emitEvent: false });
+    // emitEvent requerido: puedeGuardarBatch usa toSignal(statusChanges); false dejaba el botón deshabilitado.
+    this.ctrlResolucion.setValue(limpio, { emitEvent: true });
   }
 
   quitarDeLista(index: number): void {
@@ -851,7 +885,7 @@ export class ComiteComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res: ApiResponse<ComiteDetalleResponse>) => {
-          this.comiteExistente.set(res.data);
+          this.comiteExistente.set(res.data ?? null);
           this.loading.set(false);
         },
         error: () => {

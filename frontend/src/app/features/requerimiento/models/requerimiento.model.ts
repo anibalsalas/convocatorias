@@ -30,7 +30,8 @@ export interface ConfigurarReglasRequest {
   umbralCurricular: number;
   umbralTecnica: number;
   umbralEntrevista: number;
-  criteriosCurriculares: CriterioItem[];
+  /** Opcional; la pantalla Motor RF-14 envía []. */
+  criteriosCurriculares?: CriterioItem[];
 }
 
 export interface CondicionPerfilResumen {

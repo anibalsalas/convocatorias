@@ -99,6 +99,16 @@ export const routes: Routes = [
             (m) => m.MisResultadosComponent,
           ),
       },
+      // ── V34: Examen Técnico Virtual — Postulante ────────────────────────
+      {
+        path: 'examen/:id/:idPost',
+        canActivate: [authGuard],
+        data: { roles: ['ROLE_POSTULANTE'] },
+        loadComponent: () =>
+          import('@features/seleccion/pages/examen-virtual/examen-virtual.component').then(
+            (m) => m.ExamenVirtualComponent,
+          ),
+      },
       { path: '', redirectTo: 'convocatorias', pathMatch: 'full' },
     ],
   },
@@ -157,6 +167,16 @@ export const routes: Routes = [
         data: { roles: ['ROLE_ADMIN'] },
         loadChildren: () =>
           import('@features/admin/admin.routes').then((m) => m.adminRoutes),
+      },
+      // V34 — Banco de preguntas accesible por AREA_SOLICITANTE (fuera de módulo Selección)
+      {
+        path: 'banco-preguntas/:id',
+        canActivate: [authGuard],
+        data: { roles: ['ROLE_ADMIN', 'ROLE_AREA_SOLICITANTE'] },
+        loadComponent: () =>
+          import('@features/seleccion/pages/banco-preguntas/banco-preguntas.component').then(
+            (m) => m.BancoPreguntasComponent,
+          ),
       },
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
     ],

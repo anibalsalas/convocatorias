@@ -9,8 +9,11 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -20,8 +23,8 @@ import java.util.Optional;
  */
 public class ResultadosCurricularPdfGenerator {
 
-    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 14, Font.BOLD);
-    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 11, Font.BOLD);
+    private static final Font TITLE_FONT    = new Font(Font.HELVETICA, 12, Font.BOLD);
+    private static final Font SUBTITLE_FONT = new Font(Font.HELVETICA, 12, Font.BOLD);
     private static final Font SECTION_FONT  = new Font(Font.HELVETICA, 10, Font.BOLD);
     private static final Font BODY_FONT     = new Font(Font.HELVETICA, 9,  Font.NORMAL);
     private static final Font BODY_BOLD     = new Font(Font.HELVETICA, 9,  Font.BOLD);
@@ -36,7 +39,13 @@ public class ResultadosCurricularPdfGenerator {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
+    /** Sobrecarga retrocompatible — sin aviso de examen virtual. */
     public byte[] generar(Convocatoria conv, List<Postulacion> postulaciones, BigDecimal umbralCurricular) {
+        return generar(conv, postulaciones, umbralCurricular, null, null);
+    }
+
+    public byte[] generar(Convocatoria conv, List<Postulacion> postulaciones, BigDecimal umbralCurricular,
+                          ConfigExamen configExamen, Cronograma cronoTecnica) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4, 36, 36, 60, 40);
             PdfWriter writer = PdfWriter.getInstance(doc, baos);
@@ -47,6 +56,11 @@ public class ResultadosCurricularPdfGenerator {
             agregarTabla(doc, postulaciones, umbralCurricular);
             agregarPie(doc);
 
+            boolean hayAptos = postulaciones.stream().anyMatch(p -> esAptoPorPuntaje(p, umbralCurricular));
+            if (Boolean.TRUE.equals(conv.getExamenVirtualHabilitado()) && hayAptos && configExamen != null) {
+                agregarAvisoExamenVirtual(doc, configExamen, cronoTecnica);
+            }
+
             doc.close();
             return baos.toByteArray();
         } catch (Exception e) {
@@ -55,17 +69,18 @@ public class ResultadosCurricularPdfGenerator {
     }
 
     private void agregarTitulo(Document doc, Convocatoria conv, List<Postulacion> posts, BigDecimal umbral) throws DocumentException {
-        Paragraph titulo = new Paragraph();
-        titulo.setAlignment(Element.ALIGN_CENTER);
-        titulo.add(new Chunk("AGENCIA DE COMPRAS DE LAS FUERZAS ARMADAS", SUBTITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("MINISTERIO DE DEFENSA", BODY_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("RESULTADOS DE EVALUACIÓN CURRICULAR — RF-09", TITLE_FONT));
-        titulo.add(Chunk.NEWLINE);
-        titulo.add(new Chunk("PROCESO " + conv.getNumeroConvocatoria(), SUBTITLE_FONT));
-        doc.add(titulo);
+        ResultadosPdfInstitucionalHeader.addTo(doc);
+        Paragraph pProceso = new Paragraph("PROCESO " + conv.getNumeroConvocatoria() + " – ACFFAA", TITLE_FONT);
+        pProceso.setAlignment(Element.ALIGN_CENTER);
+        pProceso.setSpacingAfter(8f);
+        doc.add(pProceso);
+
+        Paragraph pResultados = new Paragraph();
+        pResultados.setAlignment(Element.ALIGN_CENTER);
+        pResultados.add(new Chunk("RESULTADOS DE LA EVALUACIÓN CURRICULAR", TITLE_FONT));
+        pResultados.add(Chunk.NEWLINE);
+        pResultados.add(new Chunk("DE " + truncarObjeto(conv.getObjetoContratacion()).toUpperCase() + ".", SUBTITLE_FONT));
+        doc.add(pResultados);
         doc.add(espaciado());
 
         PdfPTable info = new PdfPTable(4);
@@ -133,6 +148,45 @@ public class ResultadosCurricularPdfGenerator {
         doc.add(firma);
     }
 
+    private void agregarAvisoExamenVirtual(Document doc, ConfigExamen config, Cronograma cronoTecnica)
+            throws DocumentException {
+        doc.add(espaciado());
+
+        Locale esLocale = new Locale("es", "PE");
+        DateTimeFormatter fmtFechaLarga = DateTimeFormatter.ofPattern("EEEE dd 'de' MMMM", esLocale);
+        DateTimeFormatter fmtHora = DateTimeFormatter.ofPattern("hh:mm a", esLocale);
+
+        // Fecha: del cronograma EVAL_TECNICA si existe, si no de la config
+        LocalDate fechaExamen = cronoTecnica != null ? cronoTecnica.getFechaInicio()
+                : config.getFechaHoraInicio().toLocalDate();
+        String diaSemana = fechaExamen.getDayOfWeek().getDisplayName(TextStyle.FULL, esLocale);
+        String fechaTexto = diaSemana + " " + fechaExamen.getDayOfMonth()
+                + " de " + fechaExamen.getMonth().getDisplayName(TextStyle.FULL, esLocale);
+
+        // Hora de inicio de la configuración del examen virtual
+        LocalTime horaInicio = config.getFechaHoraInicio().toLocalTime();
+        String horaTexto = horaInicio.format(fmtHora);
+
+        // Lugar: del cronograma si tiene, sino sede por defecto
+        String lugar = (cronoTecnica != null && cronoTecnica.getLugar() != null
+                && !cronoTecnica.getLugar().isBlank())
+                ? cronoTecnica.getLugar()
+                : "la sede de la ACFFAA Av. Arequipa N°310 – Cercado de Lima";
+
+        Paragraph aviso = new Paragraph();
+        aviso.setSpacingBefore(10);
+        aviso.add(new Chunk("A LOS CANDIDATOS/AS APTOS/AS.", BODY_BOLD));
+        aviso.add(Chunk.NEWLINE);
+        aviso.add(new Chunk("Deberán rendir su evaluación técnica el día ", BODY_FONT));
+        aviso.add(new Chunk(fechaTexto, BODY_BOLD));
+        aviso.add(new Chunk(" a las ", BODY_FONT));
+        aviso.add(new Chunk(horaTexto, BODY_BOLD));
+        aviso.add(new Chunk(",", BODY_FONT));
+        aviso.add(Chunk.NEWLINE);
+        aviso.add(new Chunk("en " + lugar + ".", BODY_FONT));
+        doc.add(aviso);
+    }
+
     private void addInfoCell(PdfPTable table, String label, String value) {
         PdfPCell lbl = new PdfPCell(new Phrase(label, BODY_BOLD));
         lbl.setBorder(Rectangle.NO_BORDER); lbl.setPadding(3);
@@ -175,6 +229,12 @@ public class ResultadosCurricularPdfGenerator {
     }
 
     private String safe(String val) { return val != null ? val : "—"; }
+
+    private String truncarObjeto(String obj) {
+        if (obj == null) return "—";
+        int idx = obj.toUpperCase().indexOf("PARA LA OFICINA");
+        return idx > 0 ? obj.substring(0, idx).trim() : obj;
+    }
 
     private Paragraph espaciado() {
         Paragraph p = new Paragraph(" ");

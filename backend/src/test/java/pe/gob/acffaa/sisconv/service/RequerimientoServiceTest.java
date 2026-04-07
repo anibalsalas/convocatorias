@@ -21,6 +21,7 @@ import pe.gob.acffaa.sisconv.application.dto.response.RequerimientoResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.RequerimientoResponse.MotorReglasResumen;
 import pe.gob.acffaa.sisconv.application.mapper.RequerimientoMapper;
 import pe.gob.acffaa.sisconv.application.port.IAuditPort;
+import pe.gob.acffaa.sisconv.application.service.NotificacionService;
 import pe.gob.acffaa.sisconv.application.service.RequerimientoService;
 import pe.gob.acffaa.sisconv.domain.enums.EstadoRequerimiento;
 import pe.gob.acffaa.sisconv.domain.exception.DomainException;
@@ -28,6 +29,7 @@ import pe.gob.acffaa.sisconv.domain.exception.ResourceNotFoundException;
 import pe.gob.acffaa.sisconv.domain.model.PerfilPuesto;
 import pe.gob.acffaa.sisconv.domain.model.ReglaMotor;
 import pe.gob.acffaa.sisconv.domain.model.Requerimiento;
+import pe.gob.acffaa.sisconv.domain.repository.IConvocatoriaRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPerfilPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IReglaMotorRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
@@ -60,8 +62,10 @@ class RequerimientoServiceTest {
     @Mock private IRequerimientoRepository reqRepo;
     @Mock private IPerfilPuestoRepository perfilRepo;
     @Mock private IReglaMotorRepository reglaRepo;
+    @Mock private IConvocatoriaRepository convRepo;
     @Mock private RequerimientoMapper mapper;
     @Mock private IAuditPort auditPort;
+    @Mock private NotificacionService notificacionService;
 
     @InjectMocks
     private RequerimientoService service;
@@ -78,6 +82,7 @@ class RequerimientoServiceTest {
                 .idPerfilPuesto(1L)
                 .denominacionPuesto("Analista Programador")
                 .estado("APROBADO")
+                .idAreaSolicitante(4L)
                 .build();
 
         perfilPendiente = PerfilPuesto.builder()
@@ -126,6 +131,13 @@ class RequerimientoServiceTest {
                 .estado("ELABORADO")
                 .tienePresupuesto(false)
                 .build();
+
+        lenient().when(reglaRepo.findByIdRequerimiento(anyLong())).thenReturn(List.of());
+        lenient().when(convRepo.existsByIdRequerimiento(anyLong())).thenReturn(false);
+        lenient().doNothing().when(notificacionService).notificarRol(
+                anyString(), anyString(), anyString(), anyString());
+        lenient().doNothing().when(notificacionService).notificarUsuario(
+                anyLong(), anyString(), anyString(), anyString());
     }
 
     // ═══════════════════════════════════════════════════════
@@ -152,7 +164,7 @@ class RequerimientoServiceTest {
             doNothing().when(auditPort).registrar(anyString(), anyLong(), anyString(),
                     any(), anyString(), any(), anyString());
 
-            RequerimientoResponse result = service.crear(request, "admin", 1L, null);
+            RequerimientoResponse result = service.crear(request, "admin", 1L, null, false);
 
             assertNotNull(result);
             assertEquals("REQ-2026-0001", result.getNumeroRequerimiento());
@@ -175,7 +187,7 @@ class RequerimientoServiceTest {
             when(perfilRepo.findById(999L)).thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class,
-                    () -> service.crear(request, "admin", 1L, null));
+                    () -> service.crear(request, "admin", 1L, null, false));
         }
 
         @Test
@@ -189,9 +201,57 @@ class RequerimientoServiceTest {
             when(perfilRepo.findById(2L)).thenReturn(Optional.of(perfilPendiente));
 
             DomainException ex = assertThrows(DomainException.class,
-                    () -> service.crear(request, "admin", 1L, null));
+                    () -> service.crear(request, "admin", 1L, null, false));
             assertTrue(ex.getMessage().contains("APROBADO"));
             assertTrue(ex.getMessage().contains("PENDIENTE"));
+        }
+
+        @Test
+        @DisplayName("E6: Debe rechazar si idAreaSolicitante no coincide con el área del perfil (no ADMIN)")
+        void crear_areaSolicitanteNoCoincideConPerfil_debeLanzarDomainException() {
+            RequerimientoRequest request = new RequerimientoRequest();
+            request.setIdAreaSolicitante(4L);
+            request.setIdPerfilPuesto(1L);
+            request.setJustificacion("Test");
+            request.setCantidadPuestos(1);
+
+            PerfilPuesto perfilOtraArea = PerfilPuesto.builder()
+                    .idPerfilPuesto(1L)
+                    .denominacionPuesto("Analista Programador")
+                    .estado("APROBADO")
+                    .idAreaSolicitante(99L)
+                    .build();
+            when(perfilRepo.findById(1L)).thenReturn(Optional.of(perfilOtraArea));
+
+            DomainException ex = assertThrows(DomainException.class,
+                    () -> service.crear(request, "area_user", 1L, null, false));
+            assertTrue(ex.getMessage().contains("área solicitante"));
+        }
+
+        @Test
+        @DisplayName("E6: ADMIN puede omitir la validación de área (coherencia delegada)")
+        void crear_adminPuedeOmitirValidacionArea() {
+            RequerimientoRequest request = new RequerimientoRequest();
+            request.setIdAreaSolicitante(4L);
+            request.setIdPerfilPuesto(1L);
+            request.setJustificacion("Corrección datos");
+            request.setCantidadPuestos(1);
+
+            PerfilPuesto perfilOtraArea = PerfilPuesto.builder()
+                    .idPerfilPuesto(1L)
+                    .denominacionPuesto("Analista Programador")
+                    .estado("APROBADO")
+                    .idAreaSolicitante(99L)
+                    .build();
+            when(perfilRepo.findById(1L)).thenReturn(Optional.of(perfilOtraArea));
+            when(reqRepo.countByAnio(anyInt())).thenReturn(0L);
+            when(reqRepo.save(any(Requerimiento.class))).thenReturn(reqElaborado);
+            when(mapper.toResponse(any(Requerimiento.class))).thenReturn(responseMock);
+            doNothing().when(auditPort).registrar(anyString(), anyLong(), anyString(),
+                    any(), anyString(), any(), anyString());
+
+            assertDoesNotThrow(() -> service.crear(request, "admin", 1L, null, true));
+            verify(reqRepo).save(any(Requerimiento.class));
         }
 
         @Test
@@ -225,7 +285,7 @@ class RequerimientoServiceTest {
             doNothing().when(auditPort).registrar(anyString(), anyLong(), anyString(),
                     any(), anyString(), any(), anyString());
 
-            RequerimientoResponse result = service.crear(request, "admin", 1L, null);
+            RequerimientoResponse result = service.crear(request, "admin", 1L, null, false);
 
             assertEquals("REQ-2026-0002", result.getNumeroRequerimiento());
             assertEquals(2, result.getCantidadPuestos());
@@ -425,6 +485,46 @@ class RequerimientoServiceTest {
         }
 
         @Test
+        @DisplayName("E8-OK: Sin criterios curriculares → solo 3 reglas CALCULO")
+        void configurar_sinCriteriosCurriculares_soloReglasCalculo() {
+            ConfigurarReglasRequest request = buildValidRequest();
+            request.setCriteriosCurriculares(List.of());
+
+            when(reqRepo.findById(1L)).thenReturn(Optional.of(reqConPresupuesto));
+            when(reqRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(reglaRepo.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            RequerimientoResponse mockResp = RequerimientoResponse.builder()
+                    .idRequerimiento(1L).estado("CONFIGURADO")
+                    .motorReglas(MotorReglasResumen.builder()
+                            .pesoEvalCurricular(new BigDecimal("30.00"))
+                            .pesoEvalTecnica(new BigDecimal("35.00"))
+                            .pesoEntrevista(new BigDecimal("35.00"))
+                            .totalPesos(new BigDecimal("100.00"))
+                            .criteriosRegistrados(0)
+                            .build())
+                    .build();
+            when(mapper.toResponseConMotor(any(), any())).thenReturn(mockResp);
+
+            RequerimientoResponse result = service.configurarReglas(
+                    1L, request, "orh_user", 2L, null);
+
+            assertNotNull(result);
+            assertEquals("Motor de Reglas configurado. Listo para Etapa 2.", result.getMensaje());
+            assertEquals(0, result.getMotorReglas().getCriteriosRegistrados());
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<ReglaMotor>> captor = ArgumentCaptor.forClass(List.class);
+            verify(reglaRepo).saveAll(captor.capture());
+            List<ReglaMotor> reglas = captor.getValue();
+            assertEquals(3, reglas.size());
+            assertEquals("CALCULO", reglas.get(0).getTipoRegla());
+            assertEquals("CALCULO", reglas.get(1).getTipoRegla());
+            assertEquals("CALCULO", reglas.get(2).getTipoRegla());
+            verify(reqRepo).save(argThat(r -> "CONFIGURADO".equals(r.getEstado())));
+        }
+
+        @Test
         @DisplayName("E8-ERR: Pesos no suman 100% → DomainException")
         void configurar_pesosNoSuman100_lanzaExcepcion() {
             ConfigurarReglasRequest request = buildValidRequest();
@@ -469,8 +569,8 @@ class RequerimientoServiceTest {
         @Test
         @DisplayName("Debe obtener requerimiento existente por ID")
         void obtenerPorId_existente_debeRetornar() {
-            when(reqRepo.findById(1L)).thenReturn(Optional.of(reqElaborado));
-            when(mapper.toResponse(reqElaborado)).thenReturn(responseMock);
+            when(reqRepo.findByIdWithProfileAndCondition(1L)).thenReturn(Optional.of(reqElaborado));
+            when(mapper.toResponseConMotor(eq(reqElaborado), anyList())).thenReturn(responseMock);
 
             RequerimientoResponse result = service.obtenerPorId(1L);
 
@@ -482,7 +582,7 @@ class RequerimientoServiceTest {
         @Test
         @DisplayName("Debe lanzar excepción si requerimiento no existe")
         void obtenerPorId_noExistente_debeLanzarExcepcion() {
-            when(reqRepo.findById(999L)).thenReturn(Optional.empty());
+            when(reqRepo.findByIdWithProfileAndCondition(999L)).thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class,
                     () -> service.obtenerPorId(999L));
@@ -495,7 +595,7 @@ class RequerimientoServiceTest {
             Page<Requerimiento> page = new PageImpl<>(List.of(reqElaborado), pageable, 1);
 
             when(reqRepo.findByEstado("ELABORADO", pageable)).thenReturn(page);
-            when(mapper.toResponse(any(Requerimiento.class))).thenReturn(responseMock);
+            when(mapper.toResponseConMotor(any(Requerimiento.class), anyList())).thenReturn(responseMock);
 
             Page<RequerimientoResponse> result = service.listar("ELABORADO", null, pageable);
 
@@ -510,7 +610,7 @@ class RequerimientoServiceTest {
             Page<Requerimiento> page = new PageImpl<>(List.of(reqElaborado), pageable, 1);
 
             when(reqRepo.findByIdAreaSolicitante(4L, pageable)).thenReturn(page);
-            when(mapper.toResponse(any(Requerimiento.class))).thenReturn(responseMock);
+            when(mapper.toResponseConMotor(any(Requerimiento.class), anyList())).thenReturn(responseMock);
 
             Page<RequerimientoResponse> result = service.listar(null, 4L, pageable);
 
@@ -525,7 +625,7 @@ class RequerimientoServiceTest {
             Page<Requerimiento> page = new PageImpl<>(List.of(reqElaborado), pageable, 1);
 
             when(reqRepo.findAll(pageable)).thenReturn(page);
-            when(mapper.toResponse(any(Requerimiento.class))).thenReturn(responseMock);
+            when(mapper.toResponseConMotor(any(Requerimiento.class), anyList())).thenReturn(responseMock);
 
             Page<RequerimientoResponse> result = service.listar(null, null, pageable);
 

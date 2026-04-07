@@ -20,6 +20,11 @@ export const requerimientoRoutes: Routes = [
     loadComponent: () => import('./pages/perfil-form/perfil-form.component').then(m => m.PerfilFormComponent),
   },
   {
+    path: 'perfil/:id/ver',
+    loadComponent: () => import('./pages/perfil-form/perfil-form.component').then(m => m.PerfilFormComponent),
+    data: { soloLectura: true },
+  },
+  {
     path: 'perfil/:id/validar',
     loadComponent: () => import('./pages/perfil-validar/perfil-validar.component').then(m => m.PerfilValidarComponent),
   },

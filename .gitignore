@@ -4,6 +4,7 @@
 *.local
 credentials.json
 
+
 # --- JAVA / SPRING BOOT ---
 **/target/
 **/build/
@@ -44,6 +45,7 @@ Thumbs.db
 CLAUDE
 dll/
 docs/ 
+.claude/APPROVED
 # --- ARCHIVOS DE PROCESO Y CARGAS (SISCONV) ---
 # Ignoramos las carpetas completas de almacenamiento de documentos
 **/actas/

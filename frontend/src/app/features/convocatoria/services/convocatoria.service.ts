@@ -4,7 +4,7 @@ import { ApiService } from '@core/http/api.service';
 import { ApiResponse } from '@shared/models/api-response.model';
 import { Page, PageRequest } from '@shared/models/pagination.model';
 import {
-  ActividadCronogramaResponse, ActaResponse, AprobarConvocatoriaRequest,
+  ActividadCronogramaResponse, ActaResponse, AprobarConvocatoriaRequest, AvisoBancoAreaResponse,
   ComiteDetalleResponse, ComiteRequest, ComiteResponse, ConvocatoriaFiltros,
   ConvocatoriaRequest, ConvocatoriaResponse, CronogramaRequest, CronogramaResponse,
   FactorDetalleResponse, FactorEvaluacionRequest, FactorEvaluacionResponse,
@@ -133,11 +133,33 @@ export class ConvocatoriaService {
     return this.api.getBlob(`${this.path}/${id}/bases-pdf`);
   }
 
+  cargarBasesPdfFirmado(id: number, archivo: File): Observable<ApiResponse<ConvocatoriaResponse>> {
+    const fd = new FormData();
+    fd.append('archivo', archivo);
+    return this.api.put<ConvocatoriaResponse>(`${this.path}/${id}/bases-pdf-firmado/cargar`, fd);
+  }
+
+  descargarBasesPdfFirmado(id: number): Observable<Blob> {
+    return this.api.getBlob(`${this.path}/${id}/bases-pdf-firmado`);
+  }
+
   contarPendientesComite(): Observable<ApiResponse<number>> {
     return this.api.get<number>(`${this.path}/count-pendientes-comite`);
   }
 
   contarPendientesPublicar(): Observable<ApiResponse<number>> {
     return this.api.get<number>(`${this.path}/count-pendientes-publicar`);
+  }
+
+  pendientesBanco(): Observable<ApiResponse<AvisoBancoAreaResponse[]>> {
+    return this.api.get<AvisoBancoAreaResponse[]>(`${this.path}/pendientes-banco`);
+  }
+
+  listarBancoCargadoPendienteConfigOrh(): Observable<ApiResponse<ConvocatoriaResponse[]>> {
+    return this.api.get<ConvocatoriaResponse[]>(`${this.path}/banco-cargado-pendiente-config-orh`);
+  }
+
+  listarPendientesNotificarComiteOrh(): Observable<ApiResponse<ConvocatoriaResponse[]>> {
+    return this.api.get<ConvocatoriaResponse[]>(`${this.path}/pendientes-notificar-comite-orh`);
   }
 }

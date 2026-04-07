@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * DTO de entrada para E8: Configurar Motor de Reglas RF-14.
  * Tarea BPMN: Configurar Pesos Ponderados y Umbrales Motor RF-14 (Etapa 1 — ORH).
- * CU-05: "ORH define pesos (sum=100%), umbrales mínimos, criterios curriculares."
+ * CU-05: ORH define pesos (sum=100%) y umbrales mínimos; criterios curriculares son opcionales.
  *
  * Coherencia: Endpoints_DTOs_v2 §2 E8 Request
  *
@@ -44,8 +44,8 @@ public class ConfigurarReglasRequest {
     @DecimalMin(value = "0.00", message = "Umbral no puede ser negativo")
     private BigDecimal umbralEntrevista;
 
+    /** Vacío o null: no se crean reglas FILTRO. */
     @Valid
-    @NotEmpty(message = "Debe registrar al menos un criterio curricular")
     private List<CriterioItem> criteriosCurriculares;
 
     /**

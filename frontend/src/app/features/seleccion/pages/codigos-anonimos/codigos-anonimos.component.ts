@@ -12,12 +12,13 @@ import { SeleccionService } from '../../services/seleccion.service';
 import { ConvocatoriaService } from '@features/convocatoria/services/convocatoria.service';
 import { ToastService } from '@core/services/toast.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
+import { ConfirmDialogComponent } from '@shared/components/confirm-dialog/confirm-dialog.component';
 import { PostulacionSeleccion } from '../../models/seleccion.model';
 
 @Component({
   selector: 'app-codigos-anonimos',
   standalone: true,
-  imports: [RouterLink, PageHeaderComponent],
+  imports: [RouterLink, PageHeaderComponent, ConfirmDialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="space-y-4">
@@ -200,6 +201,16 @@ import { PostulacionSeleccion } from '../../models/seleccion.model';
         }
       }
     </div>
+
+    <app-confirm-dialog
+      [open]="mostrarAvisoNotificarComite()"
+      [title]="avisoNotificarComiteTitle"
+      [message]="avisoNotificarComiteMessage"
+      cancelText="Más tarde"
+      confirmText="Entendido"
+      [confirmDanger]="false"
+      (confirm)="cerrarAvisoNotificarComite()"
+      (cancel)="cerrarAvisoNotificarComite()" />
   `,
 })
 export class CodigosAnonimosComponent {
@@ -214,9 +225,17 @@ export class CodigosAnonimosComponent {
   readonly asignando = signal(false);
   readonly notificando = signal(false);
   readonly mostrarConfirmacion = signal(false);
+  /** Recordatorio ORH: códigos listos pero aún no se notificó al Comité (E25 → E26). */
+  readonly mostrarAvisoNotificarComite = signal(false);
   readonly postulantes = signal<PostulacionSeleccion[]>([]);
   readonly notificacionEnviada = signal(false);
   readonly mensajeNotificacion = signal('');
+
+  readonly avisoNotificarComiteTitle = 'Pendiente: notificar al Comité';
+  readonly avisoNotificarComiteMessage =
+    'Los códigos anónimos ya están asignados. Debe usar el botón «Notificar al Comité» en esta pantalla ' +
+    'para que el Comité pueda continuar con E26 — Evaluación Técnica (D.L. 1451). ' +
+    'Hasta enviar esa notificación, el flujo no queda completo para el Comité.';
 
   readonly aptos = computed(() =>
     this.postulantes().filter((p) => p.estado === 'APTO'),
@@ -260,8 +279,12 @@ export class CodigosAnonimosComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (r) => {
-          this.notificacionEnviada.set(r.data?.notificacionCodigosEnviada === true);
+          const enviada = r.data?.notificacionCodigosEnviada === true;
+          this.notificacionEnviada.set(enviada);
           this.loading.set(false);
+          if (this.yaAsignados() && !enviada) {
+            this.mostrarAvisoNotificarComite.set(true);
+          }
         },
         error: () => this.loading.set(false),
       });
@@ -287,6 +310,9 @@ export class CodigosAnonimosComponent {
           this.toast.success(
             `Códigos asignados a ${res.length} postulante(s). Notifique al Comité para proceder con E26.`,
           );
+          if (!this.notificacionEnviada()) {
+            this.mostrarAvisoNotificarComite.set(true);
+          }
         },
         error: (err: { error?: { message?: string } }) => {
           this.toast.error(err?.error?.message ?? 'Error al asignar códigos anónimos.');
@@ -308,6 +334,7 @@ export class CodigosAnonimosComponent {
           this.notificacionEnviada.set(true);
           this.mensajeNotificacion.set(res.mensaje + ' ');
           this.notificando.set(false);
+          this.mostrarAvisoNotificarComite.set(false);
           this.toast.success(res.mensaje);
         },
         error: (err: { error?: { message?: string } }) => {
@@ -315,5 +342,9 @@ export class CodigosAnonimosComponent {
           this.notificando.set(false);
         },
       });
+  }
+
+  cerrarAvisoNotificarComite(): void {
+    this.mostrarAvisoNotificarComite.set(false);
   }
 }

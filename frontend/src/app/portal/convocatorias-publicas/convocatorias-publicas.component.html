@@ -62,7 +62,7 @@
           <thead>
             <tr>
               <th>Proceso CAS</th>
-              <th>Puesto</th>
+              <th>Detalles del Puesto</th>
               <th>Oficina</th>
               <th class="text-center">Estado</th>
               <th class="text-center">Bases y<br>Formatos</th>
@@ -105,7 +105,7 @@
               @for (c of convocatorias(); track c.idConvocatoria) {
                 <tr class="table-row-hover" [class.row-finalizada]="c.estado === 'FINALIZADA'">
                   <td class="cell-proceso">{{ c.numeroConvocatoria }}</td>
-                  <td class="cell-descripcion">{{ c.nombrePuesto || c.objetoContratacion || '—' }}</td>
+                  <td class="cell-descripcion">{{ c.objetoContratacion || c.nombrePuesto || c.descripcion || '—' }}</td>
                   <td class="cell-uppercase">{{ c.unidadOrganica || '—' }}</td>
                   <td class="text-center">
                     <app-status-badge

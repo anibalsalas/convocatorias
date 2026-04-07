@@ -18,9 +18,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 import pe.gob.acffaa.sisconv.application.dto.request.AprobarPerfilRequest;
+import pe.gob.acffaa.sisconv.domain.model.Usuario;
+import pe.gob.acffaa.sisconv.domain.repository.IUsuarioRepository;
 import pe.gob.acffaa.sisconv.application.dto.request.PerfilPuestoRequest;
 import pe.gob.acffaa.sisconv.application.dto.request.ValidarPerfilRequest;
 import pe.gob.acffaa.sisconv.application.dto.response.ApiResponse;
+import pe.gob.acffaa.sisconv.application.dto.response.DenominacionPuestoResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.NivelPuestoResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.PerfilPuestoContextResponse;
 import pe.gob.acffaa.sisconv.application.dto.response.PerfilPuestoResponse;
@@ -39,9 +42,23 @@ import pe.gob.acffaa.sisconv.application.service.PerfilPuestoService;
 public class PerfilPuestoController {
 
     private final PerfilPuestoService perfilService;
+    private final IUsuarioRepository usuarioRepo;
 
-    public PerfilPuestoController(PerfilPuestoService perfilService) {
+    public PerfilPuestoController(PerfilPuestoService perfilService, IUsuarioRepository usuarioRepo) {
         this.perfilService = perfilService;
+        this.usuarioRepo = usuarioRepo;
+    }
+
+    /** Resuelve idArea del usuario si solo tiene ROLE_AREA_SOLICITANTE (sin ORH/ADMIN/OPP). */
+    private Long resolverIdAreaSiSoloAreaSolicitante(Authentication auth) {
+        boolean esAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_ORH")
+                        || a.getAuthority().equals("ROLE_OPP"));
+        if (esAdmin) return null; // ve todo
+        return usuarioRepo.findByUsername(auth.getName())
+                .map(Usuario::getIdArea)
+                .orElse(null);
     }
 
     /**
@@ -77,8 +94,9 @@ public class PerfilPuestoController {
     @PreAuthorize("hasAnyRole('ADMIN', 'ORH', 'OPP', 'AREA_SOLICITANTE')")
     @Operation(summary = "Contar pendientes de requerimiento",
             description = "Cuenta perfiles aprobados que aún no tienen requerimiento vigente asociado")
-    public ResponseEntity<ApiResponse<Long>> contarPendientesRequerimiento() {
-        return ResponseEntity.ok(ApiResponse.ok(perfilService.contarPendientesRequerimiento()));
+    public ResponseEntity<ApiResponse<Long>> contarPendientesRequerimiento(Authentication auth) {
+        Long idArea = resolverIdAreaSiSoloAreaSolicitante(auth);
+        return ResponseEntity.ok(ApiResponse.ok(perfilService.contarPendientesRequerimiento(idArea)));
     }
 
     /**
@@ -104,6 +122,17 @@ public class PerfilPuestoController {
     }
 
     /**
+     * GET /perfiles-puesto/denominaciones-puesto - Catalogo TBL_DENOMINACION_PUESTO para select.
+     */
+    @GetMapping("/denominaciones-puesto")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AREA_SOLICITANTE', 'ORH', 'OPP')")
+    @Operation(summary = "Listar denominaciones de puesto",
+            description = "Catalogo TBL_DENOMINACION_PUESTO para select Denominación del Puesto")
+    public ResponseEntity<ApiResponse<List<DenominacionPuestoResponse>>> listarDenominacionesPuesto() {
+        return ResponseEntity.ok(ApiResponse.ok(perfilService.listarDenominacionesPuesto()));
+    }
+
+    /**
      * GET /perfiles-puesto/niveles-puesto - Catalogo TBL_NIVEL_PUESTO para select.
      */
     @GetMapping("/niveles-puesto")
@@ -123,8 +152,10 @@ public class PerfilPuestoController {
     @Operation(summary = "Listar perfiles de puesto", description = "CU-02: Listado paginado con filtro por estado")
     public ResponseEntity<ApiResponse<Page<PerfilPuestoResponse>>> listar(
             @RequestParam(required = false) String estado,
-            @PageableDefault(size = 10, sort = "fechaCreacion") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(perfilService.listar(estado, pageable)));
+            @PageableDefault(size = 10, sort = "fechaCreacion") Pageable pageable,
+            Authentication auth) {
+        Long idArea = resolverIdAreaSiSoloAreaSolicitante(auth);
+        return ResponseEntity.ok(ApiResponse.ok(perfilService.listar(estado, idArea, pageable)));
     }
 
     /**

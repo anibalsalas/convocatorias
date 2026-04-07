@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from '@core/auth/auth.guard';
+import { actaCanDeactivateGuard } from './guards/acta-can-deactivate.guard';
+import { comiteCanDeactivateGuard } from './guards/comite-can-deactivate.guard';
 
 /**
  * E3 — Rutas del módulo M02 Convocatoria (PKG-02).
@@ -29,6 +31,7 @@ export const convocatoriaRoutes: Routes = [
   {
     path: ':id/comite',
     canActivate: [authGuard],
+    canDeactivate: [comiteCanDeactivateGuard],
     data: { roles: ['ROLE_ADMIN', 'ROLE_ORH'] },
     loadComponent: () => import('./pages/comite/comite.component').then(m => m.ComiteComponent),
   },
@@ -41,6 +44,7 @@ export const convocatoriaRoutes: Routes = [
   {
     path: ':id/acta',
     canActivate: [authGuard],
+    canDeactivate: [actaCanDeactivateGuard],
     data: { roles: ['ROLE_ADMIN', 'ROLE_COMITE'] },
     loadComponent: () => import('./pages/acta/acta.component').then(m => m.ActaComponent),
   },

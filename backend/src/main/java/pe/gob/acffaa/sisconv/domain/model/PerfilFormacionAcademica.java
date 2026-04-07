@@ -24,10 +24,10 @@ public class PerfilFormacionAcademica {
     @JoinColumn(name = "ID_PERFIL_PUESTO", nullable = false)
     private PerfilPuesto perfilPuesto;
 
-    @Column(name = "GRADO_ACADEMICO", nullable = false, length = 100)
+    @Column(name = "GRADO_ACADEMICO", nullable = false, length = 500)
     private String gradoAcademico;
 
-    @Column(name = "ESPECIALIDAD", nullable = false, length = 200)
+    @Column(name = "ESPECIALIDAD", length = 200)
     private String especialidad;
 
     @Column(name = "REQUIERE_COLEGIATURA", nullable = false)

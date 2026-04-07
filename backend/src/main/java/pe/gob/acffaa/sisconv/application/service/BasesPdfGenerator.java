@@ -4,13 +4,16 @@ import com.lowagie.text.*;
 import com.lowagie.text.Font;
 import com.lowagie.text.pdf.*;
 import pe.gob.acffaa.sisconv.domain.model.*;
+import pe.gob.acffaa.sisconv.util.MontoSolesEnPalabras;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -146,10 +149,6 @@ public class BasesPdfGenerator {
         doc.add(espaciado());
 
         doc.add(seccion("II. PERFIL DEL PUESTO"));
-        if (noBlanco(perfil.getMisionPuesto()) != null) {
-            doc.add(subparrafo("Misión del Puesto:"));
-            doc.add(cuerpo(perfil.getMisionPuesto()));
-        }
         PdfPTable tabla = new PdfPTable(2);
         tabla.setWidthPercentage(100);
         tabla.setWidths(new float[]{30, 70});
@@ -197,8 +196,8 @@ public class BasesPdfGenerator {
     }
 
     /**
-     * Competencias técnicas desde TBL_PERFIL_CONOCIMIENTO (tipoConocimiento = "TÉCNICO").
-     * Fallback legal: texto explicativo si no hay datos (defensible ante SERVIR).
+     * Competencias desde TBL_PERFIL_CONOCIMIENTO (tipoConocimiento = "COMPETENCIA").
+     * Formato: texto separado por comas.
      */
     private String obtenerCompetencias(PerfilPuesto perfil) {
         List<PerfilConocimiento> lista = perfil.getConocimientos();
@@ -206,21 +205,19 @@ public class BasesPdfGenerator {
             return "No se especifican competencias adicionales. "
                  + "Evaluación en etapa de Entrevista Personal.";
 
-        String tecnicos = lista.stream()
-                .filter(c -> "TÉCNICO".equalsIgnoreCase(c.getTipoConocimiento())
+        String competencias = lista.stream()
+                .filter(c -> "COMPETENCIA".equalsIgnoreCase(c.getTipoConocimiento())
                           && c.getDescripcion() != null && !c.getDescripcion().isBlank())
                 .sorted((a, b) -> Integer.compare(
                         a.getOrden() != null ? a.getOrden() : 99,
                         b.getOrden() != null ? b.getOrden() : 99))
-                .map(c -> "- " + c.getDescripcion()
-                        + (c.getNivelDominio() != null && !"NO_APLICA".equals(c.getNivelDominio())
-                                ? " (" + c.getNivelDominio() + ")" : ""))
-                .collect(Collectors.joining("\n"));
+                .map(PerfilConocimiento::getDescripcion)
+                .collect(Collectors.joining(", "));
 
-        return tecnicos.isBlank()
+        return competencias.isBlank()
                 ? "No se especifican competencias adicionales. "
                   + "Evaluación en etapa de Entrevista Personal."
-                : tecnicos;
+                : competencias;
     }
 
     /**
@@ -237,8 +234,6 @@ public class BasesPdfGenerator {
                         b.getOrden() != null ? b.getOrden() : 99))
                 .map(f -> {
                     String linea = f.getGradoAcademico();
-                    if (f.getEspecialidad() != null && !f.getEspecialidad().isBlank())
-                        linea += " en " + f.getEspecialidad();
                     if (Boolean.TRUE.equals(f.getRequiereColegiatura()))
                         linea += " (requiere colegiatura)";
                     if (Boolean.TRUE.equals(f.getRequiereHabilitacionProfesional()))
@@ -262,8 +257,7 @@ public class BasesPdfGenerator {
                 .sorted((a, b) -> Integer.compare(
                         a.getOrden() != null ? a.getOrden() : 99,
                         b.getOrden() != null ? b.getOrden() : 99))
-                .map(c -> "- " + c.getDescripcion()
-                        + (c.getHoras() != null ? " (" + c.getHoras() + " horas)" : ""))
+                .map(c -> "- " + c.getDescripcion())
                 .collect(Collectors.joining("\n"));
 
         return resultado.isBlank() ? "—" : resultado;
@@ -271,7 +265,7 @@ public class BasesPdfGenerator {
 
     /**
      * Conocimientos para el puesto desde TBL_PERFIL_CONOCIMIENTO
-     * donde tipoConocimiento != "CURSO" y != "TÉCNICO" (OFIMÁTICA, IDIOMA, OTRO).
+     * excluyendo {@code CURSO} y {@code COMPETENCIA} (p. ej. OFIMÁTICA, IDIOMA, OTRO).
      */
     private String obtenerConocimientos(PerfilPuesto perfil) {
         List<PerfilConocimiento> lista = perfil.getConocimientos();
@@ -280,13 +274,14 @@ public class BasesPdfGenerator {
         String resultado = lista.stream()
                 .filter(c -> c.getTipoConocimiento() != null
                           && !"CURSO".equalsIgnoreCase(c.getTipoConocimiento())
-                          && !"TÉCNICO".equalsIgnoreCase(c.getTipoConocimiento())
+                          && !"COMPETENCIA".equalsIgnoreCase(c.getTipoConocimiento())
                           && c.getDescripcion() != null && !c.getDescripcion().isBlank())
+                .filter(c -> !c.getDescripcion().toLowerCase().contains("registra la formación académica requerida"))
                 .sorted((a, b) -> Integer.compare(
                         a.getOrden() != null ? a.getOrden() : 99,
                         b.getOrden() != null ? b.getOrden() : 99))
                 .map(c -> {
-                    String linea = "[" + c.getTipoConocimiento() + "] " + c.getDescripcion();
+                    String linea = c.getDescripcion();
                     if (c.getNivelDominio() != null && !"NO_APLICA".equals(c.getNivelDominio()))
                         linea += " — " + c.getNivelDominio();
                     return "- " + linea;
@@ -296,20 +291,35 @@ public class BasesPdfGenerator {
         return resultado.isBlank() ? "—" : resultado;
     }
 
-    /** III. CARACTERÍSTICAS DEL PUESTO Y/O CARGO */
+    /** III. CARACTERÍSTICAS DEL PUESTO Y/O CARGO — envoltura con Phrase (igual columna DETALLES; evita líneas demasiado cortas con Paragraph en celda). */
     private void agregarFunciones(Document doc, PerfilPuesto perfil) throws DocumentException {
+        doc.newPage();
         doc.add(seccion("III. CARACTERÍSTICAS DEL PUESTO Y/O CARGO"));
-        doc.add(subparrafo("Principales funciones a desarrollar:"));
+
+        PdfPTable bloque = new PdfPTable(1);
+        bloque.setWidthPercentage(100);
+        bloque.setWidths(new float[]{100f});
+
+        bloque.addCell(celdaSinBordeFrase("Principales actividades a desarrollar:", SUBSEC_FONT, false));
+
         List<FuncionPuesto> funciones = perfil.getFunciones();
         if (funciones != null && !funciones.isEmpty()) {
+            List<FuncionPuesto> ordenadas = funciones.stream()
+                    .sorted(Comparator
+                            .comparing((FuncionPuesto f) -> f.getOrden() != null ? f.getOrden() : 0)
+                            .thenComparing(f -> f.getIdFuncionPuesto() != null ? f.getIdFuncionPuesto() : 0L))
+                    .collect(Collectors.toList());
             char letra = 'a';
-            for (FuncionPuesto f : funciones) {
-                doc.add(cuerpo(letra + ") " + f.getDescripcionFuncion()));
+            for (FuncionPuesto f : ordenadas) {
+                String texto = letra + ". " + f.getDescripcionFuncion();
+                bloque.addCell(celdaSinBordeFrase(texto, BODY_FONT, true));
                 letra++;
             }
         } else {
-            doc.add(cuerpo("Según términos de referencia del requerimiento."));
+            bloque.addCell(celdaSinBordeFrase(
+                    "Según términos de referencia del requerimiento.", BODY_FONT, true));
         }
+        doc.add(bloque);
         doc.add(espaciado());
     }
 
@@ -325,22 +335,33 @@ public class BasesPdfGenerator {
 
         String lugar = cond != null ? valOrDash(cond.getLugarPrestacion())
                 : "Agencia de Compras de las Fuerzas Armadas\nen la Av. Arequipa 310 - Cercado – Lima";
-        String horario = (cond != null && cond.getDiasLaborales() != null
+        if (cond != null && cond.getModalidadServicio() != null && !cond.getModalidadServicio().isBlank()) {
+            lugar = lugar + "\nModalidad: " + etiquetaModalidad(cond.getModalidadServicio());
+        }
+        String horarioLinea = (cond != null && cond.getDiasLaborales() != null
                 && cond.getHorarioInicio() != null && cond.getHorarioFin() != null)
-                ? cond.getDiasLaborales() + " de " + cond.getHorarioInicio()
-                  + " a.m. a " + cond.getHorarioFin() + " p.m."
+                ? cond.getDiasLaborales() + " de " + formatoHoraCas(cond.getHorarioInicio())
+                  + " a " + formatoHoraCas(cond.getHorarioFin())
                 : "Lunes a viernes de 8:30 a.m. a 5:00 p.m.";
+        String horario = horarioLinea;
+        if (cond != null && cond.getJornadaSemanal() != null) {
+            horario = horario + "\nJornada semanal máxima: " + cond.getJornadaSemanal() + " horas.";
+        }
         String duracion = cond != null ? valOrDash(cond.getDuracionContrato()) : "Según requerimiento";
-        String remuneracion = (cond != null && cond.getRemuneracionMensual() != null)
+        String remuneracionNum = (cond != null && cond.getRemuneracionMensual() != null)
                 ? "S/ " + cond.getRemuneracionMensual().setScale(2, RoundingMode.HALF_UP).toString()
                 : "Según escala institucional";
+        String montoLetras = MontoSolesEnPalabras.format(
+                cond != null ? cond.getRemuneracionMensual() : null);
+        String remuneracion = remuneracionNum;
+        if (montoLetras != null && !montoLetras.isBlank()) {
+            remuneracion = remuneracionNum + "\n(" + montoLetras + ")";
+        }
 
         fila2(tabla, "Lugar de Prestación de\nServicio y horario de trabajo",
                 lugar + "\n" + horario);
         fila2(tabla, "Duración de Contrato",
-                "Inicio: " + (cond != null && cond.getTipoInicioContrato() != null
-                        ? cond.getTipoInicioContrato().replace("_", " ").toLowerCase()
-                        : "desde la suscripción del contrato")
+                "Inicio: " + textoTipoInicioContrato(cond != null ? cond.getTipoInicioContrato() : null)
                         + "\nFin: " + duracion);
         fila2(tabla, "Remuneración Mensual",
                 remuneracion + "\nIncluyen los montos y afiliaciones de ley, así como toda"
@@ -378,7 +399,6 @@ public class BasesPdfGenerator {
         doc.add(seccion("I. EVALUACIÓN CURRICULAR"));
         doc.add(cuerpoNegrita("Esta etapa TIENE PUNTAJE Y ES DE CARÁCTER ELIMINATORIO."));
 
-        String correo = noBlanco(conv.getCorreoPostulacion(), "convocatorias@acffaa.gob.pe");
         doc.add(espaciado());
         doc.add(cuerpo(
                 "El/la postulante descargará los formatos de postulación: Ficha Curricular, Declaraciones "
@@ -386,8 +406,10 @@ public class BasesPdfGenerator {
                 + "portal web institucional)."));
         doc.add(espaciado());
         doc.add(cuerpo(
-                "El/la postulante deberá remitir al correo electrónico " + correo + ", dentro del plazo "
-                + "indicado en el cronograma, los documentos que conforman el Expediente de Postulación. "
+                "La persona postulante deberá acceder al Sistema de Convocatorias CAS, dirigirse a la "
+                + "sección «Mi Postulación» y adjuntar los documentos que conforman su expediente. "
+                + "Este procedimiento debe realizarse estrictamente dentro del plazo establecido en el "
+                + "cronograma para la etapa de Envío de Hoja de Vida Documentada. "
                 + "Dicho expediente tiene carácter de declaración jurada; por lo tanto, el/la postulante es "
                 + "responsable de la información presentada y queda sujeto/a a fiscalización posterior por "
                 + "parte de la ACFFAA."));
@@ -415,7 +437,6 @@ public class BasesPdfGenerator {
         doc.add(bullet("El archivo PDF no debe exceder los " + tamano + " MB."));
         doc.add(bullet("El nombre del archivo deberá estar denominado de la siguiente manera: "
                 + fmtNombre));
-        doc.add(bullet("El asunto del correo electrónico debe indicar: " + fmtAsunto));
         doc.add(bullet("El/la postulante que no presente su expediente de postulación en la fecha "
                 + "establecida y/o no sustente con documentos el cumplimiento de los requisitos "
                 + "mínimos señalados en los términos de referencia, excepto el requisito de "
@@ -591,6 +612,7 @@ public class BasesPdfGenerator {
     /** III. ENTREVISTA PERSONAL — tabla dinámica con pesos/puntajes de la convocatoria */
     private void agregarEntrevistaPersonal(Document doc, Convocatoria conv,
                                            List<FactorEvaluacion> factores) throws DocumentException {
+        doc.newPage();
         doc.add(seccion("III. ENTREVISTA PERSONAL"));
         doc.add(cuerpoNegrita("Esta etapa TIENE PUNTAJE Y ES DE CARÁCTER ELIMINATORIO."));
         doc.add(espaciado());
@@ -602,21 +624,6 @@ public class BasesPdfGenerator {
                 "Estará a cargo del Comité de Selección quienes evaluarán conocimientos, desenvolvimiento, "
                 + "actitud, cualidades y competencias del candidato requeridas para el puesto al cual postula."));
         doc.add(espaciado());
-
-        BigDecimal pesoEnt  = conv.getPesoEntrevista()   != null ? conv.getPesoEntrevista()   : new BigDecimal("40");
-        BigDecimal maxEnt   = obtenerPuntajeMax(factores, "ENTREVISTA", pesoEnt);
-        BigDecimal minEnt   = obtenerPuntajeMin(factores, "ENTREVISTA",
-                maxEnt.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP));
-
-        PdfPTable tabla = new PdfPTable(4);
-        tabla.setWidthPercentage(80);
-        tabla.setWidths(new float[]{30, 20, 25, 25});
-        fila4h(tabla, "EVALUACION", "PESO", "PUNTAJE MÍNIMO", "PUNTAJE MÁXIMO");
-        fila4c(tabla, "Entrevista Personal", pesoEnt.intValue() + "%",
-                minEnt.toPlainString(), maxEnt.toPlainString());
-        doc.add(tabla);
-        doc.add(espaciado());
-
         doc.add(cuerpo(
                 "En caso la entrevista personal sea virtual será comunicado en el Portal Institucional y "
                 + "se realizará mediante una plataforma virtual de videollamada (Zoom, Google Meet, Skype, "
@@ -637,29 +644,46 @@ public class BasesPdfGenerator {
                 + "estipulado para la Entrevista, si pasado el tiempo el/la candidata/a no se presenta, "
                 + "no podrá participar en la Entrevista Personal."));
         doc.add(espaciado());
+
+        BigDecimal pesoEnt  = conv.getPesoEntrevista()   != null ? conv.getPesoEntrevista()   : new BigDecimal("40");
+        BigDecimal maxEnt   = obtenerPuntajeMax(factores, "ENTREVISTA", pesoEnt);
+        BigDecimal minEnt   = obtenerPuntajeMin(factores, "ENTREVISTA",
+                maxEnt.multiply(new BigDecimal("0.60")).setScale(2, RoundingMode.HALF_UP));
+
+        PdfPTable tabla = new PdfPTable(4);
+        tabla.setWidthPercentage(80);
+        tabla.setWidths(new float[]{30, 20, 25, 25});
+        fila4h(tabla, "EVALUACION", "PESO", "PUNTAJE MÍNIMO", "PUNTAJE MÁXIMO");
+        fila4c(tabla, "Entrevista Personal", pesoEnt.intValue() + "%",
+                minEnt.toPlainString(), maxEnt.toPlainString());
+        doc.add(tabla);
+        doc.add(espaciado());
     }
 
     /** IV. DE LAS BONIFICACIONES — texto legal completo (Leyes 29248, 29973, 27674, 31533) */
     private void agregarBonificaciones(Document doc) throws DocumentException {
         doc.add(seccion("IV. DE LAS BONIFICACIONES"));
 
-        doc.add(cuerpo(
-                "a) Bonificación por ser personal licenciado de las Fuerzas Armadas: Se otorgará una "
+        doc.add(cuerpoMixto(
+                "a) Bonificación por ser personal licenciado de las Fuerzas Armadas: ",
+                "Se otorgará una "
                 + "bonificación del diez por ciento (10%) sobre el puntaje total, siempre que obtenga "
                 + "el puntaje mínimo aprobatorio en la última fase del proceso de selección (entrevista), "
                 + "y sustente su condición de licenciado."));
         doc.add(espaciado());
 
-        doc.add(cuerpo(
-                "b) Bonificación por discapacidad: Se otorgará una bonificación por discapacidad del "
+        doc.add(cuerpoMixto(
+                "b) Bonificación por discapacidad: ",
+                "Se otorgará una bonificación por discapacidad del "
                 + "quince por ciento (15%) sobre el puntaje total, siempre que obtenga el puntaje mínimo "
                 + "aprobatorio en la última fase del proceso de selección (entrevista), y sustente su "
                 + "condición de persona con discapacidad (carné de discapacidad y/o resolución emitida "
                 + "por el CONADIS)."));
         doc.add(espaciado());
 
-        doc.add(cuerpo(
-                "c) Bonificación por deportista calificado: Conforme con los artículos 2° y 7° del "
+        doc.add(cuerpoMixto(
+                "c) Bonificación por deportista calificado: ",
+                "Conforme con los artículos 2° y 7° del "
                 + "Reglamento de la Ley N° 27674, aprobado con Decreto Supremo N° 089-2003-PCM, que "
                 + "establece el acceso de Deportistas de Alto Nivel a la Administración Pública. Esta "
                 + "bonificación será otorgada siempre que el perfil del puesto en concurso establezca "
@@ -667,12 +691,14 @@ public class BasesPdfGenerator {
                 + "puntaje mínimo aprobatorio en la última fase del proceso de selección (entrevista)."));
         doc.add(espaciado());
 
-        doc.add(cuerpo(
-                "d) Bonificación a jóvenes técnicos y profesionales en el sector público: De acuerdo a "
+        doc.add(cuerpoMixto(
+                "d) Bonificación a jóvenes técnicos y profesionales en el sector público: ",
+                "De acuerdo a "
                 + "la bonificación especial prevista en el artículo 3 de la Ley Nº 31533, se otorgará "
                 + "las siguientes bonificaciones:"));
         doc.add(espaciado());
 
+        doc.newPage();
         doc.add(subparrafo("   1. Bonificación en la entrevista personal"));
         doc.add(cuerpo(
                 "Se otorgará una bonificación del 10% del puntaje obtenido en la etapa de entrevista "
@@ -715,6 +741,17 @@ public class BasesPdfGenerator {
     /** V. PUNTAJE FINAL — tabla detallada con subcategorías dinámicas */
     private void agregarPuntajeFinal(Document doc, Convocatoria conv,
                                      List<FactorEvaluacion> factores) throws DocumentException {
+        doc.add(subparrafo("Requisitos para el otorgamiento de puntos adicionales por experiencia en "
+                + "el sector público:"));
+        doc.add(cuerpo(
+                "El postulante deberá registrar y acreditar su experiencia en el sector público de manera "
+                + "fehaciente (la documentación sustentatoria: constancias de trabajo, certificados de "
+                + "prácticas, u otros documentos que demuestren de manera verificable el período y tipo de "
+                + "experiencia, indicando con claridad la fecha de inicio y fin de la relación laboral o de "
+                + "prácticas preprofesionales y profesionales) al momento de su postulación."));
+        doc.add(espaciado());
+
+        doc.newPage();
         doc.add(seccion("V. PUNTAJE FINAL"));
         doc.add(cuerpo(
                 "El puntaje final es la sumatoria de los puntajes de la evaluación curricular, evaluación "
@@ -896,6 +933,7 @@ public class BasesPdfGenerator {
 
     /** IX. MECANISMOS DE IMPUGNACIÓN */
     private void agregarMecanismosImpugnacion(Document doc) throws DocumentException {
+        doc.newPage();
         doc.add(seccion("IX. MECANISMOS DE IMPUGNACIÓN"));
         doc.add(bullet(
                 "Si algún postulante y/o candidato/a considera que la Oficina General de Administración o "
@@ -945,6 +983,7 @@ public class BasesPdfGenerator {
 
     /** CRONOGRAMA Y ETAPAS DEL PROCESO */
     private void agregarCronograma(Document doc, List<Cronograma> cronograma) throws DocumentException {
+        doc.newPage();
         Paragraph titulo = new Paragraph("CRONOGRAMA Y ETAPAS DEL PROCESO", SECTION_FONT);
         titulo.setAlignment(Element.ALIGN_CENTER);
         doc.add(titulo);
@@ -1054,6 +1093,18 @@ public class BasesPdfGenerator {
         return p;
     }
 
+    /** Párrafo con parte en negrita y parte normal, separados por el primer ": " */
+    private Paragraph cuerpoMixto(String negrita, String normal) {
+        Paragraph p = new Paragraph();
+        p.add(new Phrase(negrita, BODY_BOLD));
+        p.add(new Phrase(normal, BODY_FONT));
+        p.setAlignment(Element.ALIGN_JUSTIFIED);
+        p.setIndentationLeft(20);
+        p.setSpacingBefore(2);
+        p.setSpacingAfter(2);
+        return p;
+    }
+
     private Paragraph bullet(String texto) {
         Paragraph p = new Paragraph("\u2022  " + texto, BODY_FONT);
         p.setAlignment(Element.ALIGN_JUSTIFIED);
@@ -1065,6 +1116,46 @@ public class BasesPdfGenerator {
 
     private Paragraph espaciado() {
         return new Paragraph(" ", SMALL_FONT);
+    }
+
+    /** HH:MM (24 h) → texto tipo "8:30 a.m." / "5:00 p.m." para Bases PDF. */
+    private String formatoHoraCas(String hhmm) {
+        if (hhmm == null || !hhmm.matches("^([01]\\d|2[0-3]):[0-5]\\d$")) {
+            return hhmm != null ? hhmm : "";
+        }
+        String[] p = hhmm.split(":");
+        int h = Integer.parseInt(p[0]);
+        int m = Integer.parseInt(p[1]);
+        boolean pm = h >= 12;
+        int h12 = h % 12;
+        if (h12 == 0) {
+            h12 = 12;
+        }
+        return h12 + ":" + String.format(Locale.ROOT, "%02d", m) + (pm ? " p.m." : " a.m.");
+    }
+
+    private String textoTipoInicioContrato(String tipo) {
+        if (tipo == null || tipo.isBlank()) {
+            return "desde la suscripción del contrato";
+        }
+        return switch (tipo) {
+            case "A_LA_FIRMA" -> "desde la suscripción del contrato";
+            case "INMEDIATO" -> "inmediato, al publicar la convocatoria";
+            case "FECHA_FIJA" -> "según fecha de inicio precisada en el contrato";
+            default -> tipo.replace('_', ' ').toLowerCase(Locale.ROOT);
+        };
+    }
+
+    private String etiquetaModalidad(String codigo) {
+        if (codigo == null || codigo.isBlank()) {
+            return "";
+        }
+        return switch (codigo) {
+            case "PRESENCIAL" -> "Presencial";
+            case "REMOTO" -> "Remoto";
+            case "SEMIPRESENCIAL" -> "Semipresencial";
+            default -> codigo;
+        };
     }
 
     // ── Tablas 2 columnas ──
@@ -1182,6 +1273,21 @@ public class BasesPdfGenerator {
         return c;
     }
 
+    /**
+     * Celda sin borde usando {@link Phrase}: {@code new PdfPCell(Paragraph)} en OpenPDF suele
+     * calcular un ancho de línea demasiado estrecho (saltos prematuros). Misma idea que {@link #cellNormal(String)}.
+     */
+    private PdfPCell celdaSinBordeFrase(String texto, Font font, boolean justificar) {
+        PdfPCell c = new PdfPCell(new Phrase(texto, font));
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPadding(5);
+        c.setNoWrap(false);
+        if (justificar) {
+            c.setHorizontalAlignment(Element.ALIGN_JUSTIFIED);
+        }
+        return c;
+    }
+
     // ── Misceláneos ──
 
     private String valOrDash(String val) {
@@ -1222,8 +1328,8 @@ public class BasesPdfGenerator {
     /**
      * Encabezado institucional ACFFAA/OGA — imagen PNG real en todas las páginas.
      *
-     * Carga images/header.png desde el classpath del backend
-     * (backend/src/main/resources/images/header.png).
+     * Carga images/header.jpg desde el classpath del backend
+     * (backend/src/main/resources/images/header.jpg).
      * La imagen se escala al 62 % del ancho de página, alineada a la izquierda,
      * dejando la zona derecha libre para sellos de Firma Digital.
      */
@@ -1235,12 +1341,12 @@ public class BasesPdfGenerator {
         PageHeaderEvent() {
             try {
                 byte[] imgBytes = PageHeaderEvent.class
-                        .getResourceAsStream("/images/header.png")
+                        .getResourceAsStream("/images/header.jpg")
                         .readAllBytes();
                 headerImage = Image.getInstance(imgBytes);
             } catch (Exception e) {
                 throw new RuntimeException(
-                        "No se pudo cargar images/header.png desde el classpath: " + e.getMessage(), e);
+                        "No se pudo cargar images/header.jpg desde el classpath: " + e.getMessage(), e);
             }
         }
 

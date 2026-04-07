@@ -195,10 +195,13 @@ interface EntradaEntrevista {
                       </td>
                       <td class="px-3 py-2 text-center">
                         <span class="text-xs px-2 py-0.5 rounded font-semibold"
-                              [class]="p.estado === 'APTO' || p.estado === 'GANADOR' || p.estado === 'ACCESITARIO'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-600'">
-                          {{ p.estado }}
+                              [class.bg-gray-100]="p.puntajeEntrevista == null"
+                              [class.text-gray-600]="p.puntajeEntrevista == null"
+                              [class.bg-green-100]="p.puntajeEntrevista != null && apruebaUmbralEntrevista(p)"
+                              [class.text-green-700]="p.puntajeEntrevista != null && apruebaUmbralEntrevista(p)"
+                              [class.bg-red-100]="p.puntajeEntrevista != null && !apruebaUmbralEntrevista(p)"
+                              [class.text-red-600]="p.puntajeEntrevista != null && !apruebaUmbralEntrevista(p)">
+                          {{ etiquetaEstadoEntrevistaOrh(p) }}
                         </span>
                       </td>
                       <td class="px-3 py-2 text-center text-xs">
@@ -504,6 +507,18 @@ export class EntrevistaComponent {
 
   rolMiembro(idMiembro: number): string {
     return this.miembros().find((m) => m.idMiembroComite === idMiembro)?.rolComite ?? '—';
+  }
+
+  /** Resultado E27 coherente con umbral (no confundir con p.estado de postulación pre-entrevista). */
+  protected apruebaUmbralEntrevista(p: PostulacionSeleccion): boolean {
+    const pe = p.puntajeEntrevista;
+    if (pe == null) return false;
+    return Number(pe) >= this.umbralDinamico();
+  }
+
+  protected etiquetaEstadoEntrevistaOrh(p: PostulacionSeleccion): string {
+    if (p.puntajeEntrevista == null) return '—';
+    return this.apruebaUmbralEntrevista(p) ? 'APTO' : 'NO APTO';
   }
 
   /** Carga el factor padre ENTREVISTA para obtener puntajeMaximo y puntajeMinimo dinámicos.

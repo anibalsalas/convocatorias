@@ -48,6 +48,8 @@ public class PostulacionService {
     private final SeleccionMapper mapper;
     private final NotificacionService notificacionService;
     private final IEvaluacionCurricularRepository evalCurrRepo;
+    private final IConfigExamenRepository configExamenRepo;
+    private final IExamenPostulanteRepository examenPostulanteRepo;
 
     public PostulacionService(IPostulacionRepository postRepo, IPostulanteRepository postulanteRepo,
             IConvocatoriaRepository convRepo, IDeclaracionJuradaRepository ddjjRepo,
@@ -55,7 +57,9 @@ public class PostulacionService {
             IUsuarioRepository usuarioRepo,
             IAuditPort audit, SeleccionMapper mapper,
             NotificacionService notificacionService,
-            IEvaluacionCurricularRepository evalCurrRepo) {
+            IEvaluacionCurricularRepository evalCurrRepo,
+            IConfigExamenRepository configExamenRepo,
+            IExamenPostulanteRepository examenPostulanteRepo) {
         this.postRepo = postRepo; this.postulanteRepo = postulanteRepo;
         this.convRepo = convRepo; this.ddjjRepo = ddjjRepo;
         this.expRepo = expRepo; this.tachaRepo = tachaRepo;
@@ -63,6 +67,8 @@ public class PostulacionService {
         this.audit = audit; this.mapper = mapper;
         this.notificacionService = notificacionService;
         this.evalCurrRepo = evalCurrRepo;
+        this.configExamenRepo = configExamenRepo;
+        this.examenPostulanteRepo = examenPostulanteRepo;
     }
 
     private String user() { return SecurityContextHolder.getContext().getAuthentication().getName(); }
@@ -107,7 +113,20 @@ public class PostulacionService {
         response.setEstadoExpediente(estadoExpediente);
         response.setEstadoPostulacionVisible(estadoPostulacionVisible);
         response.setFechaConfirmacionExpediente(postulacion.getFechaConfirmacionExpediente());
-    
+
+        // V34 — Examen virtual: enriquecer si la convocatoria tiene examen habilitado
+        Convocatoria conv = postulacion.getConvocatoria();
+        if (Boolean.TRUE.equals(conv.getExamenVirtualHabilitado()) && "APTO".equals(postulacion.getEstado())) {
+            configExamenRepo.findByConvocatoriaId(conv.getIdConvocatoria()).ifPresent(cfg -> {
+                if ("PUBLICADO".equals(cfg.getEstado())) {
+                    response.setExamenVirtualDisponible(true);
+                    examenPostulanteRepo.findByConfigExamenIdAndPostulacionId(
+                            cfg.getIdConfigExamen(), postulacion.getIdPostulacion()
+                    ).ifPresent(ep -> response.setEstadoExamen(ep.getEstado()));
+                }
+            });
+        }
+
         return response;
     }
 

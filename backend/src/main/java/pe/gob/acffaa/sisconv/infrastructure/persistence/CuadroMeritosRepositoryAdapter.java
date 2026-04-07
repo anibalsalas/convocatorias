@@ -13,4 +13,5 @@ public class CuadroMeritosRepositoryAdapter implements ICuadroMeritosRepository 
     @Override public List<CuadroMeritos> saveAll(List<CuadroMeritos> l){return jpa.saveAll(l);}
     @Override public List<CuadroMeritos> findByConvocatoriaId(Long c){return jpa.findByConvocatoriaIdConvocatoria(c);}
     @Override public Optional<CuadroMeritos> findByPostulacionId(Long id){return jpa.findByPostulacionIdPostulacion(id);}
+    @Override public boolean existsByConvocatoriaId(Long id){ return jpa.existsByConvocatoriaIdConvocatoria(id); }
 }

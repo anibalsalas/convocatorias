@@ -131,6 +131,18 @@
                     <a [routerLink]="['/portal/expediente', item.idPostulacion]" class="btn-secondary-action">
                       {{ expedienteActionLabel(item) }}
                     </a>
+                    @if (item.examenVirtualDisponible && item.estadoExamen !== 'FINALIZADO' && item.estadoExamen !== 'EXPIRADO') {
+                      <a [routerLink]="['/portal/examen', item.idConvocatoria, item.idPostulacion]"
+                         class="btn-primary-action"
+                         style="margin-top: 0.5rem; display: inline-block;">
+                        Examen Técnico
+                      </a>
+                    }
+                    @if (item.estadoExamen === 'FINALIZADO') {
+                      <span class="badge-success" style="margin-top: 0.5rem; display: inline-block;">
+                        Examen completado
+                      </span>
+                    }
                   </td>
                 </tr>
               }

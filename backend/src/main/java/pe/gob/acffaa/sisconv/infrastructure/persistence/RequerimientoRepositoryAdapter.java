@@ -32,6 +32,7 @@ public class RequerimientoRepositoryAdapter implements IRequerimientoRepository 
     @Override public Page<Requerimiento> findAll(Pageable pageable) { return jpa.findAll(pageable); }
     @Override public Page<Requerimiento> findByEstado(String estado, Pageable pageable) { return jpa.findByEstado(estado, pageable); }
     @Override public Page<Requerimiento> findByIdAreaSolicitante(Long idArea, Pageable pageable) { return jpa.findByIdAreaSolicitante(idArea, pageable); }
+    @Override public Page<Requerimiento> findByEstadoAndIdAreaSolicitante(String estado, Long idArea, Pageable pageable) { return jpa.findByEstadoAndIdAreaSolicitante(estado, idArea, pageable); }
     @Override public boolean existsByNumeroRequerimiento(String numero) { return jpa.existsByNumeroRequerimiento(numero); }
     @Override public long countByAnio(int anio) { return jpa.countByAnio(anio); }
     @Override public long countElaboradosPendientesVerificacionPresupuestal() { return jpa.countElaboradosPendientesVerificacionPresupuestal(); }

@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.time.LocalDate;
 import org.springframework.core.io.FileSystemResource;
@@ -415,6 +416,32 @@ public class ConvocatoriaController {
         return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
     }
 
+    @PutMapping("/{id}/bases-pdf-firmado/cargar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Registrar PDF de bases firmado (pre-E15)",
+            description = "ORH sube el PDF de bases firmado; obligatorio antes de aprobar/publicar.")
+    public ResponseEntity<ApiResponse<ConvocatoriaResponse>> cargarBasesPdfFirmado(
+            @PathVariable Long id,
+            @RequestParam("archivo") MultipartFile archivo,
+            Authentication auth, HttpServletRequest httpReq) {
+        ConvocatoriaResponse response = convService.cargarBasesPdfFirmado(
+                id, archivo, auth.getName(), httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(response, response.getMensaje()));
+    }
+
+    @GetMapping("/{id}/bases-pdf-firmado")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Descargar PDF de bases firmado registrado")
+    public ResponseEntity<byte[]> descargarBasesPdfFirmado(@PathVariable Long id) {
+        byte[] pdf = convService.descargarBasesPdfFirmado(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.inline()
+                .filename("BASES-FIRMADO-" + id + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // Listados auxiliares
     // ══════════════════════════════════════════════════════════════
@@ -565,6 +592,56 @@ public class ConvocatoriaController {
     public ResponseEntity<ApiResponse<Long>> contarPendientesPublicar() {
         long count = convService.contarPendientesPublicar();
         return ResponseEntity.ok(ApiResponse.ok(count));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // V34 — Dashboard AREA_SOLICITANTE: convocatorias pendientes banco de preguntas
+    // ══════════════════════════════════════════════════════════════
+
+    @GetMapping("/pendientes-banco")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AREA_SOLICITANTE')")
+    @Operation(summary = "Avisos banco de preguntas (Área Solicitante)",
+            description = "Convocatorias del área con examen virtual en EN_ELABORACION, PUBLICADA o EN_SELECCION; "
+                    + "bancoCompleto=true si ya hay >=20 preguntas (mensaje enviado a ORH).")
+    public ResponseEntity<ApiResponse<List<AvisoBancoAreaResponse>>> pendientesBanco(Authentication auth) {
+        Usuario u = usuarioRepo.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", 0L));
+        return ResponseEntity.ok(ApiResponse.ok(convService.pendientesBanco(u.getIdArea())));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // POST /convocatorias/{id}/solicitar-banco — ORH solicita banco al Área Solicitante
+    // ══════════════════════════════════════════════════════════════
+
+    @PostMapping("/{id}/solicitar-banco")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Solicitar banco de preguntas al Área Solicitante",
+            description = "Disponible después de publicar E24. Notifica al usuario responsable del requerimiento.")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> solicitarBanco(
+            @PathVariable Long id, Authentication auth, HttpServletRequest httpReq) {
+        Map<String, Object> result = convService.solicitarBancoPreguntas(id, auth.getName(), httpReq);
+        return ResponseEntity.ok(ApiResponse.ok(result, (String) result.get("mensaje")));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // V34 — Dashboard ORH: banco cargado, pendiente configuración/publicación E26-V
+    // ══════════════════════════════════════════════════════════════
+
+    @GetMapping("/banco-cargado-pendiente-config-orh")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Convocatorias con banco listo para configurar examen virtual (ORH)",
+            description = "Examen virtual habilitado, >=20 preguntas en banco, configuración no PUBLICADO/CERRADO.")
+    public ResponseEntity<ApiResponse<List<ConvocatoriaResponse>>> bancoCargadoPendienteConfigOrh() {
+        return ResponseEntity.ok(ApiResponse.ok(convService.listarBancoCargadoPendienteConfigOrh()));
+    }
+
+    @GetMapping("/pendientes-notificar-comite-orh")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORH')")
+    @Operation(summary = "Convocatorias con comité pendiente de notificar a rol COMITE (ORH)",
+            description = "EN_ELABORACION con comité cuyo estado no es COMITE_CONFORMADO.")
+    public ResponseEntity<ApiResponse<List<ConvocatoriaResponse>>> pendientesNotificarComiteOrh() {
+        return ResponseEntity.ok(ApiResponse.ok(convService.listarPendientesNotificarComiteOrh(),
+                "Convocatorias pendientes de notificar al comité"));
     }
 
     // ══════════════════════════════════════════════════════════════

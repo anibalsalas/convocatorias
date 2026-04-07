@@ -21,6 +21,9 @@ public class CuadroMeritosResponse {
         private BigDecimal puntajeEntrevista;
         private BigDecimal puntajeBonificacion;
         private BigDecimal puntajeTotal;
+        /** APTO | NO APTO | — (umbral factor padre ENTREVISTA vs puntaje registrado). */
+        private String resultadoEntrevista;
+        /** GANADOR | ACCESITARIO | NO_SELECCIONADO (RF-16). */
         private String resultado;
     }
 }

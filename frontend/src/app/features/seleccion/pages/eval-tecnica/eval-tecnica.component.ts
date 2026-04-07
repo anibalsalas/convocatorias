@@ -9,6 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { SeleccionService } from '../../services/seleccion.service';
 import { ToastService } from '@core/services/toast.service';
 import { AuthService } from '@core/auth/auth.service';
@@ -18,6 +19,7 @@ import {
   EvalTecnicaRequest,
   EvalTecnicaResponse,
   FactorDetalle,
+  ConvocatoriaSeleccionItem,
 } from '../../models/seleccion.model';
 
 interface EntradaTec {
@@ -134,7 +136,7 @@ interface EntradaTec {
               <span class="text-xs text-gray-500">
                 Re-descarga el PDF con los resultados ya registrados.
               </span>
-              @if (tecnicaPublicada()) {
+              @if (tecnicaPublicada() && hayAprobadosTecnica()) {
                 <a [routerLink]="['/sistema/seleccion', idConv, 'entrevista']"
                    class="btn-secondary text-sm inline-block">
                   Continuar → E27 Entrevista Personal
@@ -175,7 +177,7 @@ interface EntradaTec {
               </div>
             }
 
-            @if (tecnicaPublicada()) {
+            @if (tecnicaPublicada() && hayAprobadosTecnica()) {
               <a [routerLink]="['/sistema/seleccion', idConv, 'entrevista']"
                  class="btn-secondary text-sm inline-block mt-1">
                 Continuar → E27 Entrevista Personal
@@ -260,8 +262,8 @@ interface EntradaTec {
           </div>
         }
 
-        <!-- Banner solo lectura — visible cuando resultados ya fueron publicados -->
-        @if (!resultado() && tecnicaPublicada()) {
+        <!-- Banner solo lectura — resultados publicados -->
+        @if (!resultado() && tecnicaPublicada() && hayAprobadosTecnica()) {
           <div class="card border border-green-300 bg-green-50 p-3 flex items-center gap-3">
             <span class="text-green-600 text-lg flex-shrink-0">✓</span>
             <div>
@@ -272,6 +274,16 @@ interface EntradaTec {
                 Los puntajes registrados por el Comité son definitivos y están disponibles en el portal público.
               </p>
             </div>
+          </div>
+        }
+        @if (!resultado() && tecnicaPublicada() && !hayAprobadosTecnica()) {
+          <div class="card border border-amber-300 bg-amber-50 p-4 space-y-2">
+            <p class="text-sm font-semibold text-amber-900">
+              E26 publicada — sin aprobados en evaluación técnica
+            </p>
+            <p class="text-xs text-amber-950">
+              No corresponde Entrevista Personal ni resultado final. El proceso se declara <strong>DESIERTO</strong> conforme a las bases (sin candidatos/as aprobados/as en la etapa).
+            </p>
           </div>
         }
 
@@ -417,6 +429,7 @@ export class EvalTecnicaComponent {
   /** Número de convocatoria legible (CAS-022-2026) cargado desde API */
   protected readonly convNumero = signal('');
   protected readonly tecnicaPublicada = signal(false);
+  protected readonly convInfo = signal<ConvocatoriaSeleccionItem | null>(null);
   /**
    * Umbral mínimo de aprobación técnica — cargado desde TBL_FACTOR_EVALUACION.PUNTAJE_MINIMO
    * (factor padre TECNICA de la convocatoria, configurado en E12 por el COMITÉ).
@@ -431,6 +444,11 @@ export class EvalTecnicaComponent {
 
   protected readonly esComiteOAdmin = computed(() =>
     this.auth.hasAnyRole(['ROLE_ADMIN', 'ROLE_COMITE']),
+  );
+
+  /** Postulantes en estado APTO tras E26 — 0 implica sin entrevista ni etapas finales. */
+  protected readonly hayAprobadosTecnica = computed(
+    () => (this.convInfo()?.postulantesAptos ?? 0) > 0,
   );
 
   protected readonly umbralTexto = computed(() => {
@@ -500,6 +518,7 @@ export class EvalTecnicaComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (conv) => {
+          this.convInfo.set(conv);
           this.convNumero.set(conv.numeroConvocatoria ?? '');
           const publicada = conv.resultadosTecnicosPublicados ?? false;
           this.tecnicaPublicada.set(publicada);
@@ -618,6 +637,15 @@ export class EvalTecnicaComponent {
           this.publicando.set(false);
           this.tecnicaPublicada.set(true);
           this.toast.success('Resultados de evaluación técnica publicados. PDF descargado.');
+          this.svc
+            .obtenerConvocatoria(this.idConv)
+            .pipe(take(1))
+            .subscribe({
+              next: (c) => {
+                this.convInfo.set(c);
+                this.tecnicaPublicada.set(c.resultadosTecnicosPublicados ?? false);
+              },
+            });
         },
         error: (err: { error?: { message?: string } }) => {
           this.publicando.set(false);

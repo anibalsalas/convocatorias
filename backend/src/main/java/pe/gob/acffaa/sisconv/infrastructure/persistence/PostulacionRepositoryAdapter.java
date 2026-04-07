@@ -72,4 +72,9 @@ public class PostulacionRepositoryAdapter implements IPostulacionRepository {
     public List<Postulacion> findByConvocatoriaIdAndEstadoIn(Long idConv, java.util.List<String> estados) {
         return jpa.findByConvocatoria_IdConvocatoriaAndEstadoIn(idConv, estados);
     }
+
+    @Override
+    public List<Postulacion> findAptosByConvocatoriaWithPostulante(Long idConv) {
+        return jpa.findAptosByConvocatoriaWithPostulante(idConv);
+    }
 }
