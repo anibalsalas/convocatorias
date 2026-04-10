@@ -5,6 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import pe.gob.acffaa.sisconv.domain.model.Requerimiento;
 import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
+
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -38,4 +40,6 @@ public class RequerimientoRepositoryAdapter implements IRequerimientoRepository 
     @Override public long countElaboradosPendientesVerificacionPresupuestal() { return jpa.countElaboradosPendientesVerificacionPresupuestal(); }
     @Override public long countByEstado(String estado) { return jpa.countByEstado(estado); }
     @Override public long countConfiguradosSinConvocatoria() { return jpa.countConfiguradosSinConvocatoria(); }
+    @Override public boolean existsByPerfilPuestoAndEstadoIn(Long idPerfilPuesto, Collection<String> estados) { return jpa.existsByPerfilPuesto_IdPerfilPuestoAndEstadoIn(idPerfilPuesto, estados); }
+    @Override public Optional<Requerimiento> findFirstByPerfilPuestoAndEstadoIn(Long idPerfilPuesto, Collection<String> estados) { return jpa.findFirstByPerfilPuesto_IdPerfilPuestoAndEstadoInOrderByFechaCreacionDesc(idPerfilPuesto, estados); }
 }

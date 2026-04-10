@@ -1,6 +1,8 @@
 package pe.gob.acffaa.sisconv.infrastructure.audit;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,7 @@ import pe.gob.acffaa.sisconv.domain.repository.ILogTransparenciaRepository;
 @Service
 public class AuditService implements IAuditPort {
 
+    private static final Logger log = LoggerFactory.getLogger(AuditService.class);
     private final ILogTransparenciaRepository logRepository;
 
     public AuditService(ILogTransparenciaRepository logRepository) {
@@ -26,19 +29,24 @@ public class AuditService implements IAuditPort {
     public void registrar(String entidad, Long idEntidad, String accion,
                           String estadoAnterior, String estadoNuevo,
                           HttpServletRequest request, String datosAdicionales) {
-        LogTransparencia log = LogTransparencia.builder()
-                .entidad(entidad)
-                .idEntidad(idEntidad)
-                .accion(accion)
-                .estadoAnterior(estadoAnterior)
-                .estadoNuevo(estadoNuevo)
-                .sustento("Operación " + accion + " sobre " + entidad)
-                .ipOrigen(obtenerIp(request))
-                .userAgent(request != null ? request.getHeader("User-Agent") : null)
-                .usuarioAccion(obtenerUsuarioActual())
-                .datosAdicionales(datosAdicionales)
-                .build();
-        logRepository.save(log);
+        try {
+            LogTransparencia entry = LogTransparencia.builder()
+                    .entidad(entidad)
+                    .idEntidad(idEntidad)
+                    .accion(accion)
+                    .estadoAnterior(estadoAnterior)
+                    .estadoNuevo(estadoNuevo)
+                    .sustento("Operación " + accion + " sobre " + entidad)
+                    .ipOrigen(obtenerIp(request))
+                    .userAgent(request != null ? request.getHeader("User-Agent") : null)
+                    .usuarioAccion(obtenerUsuarioActual())
+                    .datosAdicionales(datosAdicionales)
+                    .build();
+            logRepository.save(entry);
+        } catch (Exception ex) {
+            log.error("[AUDIT] Fallo al registrar auditoría — entidad={}, id={}, accion={}: {}",
+                    entidad, idEntidad, accion, ex.getMessage(), ex);
+        }
     }
 
     @Override
@@ -51,19 +59,24 @@ public class AuditService implements IAuditPort {
     public void registrarConvocatoria(Long idConvocatoria, String entidad, Long idEntidad,
                                        String accion, String estadoAnterior, String estadoNuevo,
                                        String sustento, HttpServletRequest request) {
-        LogTransparencia log = LogTransparencia.builder()
-                .idConvocatoria(idConvocatoria)
-                .entidad(entidad)
-                .idEntidad(idEntidad)
-                .accion(accion)
-                .estadoAnterior(estadoAnterior)
-                .estadoNuevo(estadoNuevo)
-                .sustento(sustento)
-                .ipOrigen(obtenerIp(request))
-                .userAgent(request != null ? request.getHeader("User-Agent") : null)
-                .usuarioAccion(obtenerUsuarioActual())
-                .build();
-        logRepository.save(log);
+        try {
+            LogTransparencia entry = LogTransparencia.builder()
+                    .idConvocatoria(idConvocatoria)
+                    .entidad(entidad)
+                    .idEntidad(idEntidad)
+                    .accion(accion)
+                    .estadoAnterior(estadoAnterior)
+                    .estadoNuevo(estadoNuevo)
+                    .sustento(sustento)
+                    .ipOrigen(obtenerIp(request))
+                    .userAgent(request != null ? request.getHeader("User-Agent") : null)
+                    .usuarioAccion(obtenerUsuarioActual())
+                    .build();
+            logRepository.save(entry);
+        } catch (Exception ex) {
+            log.error("[AUDIT] Fallo al registrar auditoría convocatoria — conv={}, entidad={}, accion={}: {}",
+                    idConvocatoria, entidad, accion, ex.getMessage(), ex);
+        }
     }
 
     private String obtenerUsuarioActual() {

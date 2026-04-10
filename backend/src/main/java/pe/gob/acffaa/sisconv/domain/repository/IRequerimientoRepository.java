@@ -41,4 +41,10 @@ public interface IRequerimientoRepository {
 
     /** Cuenta requerimientos CONFIGURADO sin convocatoria asociada (banner ORH — pendientes Etapa 2) */
     long countConfiguradosSinConvocatoria();
+
+    /** Verifica si existe un requerimiento vigente asociado al perfil de puesto */
+    boolean existsByPerfilPuestoAndEstadoIn(Long idPerfilPuesto, java.util.Collection<String> estados);
+
+    /** Obtiene el requerimiento vigente más reciente asociado al perfil */
+    java.util.Optional<Requerimiento> findFirstByPerfilPuestoAndEstadoIn(Long idPerfilPuesto, java.util.Collection<String> estados);
 }

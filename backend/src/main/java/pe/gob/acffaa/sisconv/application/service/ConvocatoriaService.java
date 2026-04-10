@@ -24,7 +24,7 @@ import pe.gob.acffaa.sisconv.domain.repository.*;
 
 import pe.gob.acffaa.sisconv.application.dto.request.MiembroComiteRequest;
 import pe.gob.acffaa.sisconv.application.dto.response.ComiteDetalleResponse;
-import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaMiembroComiteRepository;
+import pe.gob.acffaa.sisconv.domain.repository.IMiembroComiteRepository;
 
 import com.lowagie.text.Document;
 import com.lowagie.text.FontFactory;
@@ -85,7 +85,7 @@ public class ConvocatoriaService {
     private final IAuditPort auditPort;
     private final NotificacionService notificacionService;
 
-    private final JpaMiembroComiteRepository miembroJpaRepo;
+    private final IMiembroComiteRepository miembroJpaRepo;
     private final BasesPdfGenerator basesPdfGenerator;
     private final ICuadroMeritosRepository meritoRepo;
     private final IComunicadoRepository comunicadoRepo;
@@ -107,7 +107,7 @@ public class ConvocatoriaService {
                                ConvocatoriaMapper mapper,
                                IAuditPort auditPort,
                                NotificacionService notificacionService,
-                               JpaMiembroComiteRepository miembroJpaRepo,
+                               IMiembroComiteRepository miembroJpaRepo,
                                ICuadroMeritosRepository meritoRepo,
                                IComunicadoRepository comunicadoRepo,
                                IBancoPreguntaRepository bancoRepo,

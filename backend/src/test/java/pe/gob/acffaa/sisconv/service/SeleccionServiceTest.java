@@ -50,6 +50,8 @@ class SeleccionServiceTest {
     @Mock private IUsuarioRepository usuarioRepo;
     @Mock private IAuditPort audit;
     @Mock private NotificacionService notificacionService;
+    @Mock private IConfigExamenRepository configExamenRepo;
+    @Mock private ICronogramaRepository cronogramaRepo;
     @Mock private HttpServletRequest http;
 
     @InjectMocks private SeleccionService service;
@@ -59,7 +61,7 @@ class SeleccionServiceTest {
     void setUp() {
         service = new SeleccionService(postRepo, convRepo, evalCurrRepo, evalTecRepo,
                 entrevistaRepo, entMiembroRepo, bonifRepo, meritoRepo, factorRepo,
-                usuarioRepo, audit, mapper, notificacionService);
+                usuarioRepo, audit, mapper, notificacionService, configExamenRepo, cronogramaRepo);
         // FIX: Configurar SecurityContext para que user() no lance NPE
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("admin_test", null, List.of()));

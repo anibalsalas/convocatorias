@@ -34,7 +34,7 @@ import pe.gob.acffaa.sisconv.domain.repository.IDenominacionPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.INivelPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IPerfilPuestoRepository;
 import pe.gob.acffaa.sisconv.domain.repository.IUsuarioRepository;
-import pe.gob.acffaa.sisconv.infrastructure.persistence.JpaRequerimientoRepository;
+import pe.gob.acffaa.sisconv.domain.repository.IRequerimientoRepository;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
@@ -55,7 +55,7 @@ public class PerfilPuestoService {
     private final IDenominacionPuestoRepository denominacionPuestoRepo;
     private final PerfilPuestoMapper mapper;
     private final IAuditPort auditPort;
-    private final JpaRequerimientoRepository requerimientoRepo;
+    private final IRequerimientoRepository requerimientoRepo;
     private final NotificacionService notificacionService;
     private final IUsuarioRepository usuarioRepository;
     private final IAreaOrganizacionalRepository areaRepository;
@@ -69,7 +69,7 @@ public class PerfilPuestoService {
             IDenominacionPuestoRepository denominacionPuestoRepo,
             PerfilPuestoMapper mapper,
             IAuditPort auditPort,
-            JpaRequerimientoRepository requerimientoRepo,
+            IRequerimientoRepository requerimientoRepo,
             NotificacionService notificacionService,
             IUsuarioRepository usuarioRepository,
             IAreaOrganizacionalRepository areaRepository
@@ -205,7 +205,7 @@ public class PerfilPuestoService {
         // Guarda: condición económica solo editable mientras el requerimiento está en ELABORADO
         if (req.getCondicion() != null) {
             requerimientoRepo
-                    .findFirstByPerfilPuesto_IdPerfilPuestoAndEstadoInOrderByFechaCreacionDesc(
+                    .findFirstByPerfilPuestoAndEstadoIn(
                             perfil.getIdPerfilPuesto(), ESTADOS_REQUERIMIENTO_VIGENTES)
                     .ifPresent(requerimiento -> {
                         if (!"ELABORADO".equals(requerimiento.getEstado())) {
@@ -543,13 +543,13 @@ public class PerfilPuestoService {
         if (response == null || response.getIdPerfilPuesto() == null) {
             return response;
         }
-        boolean tieneRequerimiento = requerimientoRepo.existsByPerfilPuesto_IdPerfilPuestoAndEstadoIn(
+        boolean tieneRequerimiento = requerimientoRepo.existsByPerfilPuestoAndEstadoIn(
                 response.getIdPerfilPuesto(), ESTADOS_REQUERIMIENTO_VIGENTES
         );
         response.setTieneRequerimientoAsociado(tieneRequerimiento);
         if (tieneRequerimiento) {
             Requerimiento requerimiento = requerimientoRepo
-                    .findFirstByPerfilPuesto_IdPerfilPuestoAndEstadoInOrderByFechaCreacionDesc(
+                    .findFirstByPerfilPuestoAndEstadoIn(
                             response.getIdPerfilPuesto(), ESTADOS_REQUERIMIENTO_VIGENTES
                     )
                     .orElse(null);
